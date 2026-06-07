@@ -5,10 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Field, Avatar, Select, Toggle, Card, Tag, SectionTitle, ChipSelect, DateField } from '../src/components/ui';
 import EducationForm from '../src/components/EducationForm';
+import EducationCard from '../src/components/EducationCard';
 import { colors } from '../src/theme';
 import {
   GENDERS, WORK_STATUS, INDUSTRIES, INTERESTS, LANGUAGES,
-  PROFILE_VISIBILITY, REQUEST_FROM, eduSummary, eduLocation,
+  PROFILE_VISIBILITY, REQUEST_FROM,
 } from '../src/data';
 import { useApp } from '../src/store';
 
@@ -137,18 +138,7 @@ export default function EditProfile() {
         {/* 2 — Education Details */}
         <SectionTitle>Education Details</SectionTitle>
         {education.map((e, i) => (
-          <Card key={i} style={{ marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start' }}>
-            <Ionicons name="school" size={20} color={colors.primary} style={{ marginRight: 12, marginTop: 2 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontWeight: '800', color: colors.ink }}>{e.name || e.course || e.type}</Text>
-              {!!eduSummary(e) && <Text style={styles.meta}>{eduSummary(e)}</Text>}
-              {!!eduLocation(e) && <Text style={styles.meta}>{eduLocation(e)}</Text>}
-              <Tag label={e.type || e.level} />
-            </View>
-            <Pressable onPress={() => removeEducation(i)} hitSlop={8} style={{ padding: 4 }}>
-              <Ionicons name="trash-outline" size={20} color={colors.danger} />
-            </Pressable>
-          </Card>
+          <EducationCard key={i} entry={e} onRemove={() => removeEducation(i)} />
         ))}
         {education.length === 0 && <Text style={styles.meta}>No education added yet.</Text>}
         <Text style={styles.subLabel}>Add a record</Text>

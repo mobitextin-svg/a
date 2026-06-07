@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, Tag } from '../../src/components/ui';
+import { Button } from '../../src/components/ui';
 import EducationForm from '../../src/components/EducationForm';
+import EducationCard from '../../src/components/EducationCard';
 import { colors } from '../../src/theme';
-import { eduSummary, eduLocation } from '../../src/data';
 import { useApp } from '../../src/store';
 
 // Step 2: add one or more education entries (any type), then enter the app.
@@ -52,18 +52,7 @@ export default function Education() {
         {entries.length > 0 && (
           <View style={{ marginTop: 18 }}>
             {entries.map((e, i) => (
-              <Card key={i} style={{ marginBottom: 10, flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="school" size={22} color={colors.primary} style={{ marginRight: 12 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '800', color: colors.ink }}>{e.name || e.course || e.type}</Text>
-                  {!!eduSummary(e) && <Text style={styles.meta}>{eduSummary(e)}</Text>}
-                  {!!eduLocation(e) && <Text style={styles.meta}>{eduLocation(e)}</Text>}
-                  <Tag label={e.type} />
-                </View>
-                <Pressable onPress={() => removeEntry(i)} hitSlop={8} style={{ padding: 4 }}>
-                  <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                </Pressable>
-              </Card>
+              <EducationCard key={i} entry={e} onRemove={() => removeEntry(i)} />
             ))}
           </View>
         )}

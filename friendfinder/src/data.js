@@ -156,6 +156,26 @@ export function eduLocation(e) {
   return [e.city, e.district, e.state].filter(Boolean).join(', ');
 }
 
+// A compact "2012–2016" / batch / year range for an education record.
+export function eduYearRange(e) {
+  if (e.startYear && e.endYear) return `${e.startYear} – ${e.endYear}`;
+  return e.batch || e.endYear || e.startYear || e.year || '';
+}
+
+// Icon + accent colour per education type (for cards / badges).
+export const TYPE_META = {
+  'School': { icon: 'school', color: '#a855f7' },
+  'Diploma / Polytechnic': { icon: 'construct', color: '#06b6d4' },
+  'College (UG)': { icon: 'business', color: '#4f46e5' },
+  'College (PG)': { icon: 'business', color: '#4338ca' },
+  'University': { icon: 'library', color: '#0ea5e9' },
+  'Coaching Centre': { icon: 'megaphone', color: '#f59e0b' },
+  'Certification / Training': { icon: 'ribbon', color: '#16a34a' },
+  'Professional Course': { icon: 'briefcase', color: '#db2777' },
+  'Other / Not Listed': { icon: 'ellipsis-horizontal', color: '#64748b' },
+};
+export const typeMeta = (t) => TYPE_META[t] || { icon: 'school-outline', color: '#4f46e5' };
+
 // --- Date of birth helpers (DOB stored as ISO 'YYYY-MM-DD') -----------------
 const DOB_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -216,7 +236,7 @@ export const COURSES = ['B.Tech', 'B.E', 'Diploma', 'B.Sc', 'B.Com', 'M.Tech', '
 export const DEPARTMENTS = ['CSE', 'ECE', 'EEE', 'Mechanical', 'Civil', 'IT', 'Science', 'Commerce'];
 export const BATCHES = ['2008', '2010', '2012', '2014', '2015', '2016', '2018', '2020', '2022'];
 
-const edu = (level, name, course, department, batch, roll) => ({ level, name, course, department, batch, roll });
+const edu = (type, name, course, department, batch, roll) => ({ type, level: type, name, course, department, batch, roll });
 
 // People in the network (the current user is added at sign-up).
 export const USERS = [
@@ -225,7 +245,7 @@ export const USERS = [
     headline: 'Software Engineer @ Infosys', verified: true, isMentor: true,
     work: { title: 'Software Engineer', company: 'Infosys' },
     education: [
-      edu('College', 'ABC Engineering College', 'B.Tech', 'ECE', '2015', 'EC15021'),
+      edu('College (UG)', 'ABC Engineering College', 'B.Tech', 'ECE', '2015', 'EC15021'),
       edu('School', 'St. Xavier\'s High School', 'SSLC', 'Science', '2008'),
     ],
     where: 'Moved to Bangalore, leading a backend team.',
@@ -234,7 +254,7 @@ export const USERS = [
     id: 'u2', name: 'Priya Nair', city: 'Chennai', state: 'Tamil Nadu',
     headline: 'UX Designer', verified: true, isMentor: false,
     work: { title: 'Product Designer', company: 'Zoho' },
-    education: [edu('College', 'ABC Engineering College', 'B.Tech', 'ECE', '2015', 'EC15044')],
+    education: [edu('College (UG)', 'ABC Engineering College', 'B.Tech', 'ECE', '2015', 'EC15044')],
     where: 'Freelancing and mentoring design students.',
   },
   {
@@ -242,21 +262,21 @@ export const USERS = [
     headline: 'Founder @ BuildRight', verified: false, isMentor: true,
     business: { name: 'BuildRight', category: 'Construction Tech' },
     work: { title: 'Founder', company: 'BuildRight' },
-    education: [edu('College', 'ABC Engineering College', 'B.Tech', 'CSE', '2015', 'CS15003')],
+    education: [edu('College (UG)', 'ABC Engineering College', 'B.Tech', 'CSE', '2015', 'CS15003')],
     where: 'Running my own startup, hiring junior engineers.',
   },
   {
     id: 'u4', name: 'Sneha Iyer', city: 'Chennai', state: 'Tamil Nadu',
     headline: 'Data Analyst', verified: true, isMentor: false,
     work: { title: 'Data Analyst', company: 'TCS' },
-    education: [edu('Polytechnic', 'Government Polytechnic Chennai', 'Diploma', 'ECE', '2012', 'DP12010')],
+    education: [edu('Diploma / Polytechnic', 'Government Polytechnic Chennai', 'Diploma', 'ECE', '2012', 'DP12010')],
     where: 'Completed B.Tech via lateral entry, now in analytics.',
   },
   {
     id: 'u5', name: 'Karthik Raj', city: 'Coimbatore', state: 'Tamil Nadu',
     headline: 'Mechanical Engineer', verified: false, isMentor: false,
     work: { title: 'Design Engineer', company: 'Ashok Leyland' },
-    education: [edu('Polytechnic', 'Government Polytechnic Chennai', 'Diploma', 'Mechanical', '2012', 'DP12077')],
+    education: [edu('Diploma / Polytechnic', 'Government Polytechnic Chennai', 'Diploma', 'Mechanical', '2012', 'DP12077')],
     where: 'Working in automotive design in Hosur.',
   },
   {
@@ -269,20 +289,20 @@ export const USERS = [
     id: 'u7', name: 'Aditya Kumar', city: 'Delhi', state: 'Delhi',
     headline: 'Marketing Lead', verified: false, isMentor: false,
     business: { name: 'GrowEasy', category: 'Digital Marketing' },
-    education: [edu('University', 'Anna University', 'MBA', 'Commerce', '2018', 'MB18099')],
+    education: [edu('College (PG)', 'Anna University', 'MBA', 'Commerce', '2018', 'MB18099')],
     where: 'Heading marketing for a D2C brand.',
   },
   {
     id: 'u8', name: 'Fatima Khan', city: 'Hyderabad', state: 'Telangana',
     headline: 'Civil Engineer', verified: true, isMentor: false,
-    education: [edu('College', 'National Institute of Technology', 'B.Tech', 'Civil', '2016', 'CV16012')],
+    education: [edu('College (UG)', 'National Institute of Technology', 'B.Tech', 'Civil', '2016', 'CV16012')],
     where: 'Site engineer on metro projects.',
   },
   {
     id: 'u9', name: 'Vikram Singh', city: 'Chennai', state: 'Tamil Nadu',
     headline: 'Full-Stack Developer', verified: false, isMentor: true,
     work: { title: 'Tech Lead', company: 'Freshworks' },
-    education: [edu('College', 'ABC Engineering College', 'B.Tech', 'CSE', '2015', 'CS15041')],
+    education: [edu('College (UG)', 'ABC Engineering College', 'B.Tech', 'CSE', '2015', 'CS15041')],
     where: 'Building SaaS products, happy to mentor.',
   },
   {

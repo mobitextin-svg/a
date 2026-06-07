@@ -4,9 +4,10 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Card, Tag, Button, SectionTitle, ProgressBar } from '../../src/components/ui';
+import EducationCard from '../../src/components/EducationCard';
 import { colors, radius } from '../../src/theme';
 import { useApp } from '../../src/store';
-import { getUser, eduSummary, eduLocation, formatDOB, profileCompleteness } from '../../src/data';
+import { getUser, formatDOB, profileCompleteness } from '../../src/data';
 
 // One labelled row inside a category card.
 function InfoRow({ icon, label, value, hidden }) {
@@ -118,26 +119,7 @@ export default function Profile() {
 
           {/* 2 — Education Details */}
           <SectionTitle action="Add / Edit" onAction={edit}>Education Details</SectionTitle>
-          {(me.education || []).map((e, i) => (
-            <Card key={i} style={{ marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start' }}>
-              <View style={styles.eduIcon}><Ionicons name="school" size={20} color={colors.primary} /></View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.cardTitle}>{e.name || e.course || e.type}</Text>
-                {!!eduSummary(e) && <Text style={styles.meta}>{eduSummary(e)}</Text>}
-                {!!eduLocation(e) && <Text style={styles.meta}>{eduLocation(e)}</Text>}
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Tag label={e.type || e.level} />
-                  {!!e.status && <Tag label={e.status} color={e.status === 'Completed' ? colors.success : e.status === 'Discontinued' ? colors.danger : colors.accent} />}
-                </View>
-                {!!e.visibility && (
-                  <Text style={styles.metaSmall}>
-                    <Ionicons name="eye-outline" size={11} color={colors.muted} /> {e.visibility}
-                    {e.searchMatching ? ' · Search matching on' : ''}
-                  </Text>
-                )}
-              </View>
-            </Card>
-          ))}
+          {(me.education || []).map((e, i) => <EducationCard key={i} entry={e} />)}
           {(!me.education || me.education.length === 0) && (
             <Card><Text style={styles.meta}>No education added yet.</Text></Card>
           )}

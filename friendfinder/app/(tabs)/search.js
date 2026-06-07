@@ -6,7 +6,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Tag, Chip, Empty, Button } from '../../src/components/ui';
 import { colors, radius } from '../../src/theme';
 import { useApp, matchScore } from '../../src/store';
-import { BATCHES, DEPARTMENTS } from '../../src/data';
+import { BATCHES, DEPARTMENTS, EDUCATION_TYPES } from '../../src/data';
+
+// Quick education-level filters (HSC, UG, PG…) mapped to the data taxonomy.
+const LEVEL_FILTERS = [
+  { label: 'HSC', match: (e) => /hsc|higher secondary|12/i.test(e.course || '') },
+  { label: 'SSLC / 10th', match: (e) => /sslc|10/i.test(e.course || '') },
+  { label: 'School', match: (e) => (e.type || e.level) === 'School' },
+  { label: 'Diploma', match: (e) => (e.type || e.level) === 'Diploma / Polytechnic' },
+  { label: 'UG', match: (e) => (e.type || e.level) === 'College (UG)' },
+  { label: 'PG', match: (e) => (e.type || e.level) === 'College (PG)' },
+  { label: 'University', match: (e) => (e.type || e.level) === 'University' },
+  { label: 'Coaching', match: (e) => (e.type || e.level) === 'Coaching Centre' },
+  { label: 'Certification', match: (e) => (e.type || e.level) === 'Certification / Training' },
+  { label: 'Professional', match: (e) => (e.type || e.level) === 'Professional Course' },
+];
 
 // Smart search: free-text across name/institution/course/dept/city/batch,
 // plus quick batch & department filters. Tokenised so "ABC College 2015 ECE"
@@ -17,6 +31,7 @@ export default function Search() {
   const [q, setQ] = useState('');
   const [batch, setBatch] = useState(null);
   const [dept, setDept] = useState(null);
+  const [level, setLevel] = useState(null); // a LEVEL_FILTERS entry
 
   const results = useMemo(() => {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -24,16 +39,17 @@ export default function Search() {
       .filter((u) => {
         const hay = [
           u.name, u.city, u.state, u.headline,
-          ...u.education.flatMap((e) => [e.name, e.course, e.department, e.batch, e.level]),
+          ...u.education.flatMap((e) => [e.name, e.course, e.department, e.batch, e.type, e.level]),
         ].join(' ').toLowerCase();
         const textOk = terms.every((t) => hay.includes(t));
         const batchOk = !batch || u.education.some((e) => e.batch === batch);
         const deptOk = !dept || u.education.some((e) => e.department === dept);
-        return textOk && batchOk && deptOk;
+        const levelOk = !level || u.education.some((e) => level.match(e));
+        return textOk && batchOk && deptOk && levelOk;
       })
       .map((u) => ({ user: u, ...matchScore(state.me, u) }))
       .sort((a, b) => b.score - a.score);
-  }, [q, batch, dept, allUsers, state.me]);
+  }, [q, batch, dept, level, allUsers, state.me]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -55,6 +71,13 @@ export default function Search() {
 
       {/* Filters */}
       <View style={{ paddingLeft: 20, marginTop: 4 }}>
+        <Text style={styles.filterLabel}>Education Level</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
+          <Chip label="Any" active={!level} onPress={() => setLevel(null)} />
+          {LEVEL_FILTERS.map((lf) => (
+            <Chip key={lf.label} label={lf.label} active={level?.label === lf.label} onPress={() => setLevel(lf)} />
+          ))}
+        </ScrollView>
         <Text style={styles.filterLabel}>Batch Year</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
           <Chip label="Any" active={!batch} onPress={() => setBatch(null)} />

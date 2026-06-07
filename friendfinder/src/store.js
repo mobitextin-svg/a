@@ -39,7 +39,9 @@ export function matchScore(me, other) {
           score += 4;
           reasons.push(`Batchmate • ${a.name} ${a.batch}`);
         } else {
-          reasons.push(`Same ${b.level.toLowerCase()} • ${a.name}`);
+          // Friendly short label: "College (UG)" -> "college".
+          const lbl = (b.type || b.level || 'institution').replace(/\s*\(.*\)\s*/g, '').toLowerCase();
+          reasons.push(`Same ${lbl} • ${a.name}`);
         }
         if (a.department && a.department === b.department) {
           score += 2;
