@@ -176,6 +176,23 @@ export const TYPE_META = {
 };
 export const typeMeta = (t) => TYPE_META[t] || { icon: 'school-outline', color: '#4f46e5' };
 
+// Quick education-level search filters. HSC/SSLC also match board-based school
+// records (CBSE / ICSE / State Board) so those students are included too.
+const isBoard = (c = '') => /cbse|icse|state board/i.test(c);
+export const LEVEL_FILTERS = [
+  { label: 'HSC', match: (e) => /hsc|higher secondary|12th|plus ?two|\+2|puc|intermediate/i.test(e.course || '') || ((e.type || e.level) === 'School' && isBoard(e.course)) },
+  { label: 'SSLC / 10th', match: (e) => /sslc|matric|10th/i.test(e.course || '') || ((e.type || e.level) === 'School' && isBoard(e.course)) },
+  { label: 'School', match: (e) => (e.type || e.level) === 'School' },
+  { label: 'Diploma', match: (e) => (e.type || e.level) === 'Diploma / Polytechnic' },
+  { label: 'UG', match: (e) => (e.type || e.level) === 'College (UG)' },
+  { label: 'PG', match: (e) => (e.type || e.level) === 'College (PG)' },
+  { label: 'University', match: (e) => (e.type || e.level) === 'University' },
+  { label: 'Coaching', match: (e) => (e.type || e.level) === 'Coaching Centre' },
+  { label: 'Certification', match: (e) => (e.type || e.level) === 'Certification / Training' },
+  { label: 'Professional', match: (e) => (e.type || e.level) === 'Professional Course' },
+];
+export const levelFilterByLabel = (label) => LEVEL_FILTERS.find((l) => l.label === label) || null;
+
 // --- Date of birth helpers (DOB stored as ISO 'YYYY-MM-DD') -----------------
 const DOB_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

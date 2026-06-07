@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable, FlatList } from 'react-n
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Card, Tag, Button, SectionTitle, Empty } from '../../src/components/ui';
+import { Avatar, Card, Tag, Button, SectionTitle, Empty, Chip } from '../../src/components/ui';
 import { colors, radius, shadow } from '../../src/theme';
 import { useApp } from '../../src/store';
-import { getUser } from '../../src/data';
+import { getUser, LEVEL_FILTERS } from '../../src/data';
 
 export default function Home() {
   const router = useRouter();
@@ -34,6 +34,20 @@ export default function Home() {
           <Ionicons name="search" size={18} color={colors.muted} />
           <Text style={styles.searchText}>Search college, batch, name…</Text>
         </Pressable>
+
+        {/* Find batchmates by education level */}
+        <View style={{ marginTop: 18 }}>
+          <Text style={styles.findLabel}>Find batchmates by level</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+            {LEVEL_FILTERS.map((lf) => (
+              <Chip
+                key={lf.label}
+                label={lf.label}
+                onPress={() => router.push({ pathname: '/(tabs)/search', params: { level: lf.label, t: String(Date.now()) } })}
+              />
+            ))}
+          </ScrollView>
+        </View>
 
         {/* Incoming friend requests */}
         {state.incoming.length > 0 && (
@@ -141,6 +155,7 @@ const styles = StyleSheet.create({
   premiumText: { color: '#fff', fontWeight: '800', fontSize: 12.5, marginLeft: 5 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, marginHorizontal: 20, marginTop: 14, paddingVertical: 14, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   searchText: { color: colors.muted, marginLeft: 10, fontSize: 15 },
+  findLabel: { fontWeight: '800', color: colors.ink, fontSize: 14, paddingHorizontal: 20, marginBottom: 10 },
   section: { paddingHorizontal: 20, marginTop: 22 },
   aiRow: { },
   aiBadge: { flexDirection: 'row', alignItems: 'center', marginTop: -6, marginBottom: 12 },

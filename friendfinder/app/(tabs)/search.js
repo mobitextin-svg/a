@@ -1,37 +1,29 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, FlatList, Pressable, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Tag, Chip, Empty, Button } from '../../src/components/ui';
 import { colors, radius } from '../../src/theme';
 import { useApp, matchScore } from '../../src/store';
-import { BATCHES, DEPARTMENTS, EDUCATION_TYPES } from '../../src/data';
-
-// Quick education-level filters (HSC, UG, PG…) mapped to the data taxonomy.
-const LEVEL_FILTERS = [
-  { label: 'HSC', match: (e) => /hsc|higher secondary|12/i.test(e.course || '') },
-  { label: 'SSLC / 10th', match: (e) => /sslc|10/i.test(e.course || '') },
-  { label: 'School', match: (e) => (e.type || e.level) === 'School' },
-  { label: 'Diploma', match: (e) => (e.type || e.level) === 'Diploma / Polytechnic' },
-  { label: 'UG', match: (e) => (e.type || e.level) === 'College (UG)' },
-  { label: 'PG', match: (e) => (e.type || e.level) === 'College (PG)' },
-  { label: 'University', match: (e) => (e.type || e.level) === 'University' },
-  { label: 'Coaching', match: (e) => (e.type || e.level) === 'Coaching Centre' },
-  { label: 'Certification', match: (e) => (e.type || e.level) === 'Certification / Training' },
-  { label: 'Professional', match: (e) => (e.type || e.level) === 'Professional Course' },
-];
+import { BATCHES, DEPARTMENTS, LEVEL_FILTERS, levelFilterByLabel } from '../../src/data';
 
 // Smart search: free-text across name/institution/course/dept/city/batch,
 // plus quick batch & department filters. Tokenised so "ABC College 2015 ECE"
 // matches all terms.
 export default function Search() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { allUsers, state, sendRequest } = useApp();
   const [q, setQ] = useState('');
   const [batch, setBatch] = useState(null);
   const [dept, setDept] = useState(null);
   const [level, setLevel] = useState(null); // a LEVEL_FILTERS entry
+
+  // Preset the level filter when arriving from a "Find by level" shortcut.
+  useEffect(() => {
+    if (params.level) setLevel(levelFilterByLabel(params.level));
+  }, [params.level, params.t]);
 
   const results = useMemo(() => {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -47,7 +39,12 @@ export default function Search() {
         const levelOk = !level || u.education.some((e) => level.match(e));
         return textOk && batchOk && deptOk && levelOk;
       })
-      .map((u) => ({ user: u, ...matchScore(state.me, u) }))
+      .map((u) => ({
+        user: u,
+        ...matchScore(state.me, u),
+        // Which education record satisfied the active level filter.
+        levelMatch: level ? u.education.find((e) => level.match(e)) : null,
+      }))
       .sort((a, b) => b.score - a.score);
   }, [q, batch, dept, level, allUsers, state.me]);
 
@@ -111,7 +108,16 @@ export default function Search() {
                   {u.verified ? <Ionicons name="checkmark-circle" size={15} color={colors.primary} style={{ marginLeft: 5 }} /> : null}
                 </View>
                 <Text style={styles.meta} numberOfLines={1}>{ed?.name} • {ed?.batch}</Text>
-                {item.reasons[0] ? <Tag label={item.reasons[0]} color={colors.purple} icon="sparkles" /> : <Text style={styles.meta}>{u.city}</Text>}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {item.levelMatch ? (
+                    <Tag
+                      label={`${level.label} • ${item.levelMatch.course || item.levelMatch.name || ''}`.replace(/ • $/, '')}
+                      color={colors.accent}
+                      icon="school"
+                    />
+                  ) : null}
+                  {item.reasons[0] ? <Tag label={item.reasons[0]} color={colors.purple} icon="sparkles" /> : (!item.levelMatch && <Text style={styles.meta}>{u.city}</Text>)}
+                </View>
               </View>
               {friend ? (
                 <Ionicons name="chatbubble-ellipses" size={22} color={colors.primary} />
