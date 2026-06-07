@@ -14,6 +14,31 @@ export const LEVELS = ['School', 'College', 'Polytechnic', 'University', 'Coachi
 export const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 export const MEDIUMS = ['English', 'Tamil', 'Hindi', 'Telugu', 'Malayalam', 'Kannada', 'Marathi', 'Other'];
 
+// Professional Details.
+export const WORK_STATUS = [
+  'Working Professional', 'Student', 'Business / Entrepreneur', 'Fresher / Job Seeking',
+  'Freelancer', 'Homemaker', 'Retired', 'Other',
+];
+export const INDUSTRIES = [
+  'IT / Software', 'Education', 'Healthcare', 'Engineering', 'Finance / Banking',
+  'Government', 'Manufacturing', 'Marketing / Sales', 'Design', 'Legal',
+  'Hospitality', 'Agriculture', 'Media / Entertainment', 'Construction', 'Other',
+];
+
+// Interests (multi-select).
+export const INTERESTS = [
+  'Technology', 'Sports', 'Music', 'Travel', 'Reading', 'Movies', 'Photography',
+  'Gaming', 'Fitness', 'Cooking', 'Art', 'Entrepreneurship', 'Volunteering',
+  'Finance', 'Fashion', 'Science', 'Politics', 'Spirituality',
+];
+
+// Account Settings.
+export const LANGUAGES = ['English', 'Tamil', 'Hindi', 'Telugu', 'Malayalam', 'Kannada', 'Marathi', 'Bengali', 'Other'];
+
+// Privacy Settings option lists.
+export const PROFILE_VISIBILITY = ['Public', 'Friends Only', 'Verified Members Only', 'Private'];
+export const REQUEST_FROM = ['Everyone', 'Batchmates Only', 'Friends of Friends', 'No One'];
+
 // The education categories a user can add. Each drives its own field set
 // (EDU_FIELDS) and predefined course/degree list (COURSE_OPTIONS).
 export const EDUCATION_TYPES = [

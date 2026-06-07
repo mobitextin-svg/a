@@ -13,8 +13,14 @@ school, college, polytechnic and university — built with **React Native + Expo
 
 **Core reconnect flow**
 - Onboarding: mobile-OTP / email / Google login (mocked), profile creation, multi-entry education history
-- Rich profile settings:
-  - **Basic Information** — full name, nickname, profile photo, gender, date of birth, mobile & email (each with a privacy "hide" toggle), city/state
+- Rich profile settings, organised into **9 categories** (Profile tab read-view + a sectioned **Edit Profile** screen): Basic Information · Education Details · Professional Details · Contact Information · Social Links · Privacy Settings · Interests · Account Settings · Premium Features
+  - **Basic Information** — full name, nickname, profile photo, gender, date of birth
+  - **Professional Details** — current status, designation, company, industry, experience, skills (multi-select)
+  - **Contact Information** — mobile, email, alternate phone, address, city/state/country, pincode
+  - **Social Links** — LinkedIn, Instagram, Facebook, Twitter/X, Website, GitHub
+  - **Privacy Settings** — hide mobile/email, profile visibility, who can send requests, online status, search matching
+  - **Interests** — multi-select chips with custom entry
+  - **Account Settings** — language, notifications, change password / deactivate / delete (stubbed), log out
   - **Education Details — 6-step wizard** (`src/components/EducationForm.js`):
     1. **Location** — cascading **State → District → City/Town/Village** (data in `src/locations.js`, all 36 states/UTs)
     2. **Education Type** — School · Diploma/Polytechnic · College (UG) · College (PG) · University · Coaching Centre · Certification/Training · Professional Course · Other

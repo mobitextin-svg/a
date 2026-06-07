@@ -133,6 +133,59 @@ export function Toggle({ label, hint, value, onValueChange, icon }) {
   );
 }
 
+// Multi-select chips with optional custom entry — used for interests / skills.
+export function ChipSelect({ label, options = [], values = [], onChange, allowCustom, placeholder = 'Add your own' }) {
+  const [text, setText] = useState('');
+  const toggle = (opt) => {
+    if (values.includes(opt)) onChange(values.filter((v) => v !== opt));
+    else onChange([...values, opt]);
+  };
+  const addCustom = () => {
+    const t = text.trim();
+    if (t && !values.includes(t)) onChange([...values, t]);
+    setText('');
+  };
+  // Custom values not present in the predefined options.
+  const extras = values.filter((v) => !options.includes(v));
+  return (
+    <View style={{ marginBottom: 16 }}>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+        {[...options, ...extras].map((opt) => {
+          const on = values.includes(opt);
+          return (
+            <Pressable
+              key={opt}
+              onPress={() => toggle(opt)}
+              style={[styles.chip, on && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+            >
+              <Text style={[styles.chipText, on && { color: '#fff' }]}>{opt}</Text>
+              {on ? <Ionicons name="checkmark" size={13} color="#fff" style={{ marginLeft: 4 }} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+      {allowCustom && (
+        <View style={[styles.fieldWrap, { marginTop: 6 }]}>
+          <Ionicons name="add" size={18} color={colors.muted} style={{ marginRight: 8 }} />
+          <TextInput
+            placeholder={placeholder}
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            onSubmitEditing={addCustom}
+            returnKeyType="done"
+          />
+          {text.trim() ? (
+            <Pressable onPress={addCustom}><Ionicons name="checkmark-circle" size={22} color={colors.primary} /></Pressable>
+          ) : null}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export function SectionTitle({ children, action, onAction }) {
   return (
     <View style={styles.sectionRow}>
@@ -203,6 +256,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontWeight: '800', fontSize: 16, color: colors.ink, textAlign: 'center' },
   emptySub: { color: colors.muted, textAlign: 'center', marginTop: 6, lineHeight: 20 },
   chip: {
+    flexDirection: 'row', alignItems: 'center',
     paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill,
     borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card, marginRight: 8, marginBottom: 8,
   },
