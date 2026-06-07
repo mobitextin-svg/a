@@ -1,14 +1,70 @@
 // Reusable UI primitives for BatchMate.
 import React, { useState } from 'react';
-import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator, ScrollView, Modal, Switch } from 'react-native';
+import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator, ScrollView, Modal, Switch, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, colorFor, initials } from '../theme';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const pad2 = (n) => String(n).padStart(2, '0');
+
 export function Avatar({ name = '', size = 48, photo }) {
+  if (photo) {
+    return (
+      <Image
+        source={{ uri: photo }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.border }}
+      />
+    );
+  }
   const bg = colorFor(name);
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
       <Text style={{ color: '#fff', fontWeight: '800', fontSize: size * 0.38 }}>{initials(name)}</Text>
+    </View>
+  );
+}
+
+// Slim progress bar (0–100).
+export function ProgressBar({ percent = 0, color = colors.primary }) {
+  return (
+    <View style={styles.progressTrack}>
+      <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, percent))}%`, backgroundColor: color }]} />
+    </View>
+  );
+}
+
+// Date-of-birth picker via Day / Month / Year dropdowns (stores ISO YYYY-MM-DD).
+export function DateField({ label, value, onChange }) {
+  const parse = (v) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '');
+    return m ? { y: m[1], m: String(Number(m[2])), d: String(Number(m[3])) } : { y: '', m: '', d: '' };
+  };
+  const init = parse(value);
+  const [d, setD] = useState(init.d);
+  const [m, setM] = useState(init.m);
+  const [y, setY] = useState(init.y);
+
+  const year0 = new Date().getFullYear();
+  const days = Array.from({ length: 31 }, (_, i) => String(i + 1));
+  const years = Array.from({ length: 100 }, (_, i) => String(year0 - i));
+
+  const compose = (nd, nm, ny) => { if (nd && nm && ny) onChange(`${ny}-${pad2(nm)}-${pad2(nd)}`); };
+
+  return (
+    <View style={{ marginBottom: 16 }}>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      <View style={{ flexDirection: 'row' }}>
+        <View style={{ flex: 1, marginRight: 6 }}>
+          <Select placeholder="Day" value={d} options={days} onChange={(v) => { setD(v); compose(v, m, y); }} />
+        </View>
+        <View style={{ flex: 1.4, marginHorizontal: 6 }}>
+          <Select placeholder="Month" value={m ? MONTHS[Number(m) - 1] : ''} options={MONTHS}
+            onChange={(name) => { const mm = String(MONTHS.indexOf(name) + 1); setM(mm); compose(d, mm, y); }} />
+        </View>
+        <View style={{ flex: 1.2, marginLeft: 6 }}>
+          <Select placeholder="Year" value={y} options={years} onChange={(v) => { setY(v); compose(d, m, v); }} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -270,4 +326,6 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm, padding: 14, marginBottom: 16 },
   toggleLabel: { fontWeight: '700', color: colors.ink, fontSize: 14.5 },
   toggleHint: { color: colors.muted, fontSize: 12.5, marginTop: 2 },
+  progressTrack: { height: 8, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' },
+  progressFill: { height: 8, borderRadius: 4 },
 });

@@ -14,7 +14,8 @@ school, college, polytechnic and university — built with **React Native + Expo
 **Core reconnect flow**
 - Onboarding: mobile-OTP / email / Google login (mocked), profile creation, multi-entry education history
 - Rich profile settings, organised into **9 categories** (Profile tab read-view + a sectioned **Edit Profile** screen): Basic Information · Education Details · Professional Details · Contact Information · Social Links · Privacy Settings · Interests · Account Settings · Premium Features
-  - **Basic Information** — full name, nickname, profile photo, gender, date of birth
+  - **Profile completeness meter** — a progress bar on the Profile tab showing % complete across categories, with a "what's missing" hint
+  - **Basic Information** — full name, nickname, **profile photo** (image URL → shown on the avatar), gender, **date of birth** (Day/Month/Year picker, auto-computes age)
   - **Professional Details** — current status, designation, company, industry, experience, skills (multi-select)
   - **Contact Information** — mobile, email, alternate phone, address, city/state/country, pincode
   - **Social Links** — LinkedIn, Instagram, Facebook, Twitter/X, Website, GitHub

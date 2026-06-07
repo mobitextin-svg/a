@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Card, Tag, Button, SectionTitle } from '../../src/components/ui';
+import { Avatar, Card, Tag, Button, SectionTitle, ProgressBar } from '../../src/components/ui';
 import { colors, radius } from '../../src/theme';
 import { useApp } from '../../src/store';
-import { getUser, eduSummary, eduLocation } from '../../src/data';
+import { getUser, eduSummary, eduLocation, formatDOB, profileCompleteness } from '../../src/data';
 
 // One labelled row inside a category card.
 function InfoRow({ icon, label, value, hidden }) {
@@ -64,6 +64,7 @@ export default function Profile() {
     ['logo-github', 'GitHub', social.github],
   ].filter(([, , v]) => !!v);
 
+  const comp = profileCompleteness(me);
   const hasBasic = me.nickname || me.gender || me.dob;
   const hasProf = prof.status || prof.title || prof.company || prof.industry || prof.experience || (me.skills || []).length;
   const hasContact = mobile || email || contact.altPhone || contact.address || me.city || me.state || contact.country || contact.pincode;
@@ -78,7 +79,7 @@ export default function Profile() {
           </Pressable>
         </View>
         <View style={styles.profileTop}>
-          <Avatar name={me?.name} size={92} />
+          <Avatar name={me?.name} size={92} photo={me?.photo || undefined} />
           <Text style={styles.name}>{me?.name}{me?.nickname ? <Text style={styles.nickname}>  “{me.nickname}”</Text> : null}</Text>
           <Text style={styles.headline}>{me?.headline}</Text>
           <Text style={styles.loc}><Ionicons name="location" size={13} color={colors.muted} /> {[me?.city, me?.state].filter(Boolean).join(', ')}</Text>
@@ -93,12 +94,25 @@ export default function Profile() {
         </View>
 
         <View style={styles.body}>
+          {/* Profile completeness */}
+          {comp.percent < 100 && (
+            <Card style={{ marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={styles.cardTitle}>Profile {comp.percent}% complete</Text>
+                <Text style={styles.completeCount}>{comp.done}/{comp.total}</Text>
+              </View>
+              <ProgressBar percent={comp.percent} />
+              <Text style={[styles.meta, { marginTop: 8 }]}>Add {comp.missing.slice(0, 2).join(' & ')} to improve your matches.</Text>
+              <Button small title="Complete Profile" variant="soft" icon="sparkles-outline" onPress={edit} style={{ marginTop: 12, alignSelf: 'flex-start' }} />
+            </Card>
+          )}
+
           {/* 1 — Basic Information */}
           <SectionTitle action="Edit" onAction={edit}>Basic Information</SectionTitle>
           <Card>
             <InfoRow icon="happy-outline" label="Nickname" value={me.nickname} />
             <InfoRow icon="male-female-outline" label="Gender" value={me.gender} />
-            <InfoRow icon="calendar-outline" label="Date of Birth" value={me.dob} />
+            <InfoRow icon="calendar-outline" label="Date of Birth" value={formatDOB(me.dob)} />
             {!hasBasic && <Text style={styles.meta}>Tap Edit to add your details.</Text>}
           </Card>
 
@@ -262,6 +276,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: '800', color: colors.ink, fontSize: 15.5 },
   meta: { color: colors.muted, fontSize: 13, marginTop: 2 },
   metaSmall: { color: colors.muted, fontSize: 12, marginTop: 6 },
+  completeCount: { color: colors.primary, fontWeight: '800', fontSize: 13 },
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   infoLabel: { color: colors.muted, fontSize: 12 },
   infoValue: { color: colors.ink, fontWeight: '700', fontSize: 14.5, marginTop: 1 },

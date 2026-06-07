@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Field, Avatar, Select, Toggle } from '../../src/components/ui';
+import { Button, Field, Avatar, Select, Toggle, DateField } from '../../src/components/ui';
 import { colors } from '../../src/theme';
 import { GENDERS } from '../../src/data';
 
@@ -58,7 +58,7 @@ export default function Register() {
         <Field label="Full Name *" icon="person-outline" placeholder="e.g. Aarav Sharma" value={name} onChangeText={setName} />
         <Field label="Nickname (optional)" icon="happy-outline" placeholder="e.g. Aaru" value={nickname} onChangeText={setNickname} />
         <Select label="Gender" icon="male-female-outline" placeholder="Select gender" value={gender} options={GENDERS} onChange={setGender} />
-        <Field label="Date of Birth" icon="calendar-outline" placeholder="DD / MM / YYYY" value={dob} onChangeText={setDob} />
+        <DateField label="Date of Birth" value={dob} onChange={setDob} />
 
         <Field label="Mobile Number" icon="call-outline" keyboardType="phone-pad" placeholder="+91 98765 43210" value={mobile} onChangeText={setMobile} />
         <Toggle label="Hide mobile number" hint="Keep your number private from other members." icon="eye-off-outline" value={mobileHidden} onValueChange={setMobileHidden} />

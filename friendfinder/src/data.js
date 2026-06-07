@@ -156,6 +156,52 @@ export function eduLocation(e) {
   return [e.city, e.district, e.state].filter(Boolean).join(', ');
 }
 
+// --- Date of birth helpers (DOB stored as ISO 'YYYY-MM-DD') -----------------
+const DOB_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function ageFrom(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if (!m) return null;
+  const dob = new Date(+m[1], +m[2] - 1, +m[3]);
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const md = now.getMonth() - dob.getMonth();
+  if (md < 0 || (md === 0 && now.getDate() < dob.getDate())) age--;
+  return age >= 0 && age < 120 ? age : null;
+}
+
+export function formatDOB(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if (!m) return iso || '';
+  const pretty = `${+m[3]} ${DOB_MONTHS[+m[2] - 1]} ${m[1]}`;
+  const age = ageFrom(iso);
+  return age != null ? `${pretty} (age ${age})` : pretty;
+}
+
+// --- Profile completeness ---------------------------------------------------
+// Returns { percent, missing: [labels], done, total } across the categories.
+export function profileCompleteness(me) {
+  if (!me) return { percent: 0, missing: ['Basic Information'], done: 0, total: 7 };
+  const prof = me.profession || {};
+  const social = me.social || {};
+  const checks = [
+    ['Basic Information', !!(me.name && me.gender && me.dob)],
+    ['Profile Photo', !!me.photo],
+    ['Education Details', !!(me.education && me.education.length)],
+    ['Professional Details', !!(prof.status || prof.title || prof.company)],
+    ['Contact Information', !!((me.contact && (me.contact.mobile || me.contact.email)) || me.mobile || me.email)],
+    ['Social Links', Object.values(social).some(Boolean)],
+    ['Interests', !!(me.interests && me.interests.length)],
+  ];
+  const done = checks.filter((c) => c[1]).length;
+  return {
+    percent: Math.round((done / checks.length) * 100),
+    missing: checks.filter((c) => !c[1]).map((c) => c[0]),
+    done,
+    total: checks.length,
+  };
+}
+
 // Reference data (would come from institution tables).
 export const INSTITUTIONS = [
   'ABC Engineering College',

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-nati
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Field, Avatar, Select, Toggle, Card, Tag, SectionTitle, ChipSelect } from '../src/components/ui';
+import { Button, Field, Avatar, Select, Toggle, Card, Tag, SectionTitle, ChipSelect, DateField } from '../src/components/ui';
 import EducationForm from '../src/components/EducationForm';
 import { colors } from '../src/theme';
 import {
@@ -22,6 +22,7 @@ export default function EditProfile() {
   const [nickname, setNickname] = useState(me.nickname || '');
   const [gender, setGender] = useState(me.gender || '');
   const [dob, setDob] = useState(me.dob || '');
+  const [photo, setPhoto] = useState(me.photo || '');
 
   // --- Category 3: Professional Details ---
   const p0 = me.profession || {};
@@ -75,7 +76,8 @@ export default function EditProfile() {
       name: name.trim() || me.name,
       nickname: nickname.trim(),
       gender,
-      dob: dob.trim(),
+      dob: (dob || '').trim(),
+      photo: photo.trim(),
       profession: { status: workStatus, title: title.trim(), company: company.trim(), industry, experience: experience.trim() },
       skills,
       contact: {
@@ -115,16 +117,22 @@ export default function EditProfile() {
         {/* 1 — Basic Information */}
         <SectionTitle>Basic Information</SectionTitle>
         <View style={styles.photoRow}>
-          <Avatar name={name || '?'} size={84} />
-          <Pressable style={styles.photoBtn} onPress={() => mock('Photo upload is stubbed in this build.')}>
-            <Ionicons name="camera" size={18} color={colors.primary} />
-            <Text style={styles.photoText}>Change Photo</Text>
-          </Pressable>
+          <Avatar name={name || '?'} size={84} photo={photo || undefined} />
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={styles.photoHint}>Paste an image URL to set your profile photo.</Text>
+            {!!photo && (
+              <Pressable style={styles.photoBtn} onPress={() => setPhoto('')}>
+                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Text style={[styles.photoText, { color: colors.danger }]}>Remove Photo</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
+        <Field label="Profile Photo URL" icon="image-outline" autoCapitalize="none" placeholder="https://…/photo.jpg" value={photo} onChangeText={setPhoto} />
         <Field label="Full Name *" icon="person-outline" value={name} onChangeText={setName} />
         <Field label="Nickname (optional)" icon="happy-outline" value={nickname} onChangeText={setNickname} />
         <Select label="Gender" icon="male-female-outline" placeholder="Select gender" value={gender} options={GENDERS} onChange={setGender} />
-        <Field label="Date of Birth" icon="calendar-outline" placeholder="DD / MM / YYYY" value={dob} onChangeText={setDob} />
+        <DateField label="Date of Birth" value={dob} onChange={setDob} />
 
         {/* 2 — Education Details */}
         <SectionTitle>Education Details</SectionTitle>
@@ -221,8 +229,9 @@ const styles = StyleSheet.create({
   save: { color: colors.primary, fontWeight: '800', fontSize: 15.5 },
   wrap: { padding: 20 },
   photoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  photoBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 18, backgroundColor: colors.primarySoft, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12 },
+  photoBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 8, backgroundColor: colors.primarySoft, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12 },
   photoText: { color: colors.primary, fontWeight: '800', marginLeft: 7 },
+  photoHint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   meta: { color: colors.muted, fontSize: 13, marginTop: 2 },
   subLabel: { fontWeight: '800', color: colors.ink, fontSize: 14.5, marginTop: 10, marginBottom: 12 },
   premiumCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.gold, borderRadius: 16, padding: 18 },
