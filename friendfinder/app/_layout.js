@@ -25,6 +25,7 @@ export default function RootLayout() {
             <Stack.Screen name="account/change-password" options={{ presentation: 'card' }} />
             <Stack.Screen name="account/delete-account" options={{ presentation: 'card' }} />
             <Stack.Screen name="account/verify" options={{ presentation: 'card' }} />
+            <Stack.Screen name="deactivated" options={{ presentation: 'card', gestureEnabled: false }} />
           </Stack>
         </AppProvider>
       </SafeAreaProvider>

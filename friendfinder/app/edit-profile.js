@@ -24,7 +24,7 @@ export default function EditProfile() {
   const params = useLocalSearchParams();
   const section = params.section || 'all';
   const show = (k) => section === 'all' || section === k;
-  const { state, updateProfile, addEducation, removeEducation, logout } = useApp();
+  const { state, updateProfile, addEducation, removeEducation, logout, deactivate } = useApp();
   const me = state.me || {};
 
   // 1 — Basic Information
@@ -120,7 +120,7 @@ export default function EditProfile() {
     Alert.alert(
       'Deactivate Account',
       'Your account will be temporarily deactivated. You can reactivate it anytime by logging in again.',
-      [{ text: 'Cancel', style: 'cancel' }, { text: 'Deactivate', style: 'destructive', onPress: logout }]
+      [{ text: 'Cancel', style: 'cancel' }, { text: 'Deactivate', style: 'destructive', onPress: () => { deactivate(); router.replace('/deactivated'); } }]
     );
   const logoutAll = () =>
     Alert.alert('Log out from all devices', 'You will be signed out everywhere. Continue?', [

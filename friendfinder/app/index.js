@@ -7,5 +7,7 @@ import { Loader } from '../src/components/ui';
 export default function Index() {
   const { hydrated, state } = useApp();
   if (!hydrated) return <Loader />;
-  return <Redirect href={state.me ? '/(tabs)' : '/(auth)/welcome'} />;
+  if (!state.me) return <Redirect href="/(auth)/welcome" />;
+  if (state.deactivated) return <Redirect href="/deactivated" />;
+  return <Redirect href="/(tabs)" />;
 }

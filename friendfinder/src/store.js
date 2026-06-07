@@ -23,6 +23,7 @@ const initialState = {
   premium: false,
   profileViewers: ['u4', 'u7', 'u2'], // who viewed me (premium feature)
   recentInstitutions: [], // recent institution searches (Step 3)
+  deactivated: false, // account temporarily deactivated (data kept)
 };
 
 // --- Matching helpers (the "smart" part) -----------------------------------
@@ -110,8 +111,11 @@ export function AppProvider({ children }) {
 
   const actions = useMemo(() => ({
     // --- Auth / profile ---
-    login: (profile) => setState((s) => ({ ...s, me: { id: 'me', ...profile } })),
+    // Logging in also reactivates a deactivated account (data was kept).
+    login: (profile) => setState((s) => ({ ...s, deactivated: false, me: { id: 'me', ...profile } })),
     updateProfile: (patch) => setState((s) => ({ ...s, me: { ...s.me, ...patch } })),
+    deactivate: () => setState((s) => ({ ...s, deactivated: true })),
+    reactivate: () => setState((s) => ({ ...s, deactivated: false })),
     addEducation: (entry) =>
       setState((s) => ({ ...s, me: { ...s.me, education: [...(s.me.education || []), entry] } })),
     removeEducation: (index) =>
