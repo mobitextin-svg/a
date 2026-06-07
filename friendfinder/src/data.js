@@ -22,21 +22,25 @@ export const EDUCATION_TYPES = [
   'College (UG)',
   'College (PG)',
   'University',
-  'Professional Course',
   'Coaching Centre',
   'Certification / Training',
+  'Professional Course',
   'Other / Not Listed',
 ];
 
 // Field descriptor helper.
-//   kind: 'text' | 'number' | 'course' | 'medium'
-//   'course' renders a picker from COURSE_OPTIONS[type] (free text if none).
+//   kind: 'text' | 'number' | 'course' | 'medium' | 'location'
+//   'course'   renders a picker from COURSE_OPTIONS[type] (free text if none).
+//   'location' renders the cascading State -> District -> City picker.
 const f = (key, label, opts = {}) => ({
   key,
   label,
   kind: opts.kind || 'text',
   required: !!opts.required,
 });
+
+// Cascading State -> District -> City block.
+const loc = (required = true) => f('location', 'Location', { kind: 'location', required });
 
 // Shared field block reused by UG / PG / University degree records.
 const DEGREE_FIELDS = (nameLabel) => [
@@ -48,9 +52,7 @@ const DEGREE_FIELDS = (nameLabel) => [
   f('year', 'Year (e.g. Final Year)'),
   f('startYear', 'Start Year', { kind: 'number' }),
   f('endYear', 'Completion Year', { kind: 'number' }),
-  f('city', 'City', { required: true }),
-  f('district', 'District', { required: true }),
-  f('state', 'State'),
+  loc(true),
 ];
 
 // Which fields to show for each education type.
@@ -61,9 +63,7 @@ export const EDU_FIELDS = {
     f('section', 'Section'),
     f('batch', 'Batch Year', { kind: 'number' }),
     f('medium', 'Medium', { kind: 'medium' }),
-    f('city', 'City', { required: true }),
-    f('district', 'District', { required: true }),
-    f('state', 'State'),
+    loc(true),
   ],
   'Diploma / Polytechnic': [
     f('name', 'Institution Name'),
@@ -72,26 +72,11 @@ export const EDU_FIELDS = {
     f('section', 'Section'),
     f('batch', 'Batch Year', { kind: 'number' }),
     f('medium', 'Medium', { kind: 'medium' }),
-    f('city', 'City', { required: true }),
-    f('district', 'District', { required: true }),
-    f('state', 'State'),
+    loc(true),
   ],
   'College (UG)': DEGREE_FIELDS('College Name'),
   'College (PG)': DEGREE_FIELDS('College Name'),
   'University': DEGREE_FIELDS('University Name'),
-  'Professional Course': [
-    f('course', 'Professional Course', { kind: 'course' }),
-    f('name', 'Institution / Academy Name', { required: true }),
-    f('specialization', 'Specialization'),
-    f('batch', 'Batch Year', { kind: 'number' }),
-    f('startYear', 'Start Year', { kind: 'number' }),
-    f('endYear', 'Completion Year', { kind: 'number' }),
-    f('university', 'University'),
-    f('year', 'Year'),
-    f('city', 'City', { required: true }),
-    f('district', 'District', { required: true }),
-    f('state', 'State'),
-  ],
   'Coaching Centre': [
     f('name', 'Coaching Name'),
     f('course', 'Course', { kind: 'course' }),
@@ -102,13 +87,23 @@ export const EDU_FIELDS = {
     f('course', 'Course', { kind: 'course' }),
     f('year', 'Year', { kind: 'number' }),
   ],
+  'Professional Course': [
+    f('course', 'Professional Course', { kind: 'course' }),
+    f('name', 'Institution / Academy Name', { required: true }),
+    f('specialization', 'Specialization'),
+    f('batch', 'Batch Year', { kind: 'number' }),
+    f('startYear', 'Start Year', { kind: 'number' }),
+    f('endYear', 'Completion Year', { kind: 'number' }),
+    f('university', 'University'),
+    f('year', 'Year'),
+    loc(true),
+  ],
   'Other / Not Listed': [
     f('name', 'Institution Name'),
     f('course', 'Course / Title'),
     f('department', 'Department / Field'),
     f('batch', 'Batch Year', { kind: 'number' }),
-    f('city', 'City'),
-    f('state', 'State'),
+    loc(false),
   ],
 };
 
@@ -124,7 +119,7 @@ export const COURSE_OPTIONS = {
   ],
   'College (UG)': ['B.A.', 'B.Com.', 'B.Sc.', 'BCA', 'BBA', 'B.Tech / B.E.', 'B.Arch', 'B.Pharm', 'BSW', 'B.Ed', 'MBBS', 'BDS', 'B.Sc Nursing', 'Other'],
   'College (PG)': ['M.A.', 'M.Com.', 'M.Sc.', 'MBA', 'MCA', 'M.Tech / M.E.', 'M.Pharm', 'MSW', 'M.Ed', 'MD', 'MDS', 'Other'],
-  'University': ['M.Phil', 'PhD', 'Doctorate', 'Post Doctoral Research', 'Other'],
+  'University': ['M.Phil', 'PhD', 'Doctorate', 'Post Doctoral Research', 'Other'], // University / Research
   'Coaching Centre': ['UPSC', 'TNPSC', 'SSC', 'Banking', 'Railways', 'NEET', 'JEE', 'GATE', 'CAT', 'IELTS', 'TOEFL', 'Spoken English', 'Other'],
   'Certification / Training': ['Tally', 'AWS', 'Microsoft', 'Google Certification', 'Cisco CCNA', 'Red Hat', 'Python', 'Java', 'Data Science', 'Artificial Intelligence', 'Digital Marketing', 'Graphic Design', 'Web Development', 'Other'],
   'Professional Course': ['CA (Chartered Accountant)', 'CMA', 'CS (Company Secretary)', 'LLB', 'LLM', 'Nursing', 'Physiotherapy', 'Pharmacy', 'Aviation', 'Hotel Management', 'Fashion Design', 'Interior Design', 'Journalism', 'Animation', 'Other'],

@@ -15,7 +15,8 @@ school, college, polytechnic and university — built with **React Native + Expo
 - Onboarding: mobile-OTP / email / Google login (mocked), profile creation, multi-entry education history
 - Rich profile settings:
   - **Basic Information** — full name, nickname, profile photo, gender, date of birth, mobile & email (each with a privacy "hide" toggle), city/state
-  - **Education Details** — add multiple records across **School · Diploma / Polytechnic · College (UG) · College (PG) · University · Professional Course · Coaching Centre · Certification / Training · Other**. Each type shows its own fields (Class/Grade, Semester, Department, Batch Year, Start/Completion Year, Medium, City/District/State…) with required-field validation
+  - **Education Details** — add multiple records across **School · Diploma / Polytechnic · College (UG) · College (PG) · University · Coaching Centre · Certification / Training · Professional Course · Other**. Each type shows its own fields (Class/Grade, Semester, Department, Batch Year, Start/Completion Year, Medium…) with required-field validation
+  - **Cascading location** — pick **State → District → City** as prefilled dropdowns (data in `src/locations.js`); every level also offers **"Other"** to type a value manually
   - **Predefined Course / Degree options** per education type (e.g. SSLC/HSC for School, B.Tech/MBBS for UG, MBA/MCA for PG, PhD for University, UPSC/NEET/GATE for Coaching, AWS/Python for Certification, CA/LLB for Professional Course) — with an "Other" free-text fallback
   - **Edit Profile** screen to update basic info and add / remove education records any time
 - Smart Search — free-text + batch/department filters (e.g. `ABC College 2015 ECE`)

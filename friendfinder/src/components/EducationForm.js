@@ -5,8 +5,12 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Button, Field, Select } from './ui';
+import LocationPicker from './LocationPicker';
 import { colors } from '../theme';
 import { EDUCATION_TYPES, EDU_FIELDS, COURSE_OPTIONS, MEDIUMS } from '../data';
+
+// Keys written by the cascading location picker.
+const LOCATION_KEYS = ['state', 'district', 'city'];
 
 const emptyValues = () => ({});
 
@@ -18,10 +22,21 @@ export default function EducationForm({ onAdd, addLabel = 'Add this education' }
   const set = (key, val) => setValues((v) => ({ ...v, [key]: val }));
 
   // Required fields that are still empty block submission.
-  const missing = useMemo(
-    () => fields.filter((fl) => fl.required && !String(values[fl.key] || '').trim()).map((fl) => fl.label),
-    [fields, values]
-  );
+  const missing = useMemo(() => {
+    const out = [];
+    fields.forEach((fl) => {
+      if (!fl.required) return;
+      if (fl.kind === 'location') {
+        // State, District & City are all required for a location field.
+        LOCATION_KEYS.forEach((k) => {
+          if (!String(values[k] || '').trim()) out.push(k[0].toUpperCase() + k.slice(1));
+        });
+      } else if (!String(values[fl.key] || '').trim()) {
+        out.push(fl.label);
+      }
+    });
+    return out;
+  }, [fields, values]);
 
   const changeType = (t) => { setType(t); setValues(emptyValues()); };
 
@@ -30,6 +45,13 @@ export default function EducationForm({ onAdd, addLabel = 'Add this education' }
     // Keep `level` mirrored to `type` for back-compat with search/matching.
     const entry = { type, level: type };
     fields.forEach((fl) => {
+      if (fl.kind === 'location') {
+        LOCATION_KEYS.forEach((k) => {
+          const v = String(values[k] || '').trim();
+          if (v) entry[k] = v;
+        });
+        return;
+      }
       let val = String(values[fl.key] || '').trim();
       // If "Other" was chosen and a custom value typed, use the custom text.
       const custom = String(values[fl.key + 'Custom'] || '').trim();
@@ -93,6 +115,16 @@ export default function EducationForm({ onAdd, addLabel = 'Add this education' }
               value={values[fl.key] || ''}
               options={MEDIUMS}
               onChange={(t) => set(fl.key, t)}
+            />
+          );
+        }
+        if (fl.kind === 'location') {
+          return (
+            <LocationPicker
+              key={fl.key}
+              required={fl.required}
+              value={{ state: values.state, district: values.district, city: values.city }}
+              onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
             />
           );
         }
