@@ -39,6 +39,11 @@ export const LANGUAGES = ['English', 'Tamil', 'Hindi', 'Telugu', 'Malayalam', 'K
 export const PROFILE_VISIBILITY = ['Public', 'Friends Only', 'Verified Members Only', 'Private'];
 export const REQUEST_FROM = ['Everyone', 'Batchmates Only', 'Friends of Friends', 'No One'];
 
+// Reasons offered during account deletion.
+export const DELETE_REASONS = [
+  'Privacy concerns', 'Found my friends', 'Not useful', 'Created another account', 'Other',
+];
+
 // The education categories a user can add. Each drives its own field set
 // (EDU_FIELDS) and predefined course/degree list (COURSE_OPTIONS).
 export const EDUCATION_TYPES = [

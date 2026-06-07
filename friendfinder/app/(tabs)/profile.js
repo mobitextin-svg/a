@@ -44,6 +44,7 @@ export default function Profile() {
   const { state, friendsList, logout } = useApp();
   const me = state.me || {};
   const edit = () => router.push('/edit-profile');
+  const editSection = (section) => router.push({ pathname: '/edit-profile', params: { section } });
 
   const prof = me.profession || {};
   const contact = me.contact || {};
@@ -109,7 +110,7 @@ export default function Profile() {
           )}
 
           {/* 1 — Basic Information */}
-          <SectionTitle action="Edit" onAction={edit}>Basic Information</SectionTitle>
+          <SectionTitle action="Edit" onAction={() => editSection('basic')}>Basic Information</SectionTitle>
           <Card>
             <InfoRow icon="happy-outline" label="Nickname" value={me.nickname} />
             <InfoRow icon="male-female-outline" label="Gender" value={me.gender} />
@@ -118,14 +119,14 @@ export default function Profile() {
           </Card>
 
           {/* 2 — Education Details */}
-          <SectionTitle action="Add / Edit" onAction={edit}>Education Details</SectionTitle>
+          <SectionTitle action="Add / Edit" onAction={() => editSection('education')}>Education Details</SectionTitle>
           {(me.education || []).map((e, i) => <EducationCard key={i} entry={e} />)}
           {(!me.education || me.education.length === 0) && (
             <Card><Text style={styles.meta}>No education added yet.</Text></Card>
           )}
 
           {/* 3 — Professional Details */}
-          <SectionTitle action="Edit" onAction={edit}>Professional Details</SectionTitle>
+          <SectionTitle action="Edit" onAction={() => editSection('professional')}>Professional Details</SectionTitle>
           <Card>
             <InfoRow icon="briefcase-outline" label="Current Status" value={prof.status} />
             <InfoRow icon="id-card-outline" label="Designation" value={[prof.title, prof.company].filter(Boolean).join(' @ ')} />
@@ -141,7 +142,7 @@ export default function Profile() {
           </Card>
 
           {/* 4 — Contact Information */}
-          <SectionTitle action="Edit" onAction={edit}>Contact Information</SectionTitle>
+          <SectionTitle action="Edit" onAction={() => editSection('contact')}>Contact Information</SectionTitle>
           <Card>
             <InfoRow icon="call-outline" label="Mobile Number" value={mobile} hidden={mobileHidden} />
             <InfoRow icon="mail-outline" label="Email ID" value={email} hidden={emailHidden} />
@@ -156,7 +157,7 @@ export default function Profile() {
           {/* 5 — Social Links */}
           {socialLinks.length > 0 && (
             <>
-              <SectionTitle action="Edit" onAction={edit}>Social Links</SectionTitle>
+              <SectionTitle action="Edit" onAction={() => editSection('social')}>Social Links</SectionTitle>
               <Card>
                 {socialLinks.map(([icon, label, value], i) => (
                   <View key={label} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
@@ -174,13 +175,13 @@ export default function Profile() {
           {/* 6 — Interests */}
           {(me.interests || []).length > 0 && (
             <>
-              <SectionTitle action="Edit" onAction={edit}>Interests</SectionTitle>
+              <SectionTitle action="Edit" onAction={() => editSection('interests')}>Interests</SectionTitle>
               <Card><TagCloud items={me.interests} /></Card>
             </>
           )}
 
           {/* 7 — Privacy Settings */}
-          <SectionTitle action="Edit" onAction={edit}>Privacy Settings</SectionTitle>
+          <SectionTitle action="Edit" onAction={() => editSection('privacy')}>Privacy Settings</SectionTitle>
           <Card>
             <InfoRow icon="shield-outline" label="Profile Visibility" value={privacy.profileVisibility || 'Public'} />
             <InfoRow icon="person-add-outline" label="Who can send requests" value={privacy.requestsFrom || 'Everyone'} />
@@ -191,7 +192,7 @@ export default function Profile() {
           </Card>
 
           {/* 8 — Account Settings */}
-          <SectionTitle action="Edit" onAction={edit}>Account Settings</SectionTitle>
+          <SectionTitle action="Edit" onAction={() => editSection('account')}>Account Settings</SectionTitle>
           <Card>
             <InfoRow icon="language-outline" label="Preferred Language" value={account.language || 'English'} />
             <InfoRow icon="notifications-outline" label="Push notifications" value={(account.pushNotif ?? true) ? 'On' : 'Off'} />

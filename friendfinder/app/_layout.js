@@ -22,6 +22,9 @@ export default function RootLayout() {
             <Stack.Screen name="reunion/[id]" />
             <Stack.Screen name="premium" options={{ presentation: 'modal' }} />
             <Stack.Screen name="edit-profile" options={{ presentation: 'card' }} />
+            <Stack.Screen name="account/change-password" options={{ presentation: 'card' }} />
+            <Stack.Screen name="account/delete-account" options={{ presentation: 'card' }} />
+            <Stack.Screen name="account/verify" options={{ presentation: 'card' }} />
           </Stack>
         </AppProvider>
       </SafeAreaProvider>
