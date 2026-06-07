@@ -28,10 +28,14 @@ export const EDUCATION_TYPES = [
   'Other / Not Listed',
 ];
 
+// Status of an education record (Step 5 of the flow).
+export const STATUSES = ['Currently Studying', 'Completed', 'Discontinued'];
+// Who can see an education record (Step 6 of the flow).
+export const VISIBILITIES = ['Public', 'Friends Only', 'Verified Members Only', 'Private'];
+
 // Field descriptor helper.
-//   kind: 'text' | 'number' | 'course' | 'medium' | 'location'
-//   'course'   renders a picker from COURSE_OPTIONS[type] (free text if none).
-//   'location' renders the cascading State -> District -> City picker.
+//   kind: 'text' | 'number' | 'course'
+//   'course' renders a picker from COURSE_OPTIONS[type] (free text if none).
 const f = (key, label, opts = {}) => ({
   key,
   label,
@@ -39,71 +43,60 @@ const f = (key, label, opts = {}) => ({
   required: !!opts.required,
 });
 
-// Cascading State -> District -> City block.
-const loc = (required = true) => f('location', 'Location', { kind: 'location', required });
+// Common Batch / Start / Completion year trio (Step 4).
+const YEARS = [
+  f('batch', 'Batch Year', { kind: 'number' }),
+  f('startYear', 'Start Year', { kind: 'number' }),
+  f('endYear', 'Completion Year', { kind: 'number' }),
+];
 
 // Shared field block reused by UG / PG / University degree records.
 const DEGREE_FIELDS = (nameLabel) => [
-  f('name', nameLabel),
-  f('course', 'Degree', { kind: 'course' }),
+  f('name', nameLabel, { required: true }),
+  f('course', 'Degree', { kind: 'course', required: true }),
   f('department', 'Department'),
-  f('university', 'University'),
-  f('batch', 'Batch Year', { kind: 'number' }),
-  f('year', 'Year (e.g. Final Year)'),
-  f('startYear', 'Start Year', { kind: 'number' }),
-  f('endYear', 'Completion Year', { kind: 'number' }),
-  loc(true),
+  ...YEARS,
 ];
 
-// Which fields to show for each education type.
+// Institution-detail fields per education type (Step 4 of the flow).
+// Location (state/district/city) and status/visibility are collected in the
+// dedicated wizard steps, not here.
 export const EDU_FIELDS = {
   'School': [
-    f('name', 'School Name'),
-    f('course', 'Class / Grade', { kind: 'course', required: true }),
-    f('section', 'Section'),
-    f('batch', 'Batch Year', { kind: 'number' }),
-    f('medium', 'Medium', { kind: 'medium' }),
-    loc(true),
+    f('name', 'School Name', { required: true }),
+    f('course', 'Class', { kind: 'course', required: true }),
+    f('section', 'Section (Optional)'),
+    ...YEARS,
   ],
   'Diploma / Polytechnic': [
-    f('name', 'Institution Name'),
-    f('course', 'Course', { kind: 'course' }),
-    f('semester', 'Semester'),
-    f('section', 'Section'),
-    f('batch', 'Batch Year', { kind: 'number' }),
-    f('medium', 'Medium', { kind: 'medium' }),
-    loc(true),
+    f('name', 'Polytechnic Name', { required: true }),
+    f('course', 'Diploma Course', { kind: 'course', required: true }),
+    f('department', 'Department'),
+    ...YEARS,
   ],
   'College (UG)': DEGREE_FIELDS('College Name'),
   'College (PG)': DEGREE_FIELDS('College Name'),
   'University': DEGREE_FIELDS('University Name'),
   'Coaching Centre': [
-    f('name', 'Coaching Name'),
-    f('course', 'Course', { kind: 'course' }),
-    f('year', 'Year', { kind: 'number' }),
+    f('name', 'Coaching Centre Name', { required: true }),
+    f('course', 'Course Name', { kind: 'course', required: true }),
+    ...YEARS,
   ],
   'Certification / Training': [
-    f('name', 'Certification / Training Name'),
-    f('course', 'Course', { kind: 'course' }),
-    f('year', 'Year', { kind: 'number' }),
+    f('name', 'Institute Name', { required: true }),
+    f('course', 'Certification Name', { kind: 'course', required: true }),
+    ...YEARS,
   ],
   'Professional Course': [
-    f('course', 'Professional Course', { kind: 'course' }),
-    f('name', 'Institution / Academy Name', { required: true }),
-    f('specialization', 'Specialization'),
-    f('batch', 'Batch Year', { kind: 'number' }),
-    f('startYear', 'Start Year', { kind: 'number' }),
-    f('endYear', 'Completion Year', { kind: 'number' }),
-    f('university', 'University'),
-    f('year', 'Year'),
-    loc(true),
+    f('name', 'Institute Name', { required: true }),
+    f('course', 'Course Name', { kind: 'course', required: true }),
+    f('specialization', 'Department / Specialization'),
+    ...YEARS,
   ],
   'Other / Not Listed': [
-    f('name', 'Institution Name'),
-    f('course', 'Course / Title'),
-    f('department', 'Department / Field'),
-    f('batch', 'Batch Year', { kind: 'number' }),
-    loc(false),
+    f('name', 'Institution Name', { required: true }),
+    f('course', 'Course / Program Name'),
+    ...YEARS,
   ],
 };
 

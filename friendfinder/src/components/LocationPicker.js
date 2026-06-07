@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { Field, Select } from './ui';
 import { STATES, DISTRICTS, CITIES, OTHER } from '../locations';
 
-export default function LocationPicker({ value = {}, onChange, required }) {
+export default function LocationPicker({ value = {}, onChange, required, cityLabel = 'City' }) {
   const { state = '', district = '', city = '' } = value;
   const districtOpts = DISTRICTS[state] || [];
   const cityOpts = CITIES[state] || [];
@@ -64,10 +64,10 @@ export default function LocationPicker({ value = {}, onChange, required }) {
 
       {/* City — depends on state */}
       {!state ? (
-        <Select label="City" required={required} placeholder="Select state first" value="" options={[]} onChange={() => {}} />
+        <Select label={cityLabel} required={required} placeholder="Select state first" value="" options={[]} onChange={() => {}} />
       ) : cityOpts.length && !cityOther ? (
         <Select
-          label="City"
+          label={cityLabel}
           required={required}
           placeholder="Select city"
           value={city}
@@ -76,8 +76,8 @@ export default function LocationPicker({ value = {}, onChange, required }) {
         />
       ) : (
         <Field
-          label={'City' + (required ? ' *' : '')}
-          placeholder="Enter city"
+          label={cityLabel + (required ? ' *' : '')}
+          placeholder="Enter city / town / village"
           value={city}
           onChangeText={(t) => onChange({ city: t })}
         />

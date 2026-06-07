@@ -22,6 +22,7 @@ const initialState = {
   rsvps: [], // reunion ids I'm attending
   premium: false,
   profileViewers: ['u4', 'u7', 'u2'], // who viewed me (premium feature)
+  recentInstitutions: [], // recent institution searches (Step 3)
 };
 
 // --- Matching helpers (the "smart" part) -----------------------------------
@@ -88,6 +89,12 @@ export function AppProvider({ children }) {
       setState((s) => ({ ...s, me: { ...s.me, education: [...(s.me.education || []), entry] } })),
     removeEducation: (index) =>
       setState((s) => ({ ...s, me: { ...s.me, education: (s.me.education || []).filter((_, i) => i !== index) } })),
+    addRecentInstitution: (name) =>
+      setState((s) => {
+        const n = (name || '').trim();
+        if (!n) return s;
+        return { ...s, recentInstitutions: [n, ...s.recentInstitutions.filter((x) => x !== n)].slice(0, 8) };
+      }),
     logout: () => setState({ ...initialState, me: null }),
 
     // --- Friend connections ---

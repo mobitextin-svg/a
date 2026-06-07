@@ -15,9 +15,15 @@ school, college, polytechnic and university — built with **React Native + Expo
 - Onboarding: mobile-OTP / email / Google login (mocked), profile creation, multi-entry education history
 - Rich profile settings:
   - **Basic Information** — full name, nickname, profile photo, gender, date of birth, mobile & email (each with a privacy "hide" toggle), city/state
-  - **Education Details** — add multiple records across **School · Diploma / Polytechnic · College (UG) · College (PG) · University · Coaching Centre · Certification / Training · Professional Course · Other**. Each type shows its own fields (Class/Grade, Semester, Department, Batch Year, Start/Completion Year, Medium…) with required-field validation
-  - **Cascading location** — pick **State → District → City** as prefilled dropdowns (data in `src/locations.js`); every level also offers **"Other"** to type a value manually
-  - **Predefined Course / Degree options** per education type (e.g. SSLC/HSC for School, B.Tech/MBBS for UG, MBA/MCA for PG, PhD for University, UPSC/NEET/GATE for Coaching, AWS/Python for Certification, CA/LLB for Professional Course) — with an "Other" free-text fallback
+  - **Education Details — 6-step wizard** (`src/components/EducationForm.js`):
+    1. **Location** — cascading **State → District → City/Town/Village** (data in `src/locations.js`, all 36 states/UTs)
+    2. **Education Type** — School · Diploma/Polytechnic · College (UG) · College (PG) · University · Coaching Centre · Certification/Training · Professional Course · Other
+    3. **Institution Search** — search by name with city-based suggestions, recent searches and "popular in your city" (mock directory in `src/institutions.js`), plus **Add Institution Manually**
+    4. **Institution Details** — type-specific fields (name, course/degree, department/specialization, batch/start/completion year) with required-field validation
+    5. **Status** — Currently Studying · Completed · Discontinued
+    6. **Visibility** — Public · Friends Only · Verified Members Only · Private, plus a **Use for Search Matching** toggle
+  - Every dropdown (state, district, city, course/degree, institution) offers an **"Other → type manually"** fallback
+  - **Predefined Course / Degree options** per education type (e.g. SSLC/HSC for School, B.Tech/MBBS for UG, MBA/MCA for PG, PhD for University, UPSC/NEET/GATE for Coaching, AWS/Python for Certification, CA/LLB for Professional Course)
   - **Edit Profile** screen to update basic info and add / remove education records any time
 - Smart Search — free-text + batch/department filters (e.g. `ABC College 2015 ECE`)
 - Classmate matching with a relevance score (batchmate / same dept / same college / same city)

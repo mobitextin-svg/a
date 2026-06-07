@@ -122,9 +122,17 @@ export default function Profile() {
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.cardTitle}>{e.name || e.course || e.type}</Text>
                 {!!eduSummary(e) && <Text style={styles.meta}>{eduSummary(e)}</Text>}
-                {!!e.university && <Text style={styles.meta}>{e.university}</Text>}
                 {!!eduLocation(e) && <Text style={styles.meta}>{eduLocation(e)}</Text>}
-                <Tag label={e.type || e.level} />
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Tag label={e.type || e.level} />
+                  {!!e.status && <Tag label={e.status} color={e.status === 'Completed' ? colors.success : e.status === 'Discontinued' ? colors.danger : colors.accent} />}
+                </View>
+                {!!e.visibility && (
+                  <Text style={styles.metaSmall}>
+                    <Ionicons name="eye-outline" size={11} color={colors.muted} /> {e.visibility}
+                    {e.searchMatching ? ' · Search matching on' : ''}
+                  </Text>
+                )}
               </View>
             </Card>
           ))}
@@ -177,6 +185,7 @@ const styles = StyleSheet.create({
   verifyCard: { marginBottom: 14 },
   cardTitle: { fontWeight: '800', color: colors.ink, fontSize: 15.5 },
   meta: { color: colors.muted, fontSize: 13, marginTop: 2 },
+  metaSmall: { color: colors.muted, fontSize: 12, marginTop: 6 },
   premiumCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.gold, borderRadius: radius.md, padding: 18, marginBottom: 6 },
   premiumTitle: { color: '#fff', fontWeight: '900', fontSize: 16 },
   premiumSub: { color: 'rgba(255,255,255,0.92)', marginTop: 3, fontSize: 13 },

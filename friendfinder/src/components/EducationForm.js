@@ -1,88 +1,194 @@
-// Dynamic "add an education record" form.
-// Renders a different set of inputs per education type (driven by EDU_FIELDS)
-// and a predefined Course/Degree picker (COURSE_OPTIONS). Shared by the
-// onboarding flow and the Edit Profile screen.
+// Stepwise "add an education record" wizard.
+// Step 1 Location · Step 2 Type · Step 3 Institution Search ·
+// Step 4 Details · Step 5 Status · Step 6 Visibility.
+// Every dropdown (course/degree, district, city, institution) offers an
+// "Other / type manually" fallback.
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Button, Field, Select } from './ui';
+import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Button, Field, Select, Toggle } from './ui';
 import LocationPicker from './LocationPicker';
-import { colors } from '../theme';
-import { EDUCATION_TYPES, EDU_FIELDS, COURSE_OPTIONS, MEDIUMS } from '../data';
+import { colors, radius } from '../theme';
+import {
+  EDUCATION_TYPES, EDU_FIELDS, COURSE_OPTIONS, STATUSES, VISIBILITIES,
+} from '../data';
+import { searchInstitutions, popularInCity } from '../institutions';
+import { useApp } from '../store';
 
-// Keys written by the cascading location picker.
-const LOCATION_KEYS = ['state', 'district', 'city'];
+const TOTAL = 6;
+const TITLES = {
+  1: 'Location', 2: 'Education Type', 3: 'Institution Search',
+  4: 'Institution Details', 5: 'Status', 6: 'Visibility',
+};
 
-const emptyValues = () => ({});
+// Single-select option row used for Type / Status / Visibility.
+function RadioRow({ label, selected, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.radioRow, selected && styles.radioRowOn]}>
+      <Ionicons
+        name={selected ? 'radio-button-on' : 'radio-button-off'}
+        size={20}
+        color={selected ? colors.primary : colors.muted}
+      />
+      <Text style={[styles.radioText, selected && { color: colors.primary, fontWeight: '800' }]}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function EducationForm({ onAdd, addLabel = 'Add this education' }) {
-  const [type, setType] = useState(EDUCATION_TYPES[2]); // default: College (UG)
-  const [values, setValues] = useState(emptyValues());
+  const { state: appState, addRecentInstitution } = useApp();
 
-  const fields = EDU_FIELDS[type] || [];
-  const set = (key, val) => setValues((v) => ({ ...v, [key]: val }));
+  const [step, setStep] = useState(1);
+  const [place, setPlace] = useState({ state: '', district: '', city: '' });
+  const [type, setType] = useState('');
+  const [query, setQuery] = useState('');
+  const [manual, setManual] = useState(false);
+  const [details, setDetails] = useState({});
+  const [status, setStatus] = useState('');
+  const [visibility, setVisibility] = useState('Public');
+  const [searchMatching, setSearchMatching] = useState(true);
 
-  // Required fields that are still empty block submission.
-  const missing = useMemo(() => {
-    const out = [];
-    fields.forEach((fl) => {
-      if (!fl.required) return;
-      if (fl.kind === 'location') {
-        // State, District & City are all required for a location field.
-        LOCATION_KEYS.forEach((k) => {
-          if (!String(values[k] || '').trim()) out.push(k[0].toUpperCase() + k.slice(1));
-        });
-      } else if (!String(values[fl.key] || '').trim()) {
-        out.push(fl.label);
-      }
-    });
-    return out;
-  }, [fields, values]);
+  const fields = type ? EDU_FIELDS[type] || [] : [];
+  const setD = (k, v) => setDetails((d) => ({ ...d, [k]: v }));
 
-  const changeType = (t) => { setType(t); setValues(emptyValues()); };
-
-  const add = () => {
-    if (missing.length) return;
-    // Keep `level` mirrored to `type` for back-compat with search/matching.
-    const entry = { type, level: type };
-    fields.forEach((fl) => {
-      if (fl.kind === 'location') {
-        LOCATION_KEYS.forEach((k) => {
-          const v = String(values[k] || '').trim();
-          if (v) entry[k] = v;
-        });
-        return;
-      }
-      let val = String(values[fl.key] || '').trim();
-      // If "Other" was chosen and a custom value typed, use the custom text.
-      const custom = String(values[fl.key + 'Custom'] || '').trim();
-      if (val === 'Other' && custom) val = custom;
-      if (val) entry[fl.key] = val;
-    });
-    onAdd(entry);
-    setValues(emptyValues());
+  const reset = () => {
+    setStep(1); setPlace({ state: '', district: '', city: '' }); setType('');
+    setQuery(''); setManual(false); setDetails({}); setStatus('');
+    setVisibility('Public'); setSearchMatching(true);
   };
 
-  return (
-    <View>
-      <Select
-        label="Education Type"
-        icon="school-outline"
-        value={type}
-        options={EDUCATION_TYPES}
-        onChange={changeType}
-      />
+  // Resolve a field value, honouring the "Other" -> custom text override.
+  const resolved = (fl) => {
+    let v = String(details[fl.key] || '').trim();
+    const custom = String(details[fl.key + 'Custom'] || '').trim();
+    if (v === 'Other' && custom) v = custom;
+    return v;
+  };
 
+  const canNext = useMemo(() => {
+    if (step === 1) return !!(place.state && place.district && place.city);
+    if (step === 2) return !!type;
+    if (step === 3) return !!String(details.name || '').trim();
+    if (step === 4) return fields.filter((fl) => fl.required).every((fl) => resolved(fl));
+    if (step === 5) return !!status;
+    if (step === 6) return !!visibility;
+    return true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, place, type, details, fields, status, visibility]);
+
+  const pickType = (t) => { setType(t); setDetails({}); };
+  const pickInstitution = (name) => { setD('name', name); setManual(false); };
+
+  const finish = () => {
+    const entry = {
+      type, level: type,
+      state: place.state, district: place.district, city: place.city,
+      status, visibility, searchMatching,
+    };
+    fields.forEach((fl) => { const v = resolved(fl); if (v) entry[fl.key] = v; });
+    if (entry.name) addRecentInstitution(entry.name);
+    onAdd(entry);
+    reset();
+  };
+
+  // --- Step bodies ----------------------------------------------------------
+  const renderStep3 = () => {
+    const suggestions = searchInstitutions(query, place.city);
+    const popular = popularInCity(place.city);
+    const recent = appState.recentInstitutions || [];
+    return (
+      <View>
+        <Field
+          label="Search Institution"
+          icon="search-outline"
+          placeholder="Search by institution name"
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+        />
+
+        {!!details.name && (
+          <View style={styles.selectedBox}>
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+            <Text style={styles.selectedText} numberOfLines={1}>Selected: {details.name}</Text>
+          </View>
+        )}
+
+        {/* Manual add */}
+        <Pressable style={styles.checkRow} onPress={() => setManual((m) => !m)}>
+          <Ionicons name={manual ? 'checkbox' : 'square-outline'} size={20} color={manual ? colors.primary : colors.muted} />
+          <Text style={styles.checkText}>Add Institution Manually</Text>
+        </Pressable>
+        {manual && (
+          <Field
+            placeholder="Enter institution name"
+            value={details.name || ''}
+            onChangeText={(t) => setD('name', t)}
+            autoFocus
+          />
+        )}
+
+        {!manual && (
+          <>
+            {query.length > 0 && (
+              <>
+                <Text style={styles.listLabel}>Suggestions</Text>
+                {suggestions.length ? suggestions.map((i) => (
+                  <Pressable key={i.name} style={styles.instRow} onPress={() => pickInstitution(i.name)}>
+                    <Ionicons name="business-outline" size={18} color={colors.primary} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={styles.instName}>{i.name}</Text>
+                      <Text style={styles.instCity}>{i.city}</Text>
+                    </View>
+                    {details.name === i.name && <Ionicons name="checkmark" size={18} color={colors.success} />}
+                  </Pressable>
+                )) : <Text style={styles.note}>No matches. Tick “Add Institution Manually” above.</Text>}
+              </>
+            )}
+
+            {recent.length > 0 && (
+              <>
+                <Text style={styles.listLabel}>Recent Searches</Text>
+                <View style={styles.chipWrap}>
+                  {recent.map((r) => (
+                    <Pressable key={r} style={styles.chip} onPress={() => pickInstitution(r)}>
+                      <Ionicons name="time-outline" size={13} color={colors.body} />
+                      <Text style={styles.chipText}>{r}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <Text style={styles.listLabel}>Popular in {place.city || 'your city'}</Text>
+            {popular.length ? popular.map((i) => (
+              <Pressable key={i.name} style={styles.instRow} onPress={() => pickInstitution(i.name)}>
+                <Ionicons name="star-outline" size={18} color={colors.gold} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.instName}>{i.name}</Text>
+                  <Text style={styles.instCity}>{i.city}</Text>
+                </View>
+                {details.name === i.name && <Ionicons name="checkmark" size={18} color={colors.success} />}
+              </Pressable>
+            )) : <Text style={styles.note}>No popular institutions listed for this city — search above or add manually.</Text>}
+          </>
+        )}
+      </View>
+    );
+  };
+
+  const renderStep4 = () => (
+    <View>
       {fields.map((fl) => {
         if (fl.kind === 'course') {
           const opts = COURSE_OPTIONS[type] || [];
-          // No predefined list → free text entry.
           if (!opts.length) {
             return (
               <Field
                 key={fl.key}
                 label={fl.label + (fl.required ? ' *' : '')}
-                value={values[fl.key] || ''}
-                onChangeText={(t) => set(fl.key, t)}
+                value={details[fl.key] || ''}
+                onChangeText={(t) => setD(fl.key, t)}
               />
             );
           }
@@ -92,40 +198,18 @@ export default function EducationForm({ onAdd, addLabel = 'Add this education' }
                 label={fl.label}
                 required={fl.required}
                 placeholder={`Select ${fl.label}`}
-                value={values[fl.key] || ''}
+                value={details[fl.key] || ''}
                 options={opts}
-                onChange={(t) => set(fl.key, t)}
+                onChange={(t) => setD(fl.key, t)}
               />
-              {values[fl.key] === 'Other' && (
+              {details[fl.key] === 'Other' && (
                 <Field
                   placeholder={`Enter ${fl.label.toLowerCase()}`}
-                  value={values[fl.key + 'Custom'] || ''}
-                  onChangeText={(t) => set(fl.key + 'Custom', t)}
+                  value={details[fl.key + 'Custom'] || ''}
+                  onChangeText={(t) => setD(fl.key + 'Custom', t)}
                 />
               )}
             </View>
-          );
-        }
-        if (fl.kind === 'medium') {
-          return (
-            <Select
-              key={fl.key}
-              label={fl.label + ' (Optional)'}
-              placeholder="Select medium"
-              value={values[fl.key] || ''}
-              options={MEDIUMS}
-              onChange={(t) => set(fl.key, t)}
-            />
-          );
-        }
-        if (fl.kind === 'location') {
-          return (
-            <LocationPicker
-              key={fl.key}
-              required={fl.required}
-              value={{ state: values.state, district: values.district, city: values.city }}
-              onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-            />
           );
         }
         return (
@@ -133,27 +217,112 @@ export default function EducationForm({ onAdd, addLabel = 'Add this education' }
             key={fl.key}
             label={fl.label + (fl.required ? ' *' : '')}
             keyboardType={fl.kind === 'number' ? 'number-pad' : 'default'}
-            value={values[fl.key] || ''}
-            onChangeText={(t) => set(fl.key, t)}
+            value={details[fl.key] || ''}
+            onChangeText={(t) => setD(fl.key, t)}
           />
         );
       })}
+    </View>
+  );
 
-      {missing.length > 0 && (
-        <Text style={styles.hint}>Required: {missing.join(', ')}</Text>
-      )}
+  const renderBody = () => {
+    switch (step) {
+      case 1:
+        return (
+          <LocationPicker
+            required
+            cityLabel="City / Town / Village"
+            value={place}
+            onChange={(patch) => setPlace((p) => ({ ...p, ...patch }))}
+          />
+        );
+      case 2:
+        return EDUCATION_TYPES.map((t) => (
+          <RadioRow key={t} label={t} selected={type === t} onPress={() => pickType(t)} />
+        ));
+      case 3:
+        return renderStep3();
+      case 4:
+        return renderStep4();
+      case 5:
+        return STATUSES.map((s) => (
+          <RadioRow key={s} label={s} selected={status === s} onPress={() => setStatus(s)} />
+        ));
+      case 6:
+        return (
+          <View>
+            {VISIBILITIES.map((v) => (
+              <RadioRow key={v} label={v} selected={visibility === v} onPress={() => setVisibility(v)} />
+            ))}
+            <View style={{ marginTop: 8 }}>
+              <Toggle
+                label="Use for Search Matching"
+                hint="Let this record help batchmates find you."
+                icon="search-outline"
+                value={searchMatching}
+                onValueChange={setSearchMatching}
+              />
+            </View>
+          </View>
+        );
+      default:
+        return null;
+    }
+  };
 
-      <Button
-        title={addLabel}
-        variant="soft"
-        icon="add-circle-outline"
-        onPress={add}
-        disabled={missing.length > 0}
-      />
+  return (
+    <View style={styles.card}>
+      {/* Progress */}
+      <Text style={styles.stepLabel}>STEP {step} OF {TOTAL}</Text>
+      <Text style={styles.stepTitle}>{TITLES[step]}</Text>
+      <View style={styles.dots}>
+        {Array.from({ length: TOTAL }).map((_, i) => (
+          <View key={i} style={[styles.dot, i < step && styles.dotOn]} />
+        ))}
+      </View>
+
+      <View style={{ marginTop: 4 }}>{renderBody()}</View>
+
+      {/* Nav */}
+      <View style={styles.nav}>
+        {step > 1 ? (
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Button title="Back" variant="ghost" icon="chevron-back" onPress={() => setStep((s) => s - 1)} />
+          </View>
+        ) : null}
+        <View style={{ flex: 1, marginLeft: step > 1 ? 8 : 0 }}>
+          {step < TOTAL ? (
+            <Button title="Next" icon="chevron-forward" onPress={() => setStep((s) => s + 1)} disabled={!canNext} />
+          ) : (
+            <Button title={addLabel} icon="add-circle-outline" onPress={finish} disabled={!canNext} />
+          )}
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  hint: { color: colors.danger, fontSize: 12.5, marginBottom: 10, fontWeight: '600' },
+  card: { backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: 16 },
+  stepLabel: { color: colors.primary, fontWeight: '800', fontSize: 11.5, letterSpacing: 1 },
+  stepTitle: { fontSize: 20, fontWeight: '900', color: colors.ink, marginTop: 2 },
+  dots: { flexDirection: 'row', marginTop: 10, marginBottom: 14 },
+  dot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.border, marginRight: 4 },
+  dotOn: { backgroundColor: colors.primary },
+  radioRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 14, borderRadius: radius.sm, borderWidth: 1.5, borderColor: colors.border, marginBottom: 8 },
+  radioRowOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  radioText: { marginLeft: 12, fontSize: 15, fontWeight: '600', color: colors.ink },
+  checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, marginBottom: 8 },
+  checkText: { marginLeft: 10, fontWeight: '700', color: colors.ink, fontSize: 14.5 },
+  selectedBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.successSoft, borderRadius: radius.sm, padding: 10, marginBottom: 12 },
+  selectedText: { marginLeft: 8, color: colors.ink, fontWeight: '700', flex: 1 },
+  listLabel: { fontWeight: '800', color: colors.ink, fontSize: 13, marginTop: 14, marginBottom: 8 },
+  instRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 12, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, marginBottom: 8 },
+  instName: { fontWeight: '700', color: colors.ink, fontSize: 14.5 },
+  instCity: { color: colors.muted, fontSize: 12.5, marginTop: 1 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap' },
+  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 7, paddingHorizontal: 12, marginRight: 8, marginBottom: 8 },
+  chipText: { marginLeft: 5, color: colors.body, fontWeight: '700', fontSize: 12.5 },
+  note: { color: colors.muted, fontSize: 13, marginBottom: 6 },
+  nav: { flexDirection: 'row', marginTop: 18 },
 });
