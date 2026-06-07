@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,9 +10,18 @@ import { getUser, LEVEL_FILTERS } from '../../src/data';
 
 export default function Home() {
   const router = useRouter();
-  const { state, suggestions, sendRequest, acceptRequest, rejectRequest, joined } = useApp();
+  const { state, suggestions, sendRequest, acceptRequest, rejectRequest, joined, allUsers } = useApp();
   const me = state.me;
   const whereAreThey = suggestions.filter((s) => s.user.where).slice(0, 5);
+
+  // How many people match each education level (for the Home chips).
+  const levelCounts = useMemo(() => {
+    const map = {};
+    LEVEL_FILTERS.forEach((lf) => {
+      map[lf.label] = allUsers.filter((u) => (u.education || []).some((e) => lf.match(e))).length;
+    });
+    return map;
+  }, [allUsers]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -39,10 +48,10 @@ export default function Home() {
         <View style={{ marginTop: 18 }}>
           <Text style={styles.findLabel}>Find batchmates by level</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
-            {LEVEL_FILTERS.map((lf) => (
+            {LEVEL_FILTERS.filter((lf) => levelCounts[lf.label] > 0).map((lf) => (
               <Chip
                 key={lf.label}
-                label={lf.label}
+                label={`${lf.label} · ${levelCounts[lf.label]}`}
                 onPress={() => router.push({ pathname: '/(tabs)/search', params: { level: lf.label, t: String(Date.now()) } })}
               />
             ))}

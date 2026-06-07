@@ -4,8 +4,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Card, Tag, Button } from '../../src/components/ui';
+import EducationCard from '../../src/components/EducationCard';
 import { colors, radius } from '../../src/theme';
-import { useApp, matchScore } from '../../src/store';
+import { useApp, matchScore, sharedEducation } from '../../src/store';
 import { getUser } from '../../src/data';
 
 export default function UserProfile() {
@@ -23,6 +24,7 @@ export default function UserProfile() {
   const isFriend = state.friends.includes(u.id);
   const requested = state.outgoing.includes(u.id);
   const { reasons } = matchScore(state.me, u);
+  const shared = sharedEducation(state.me, u);
 
   const confirmBlock = () => {
     const doBlock = () => { block(u.id); router.back(); };
@@ -83,18 +85,27 @@ export default function UserProfile() {
           </Card>
         )}
 
+        {/* What you have in common */}
+        {shared.length > 0 && (
+          <>
+            <Text style={styles.section}>What you have in common</Text>
+            <Card style={{ backgroundColor: colors.primarySoft, borderColor: colors.primary + '33' }}>
+              {shared.map((s, i) => (
+                <View key={i} style={[styles.commonRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.primary + '22' }]}>
+                  <Ionicons name={s.icon} size={18} color={colors.primary} style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commonText}>{s.text}</Text>
+                    {!!s.sub && <Text style={styles.meta}>{s.sub}</Text>}
+                  </View>
+                </View>
+              ))}
+            </Card>
+          </>
+        )}
+
         {/* Education */}
         <Text style={styles.section}>Education</Text>
-        {u.education.map((e, i) => (
-          <Card key={i} style={{ marginBottom: 10, flexDirection: 'row', alignItems: 'center' }}>
-            <View style={styles.icon}><Ionicons name="school" size={20} color={colors.primary} /></View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.cardTitle}>{e.name}</Text>
-              <Text style={styles.meta}>{[e.course, e.department, e.batch].filter(Boolean).join(' • ')}</Text>
-            </View>
-            <Tag label={e.level} />
-          </Card>
-        ))}
+        {u.education.map((e, i) => <EducationCard key={i} entry={e} />)}
 
         {/* Where are they now */}
         {u.where && (
@@ -120,4 +131,6 @@ const styles = StyleSheet.create({
   section: { fontSize: 18, fontWeight: '800', color: colors.ink, marginTop: 22, marginBottom: 12 },
   cardTitle: { fontWeight: '800', color: colors.ink, fontSize: 15.5 },
   meta: { color: colors.muted, fontSize: 13, marginTop: 2 },
+  commonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
+  commonText: { fontWeight: '800', color: colors.ink, fontSize: 14.5 },
 });

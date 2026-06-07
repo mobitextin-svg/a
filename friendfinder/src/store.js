@@ -60,6 +60,31 @@ export function matchScore(me, other) {
   return { score, reasons: uniq.slice(0, 2) };
 }
 
+// Detailed list of everything you share with another user (for their profile).
+export function sharedEducation(me, other) {
+  const out = [];
+  for (const a of me?.education || []) {
+    for (const b of other.education || []) {
+      if (a.name && a.name === b.name) {
+        const lvl = (b.type || b.level || 'institution').replace(/\s*\(.*\)\s*/g, '');
+        if (a.batch && a.batch === b.batch) {
+          out.push({ icon: 'people', text: `Batchmate at ${b.name}`, sub: [lvl, b.batch].filter(Boolean).join(' • ') });
+        } else {
+          out.push({ icon: 'school', text: `Same ${lvl.toLowerCase()}`, sub: b.name });
+        }
+        if (a.department && a.department === b.department) {
+          out.push({ icon: 'git-branch', text: 'Same department', sub: a.department });
+        }
+      }
+    }
+  }
+  if (me?.city && other.city && me.city === other.city) {
+    out.push({ icon: 'location', text: 'Same city', sub: other.city });
+  }
+  const seen = new Set();
+  return out.filter((o) => { const k = o.text + o.sub; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
 export function AppProvider({ children }) {
   const [state, setState] = useState(initialState);
   const [hydrated, setHydrated] = useState(false);
