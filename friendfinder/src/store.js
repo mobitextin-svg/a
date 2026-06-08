@@ -118,6 +118,11 @@ export function AppProvider({ children }) {
     reactivate: () => setState((s) => ({ ...s, deactivated: false })),
     addEducation: (entry) =>
       setState((s) => ({ ...s, me: { ...s.me, education: [...(s.me.education || []), entry] } })),
+    updateEducation: (index, entry) =>
+      setState((s) => ({
+        ...s,
+        me: { ...s.me, education: (s.me.education || []).map((e, i) => (i === index ? entry : e)) },
+      })),
     removeEducation: (index) =>
       setState((s) => ({ ...s, me: { ...s.me, education: (s.me.education || []).filter((_, i) => i !== index) } })),
     addRecentInstitution: (name) =>

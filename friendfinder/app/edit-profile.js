@@ -24,8 +24,12 @@ export default function EditProfile() {
   const params = useLocalSearchParams();
   const section = params.section || 'all';
   const show = (k) => section === 'all' || section === k;
-  const { state, updateProfile, addEducation, removeEducation, logout, deactivate } = useApp();
+  const { state, updateProfile, addEducation, updateEducation, removeEducation, logout, deactivate } = useApp();
   const me = state.me || {};
+
+  // Education Details — which record is being edited, and whether we're adding one.
+  const [editingEdu, setEditingEdu] = useState(null); // index of record being edited
+  const [addingEdu, setAddingEdu] = useState(false);
 
   // 1 — Basic Information
   const [name, setName] = useState(me.name || '');
@@ -165,11 +169,48 @@ export default function EditProfile() {
         {show('education') && (<>
           <SectionTitle>Education Details</SectionTitle>
           {education.map((e, i) => (
-            <EducationCard key={i} entry={e} onRemove={() => removeEducation(i)} />
+            editingEdu === i ? (
+              <EducationForm
+                key={i}
+                mode="edit"
+                initial={e}
+                saveLabel="Save Changes"
+                onSave={(entry) => { updateEducation(i, entry); setEditingEdu(null); }}
+                onCancel={() => setEditingEdu(null)}
+              />
+            ) : (
+              <EducationCard
+                key={i}
+                entry={e}
+                onEdit={() => { setEditingEdu(i); setAddingEdu(false); }}
+                onRemove={() => removeEducation(i)}
+              />
+            )
           ))}
           {education.length === 0 && <Text style={styles.meta}>No education added yet.</Text>}
-          <Text style={styles.subLabel}>Add a record</Text>
-          <EducationForm onAdd={addEducation} />
+
+          {addingEdu ? (
+            <View style={{ marginTop: 12 }}>
+              <Text style={styles.subLabel}>Add institution</Text>
+              <EducationForm
+                mode="edit"
+                initial={{}}
+                saveLabel="Add this institution"
+                onSave={(entry) => { addEducation(entry); setAddingEdu(false); }}
+                onCancel={() => setAddingEdu(false)}
+              />
+            </View>
+          ) : (
+            editingEdu === null && (
+              <Button
+                title="Add more institution"
+                variant="soft"
+                icon="add-circle-outline"
+                onPress={() => setAddingEdu(true)}
+                style={{ marginTop: 12 }}
+              />
+            )
+          )}
         </>)}
 
         {show('professional') && (<>
