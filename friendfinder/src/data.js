@@ -32,6 +32,28 @@ export const INTERESTS = [
   'Finance', 'Fashion', 'Science', 'Politics', 'Spirituality',
 ];
 
+// Hobbies (multi-select) — kept separate from interests on the profile.
+export const HOBBIES = [
+  'Cricket', 'Football', 'Singing', 'Dancing', 'Painting', 'Gardening', 'Trekking',
+  'Cycling', 'Chess', 'Yoga', 'Blogging', 'Writing', 'Calligraphy', 'Birdwatching',
+  'Collecting', 'DIY / Crafts',
+];
+
+// Friend-matching: who the member is hoping to reconnect with.
+export const LOOKING_FOR = [
+  'School Friends', 'College Friends', 'Teachers', 'Classmates', 'Hostel Friends', 'Alumni',
+];
+
+// Premium feature list (display only — gated behind state.premium).
+export const PREMIUM_FEATURES = [
+  { icon: 'eye-outline', label: 'Who Viewed My Profile' },
+  { icon: 'search-outline', label: 'Who Searched My Name' },
+  { icon: 'lock-open-outline', label: 'Contact Unlock Requests' },
+  { icon: 'trending-up-outline', label: 'Priority Search Ranking' },
+  { icon: 'options-outline', label: 'Advanced Filters' },
+  { icon: 'rocket-outline', label: 'Profile Boost' },
+];
+
 // Account Settings.
 export const LANGUAGES = ['English', 'Tamil', 'Hindi', 'Telugu', 'Malayalam', 'Kannada', 'Marathi', 'Bengali', 'Other'];
 

@@ -288,7 +288,8 @@ function EducationEditForm({ initial = {}, onSave, onCancel, saveLabel = 'Save C
         </View>
       )}
 
-      <Field label="Institute Name *" icon="business-outline" value={name} onChangeText={setName} />
+      <Text style={styles.groupLabel}>Institute Name *</Text>
+      <InstitutionSearch city={initial.city} value={name} onPick={setName} />
 
       {courseOpts.length ? (
         <>
