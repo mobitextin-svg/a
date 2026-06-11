@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZyvoRCS Sender v9 — RCS Only</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1F4E78;--navy-dk:#163858;--navy-lt:#2E6DA8;
+  --teal:#00C6FF;--teal-dk:#009FD4;
+  --bg:#0E2338;--bg-card:#172E48;--bg-input:#0B1E30;
+  --text:#E4F1FB;--muted:#7AADCC;--border:#264D6E;
+  --ok:#22C55E;--err:#EF4444;--warn:#F59E0B;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+
+/* Header */
+.hdr{background:var(--navy-dk);border-bottom:2px solid var(--teal);height:50px;display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.logo{font-size:20px;font-weight:800;color:var(--teal);letter-spacing:1px}
+.logo em{color:var(--text);font-style:normal}
+.ver{font-size:11px;color:var(--muted);background:var(--navy);padding:2px 7px;border-radius:8px}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+.dbadge{font-size:12px;font-weight:600;padding:3px 10px;border-radius:10px}
+.dbadge.ok{background:rgba(34,197,94,.2);color:var(--ok);border:1px solid var(--ok)}
+.dbadge.no{background:rgba(239,68,68,.15);color:var(--err);border:1px solid var(--err)}
+
+/* Layout */
+.layout{display:flex;height:calc(100vh - 50px)}
+.sidebar{width:220px;background:var(--navy-dk);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:14px 10px;gap:4px;flex-shrink:0}
+.nav{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);transition:.15s;user-select:none}
+.nav:hover{background:var(--navy);color:var(--text)}
+.nav.on{background:var(--teal);color:#003050;font-weight:700}
+.nav .ic{font-size:16px;min-width:20px}
+.nav-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--muted);line-height:1.6}
+.main{flex:1;overflow-y:auto;padding:20px}
+.sec{display:none}.sec.on{display:block}
+
+/* Cards */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}
+.ctitle{font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+
+/* Form */
+.fld{margin-bottom:13px}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;letter-spacing:.3px}
+input,select,textarea{width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal)}
+textarea{resize:vertical}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:6px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-teal{background:var(--teal);color:#003050}.btn-teal:not(:disabled):hover{background:var(--teal-dk)}
+.btn-navy{background:var(--navy-lt);color:#fff}.btn-navy:not(:disabled):hover{background:var(--navy)}
+.btn-ok{background:var(--ok);color:#fff}.btn-ok:not(:disabled):hover{filter:brightness(1.1)}
+.btn-err{background:var(--err);color:#fff}.btn-err:not(:disabled):hover{filter:brightness(1.1)}
+.btn-warn{background:var(--warn);color:#000}.btn-warn:not(:disabled):hover{filter:brightness(1.1)}
+.btn-sm{padding:6px 12px;font-size:12px}
+
+/* Tabs inside section */
+.tabs{display:flex;gap:4px;margin-bottom:14px;background:var(--bg-input);border-radius:8px;padding:4px}
+.tab{flex:1;text-align:center;padding:8px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);transition:.15s}
+.tab.on{background:var(--teal);color:#003050}
+.tab-body{display:none}.tab-body.on{display:block}
+
+/* Device cards */
+.dev-card{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:11px 14px;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.dev-card.ok{border-color:var(--ok)}
+.dev-name{font-weight:600;font-size:13px}
+.dev-state{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* SIM selector */
+.sim-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:4px}
+.sim-opt{background:var(--bg-input);border:2px solid var(--border);border-radius:8px;padding:12px;text-align:center;cursor:pointer;transition:.15s}
+.sim-opt:hover{border-color:var(--muted)}
+.sim-opt.on{border-color:var(--teal);background:rgba(0,198,255,.1)}
+.sim-opt .sico{font-size:22px;margin-bottom:4px}
+.sim-opt .slbl{font-size:12px;font-weight:700;color:var(--text)}
+.sim-opt .sdesc{font-size:10px;color:var(--muted);margin-top:2px}
+.sim-sub-ids{display:none;margin-top:10px}
+.sim-sub-ids.show{display:grid}
+
+/* SIM status pills */
+.sim-status{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.sim-pill{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:12px;background:var(--bg-input);border:1px solid var(--border)}
+.sim-pill .dot{width:8px;height:8px;border-radius:50%}
+.dot-ok{background:var(--ok)}
+.dot-no{background:var(--err)}
+.dot-uk{background:var(--warn)}
+
+/* Upload / drop zone */
+.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:26px;text-align:center;cursor:pointer;transition:.2s}
+.drop-zone:hover{border-color:var(--teal);background:rgba(0,198,255,.04)}
+.drop-icon{font-size:32px;margin-bottom:7px}
+.drop-txt{color:var(--muted);font-size:13px}
+
+/* Paste numbers */
+.paste-area{width:100%;min-height:160px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-size:13px;font-family:'Consolas',monospace;resize:vertical}
+.paste-area:focus{outline:none;border-color:var(--teal)}
+.paste-info{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6}
+.number-preview{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.num-chip{background:var(--navy);border:1px solid var(--border);border-radius:5px;padding:3px 9px;font-size:12px;font-family:monospace}
+
+/* Column mapper */
+.map-row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:8px}
+.map-key{font-size:13px;color:var(--teal);font-family:monospace}
+
+/* Var pills */
+.vars{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.var-pill{background:rgba(0,198,255,.12);border:1px solid var(--teal);color:var(--teal);padding:3px 10px;border-radius:5px;font-size:12px;font-family:monospace;cursor:pointer;transition:.15s}
+.var-pill:hover{background:rgba(0,198,255,.25)}
+
+/* Custom message buttons */
+.cbtn-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cbtn-empty{font-size:12px;color:var(--muted)}
+.cbtn{display:inline-flex;align-items:center;gap:6px;background:rgba(0,198,255,.10);border:1px solid var(--teal);color:var(--teal);padding:4px 6px 4px 11px;border-radius:14px;font-size:12px;cursor:pointer;transition:.15s}
+.cbtn:hover{background:rgba(0,198,255,.22)}
+.cbtn .cbtn-lbl{font-weight:600}
+.cbtn .cbtn-edit,.cbtn .cbtn-del{font-size:11px;opacity:.65;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center}
+.cbtn .cbtn-edit:hover{opacity:1;background:rgba(0,198,255,.35)}
+.cbtn .cbtn-del:hover{opacity:1;background:var(--err);color:#fff}
+.cbtn-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:10px;padding:10px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px}
+.cbtn-form .fld{margin-bottom:0}
+.cbtn-form .f-label{flex:0 0 150px}
+.cbtn-form .f-text{flex:1 1 220px}
+.cbtn-form input{width:100%}
+
+/* Preview */
+.prev-wrap{background:#ddd5c8;border-radius:8px;padding:14px;min-height:70px}
+.prev-bubble{background:#DCF8C6;color:#111;border-radius:10px 10px 10px 2px;padding:10px 14px;max-width:85%;font-size:13px;line-height:1.5;word-break:break-word}
+
+/* Template cards */
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:4px}
+.tpl-card{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:13px 14px;display:flex;flex-direction:column;gap:8px;transition:.15s;cursor:pointer}
+.tpl-card:hover{border-color:var(--teal);background:rgba(0,198,255,.05)}
+.tpl-card-name{font-weight:700;font-size:13px;color:var(--teal);display:flex;align-items:center;gap:6px}
+.tpl-card-body{font-size:12px;color:var(--muted);line-height:1.5;white-space:pre-wrap;word-break:break-word;max-height:56px;overflow:hidden;position:relative}
+.tpl-card-body::after{content:'';position:absolute;bottom:0;left:0;right:0;height:18px;background:linear-gradient(transparent,var(--bg-input))}
+.tpl-card-actions{display:flex;gap:6px;margin-top:2px}
+.tpl-chip{display:inline-flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);padding:7px 12px;border-radius:6px;margin:4px;font-size:13px;cursor:pointer;transition:.15s}
+.tpl-chip:hover{border-color:var(--teal)}
+.tpl-del{color:var(--err);font-size:15px;cursor:pointer;line-height:1}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.stat{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.stat-v{font-size:26px;font-weight:800;color:var(--teal)}
+.stat-l{font-size:11px;color:var(--muted);margin-top:2px}
+.stat.sent .stat-v{color:var(--ok)}.stat.fail .stat-v{color:var(--err)}
+
+/* Progress */
+.prog-wrap{background:var(--bg-input);border-radius:20px;height:10px;overflow:hidden;margin:10px 0}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--navy-lt),var(--teal));border-radius:20px;transition:width .5s ease;width:0%}
+
+/* Log */
+.log{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px;height:230px;overflow-y:auto;font-family:'Consolas',monospace;font-size:12px}
+.log-row{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.log-t{color:var(--muted);margin-right:8px}
+
+/* Send controls */
+.ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+
+/* Divider */
+.divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+
+/* Info box */
+.info-box{background:rgba(0,198,255,.08);border:1px solid rgba(0,198,255,.25);border-radius:7px;padding:10px 14px;font-size:12px;color:var(--muted);line-height:1.7;margin-top:10px}
+
+/* Badges */
+.badge{display:inline-block;padding:2px 9px;border-radius:9px;font-size:11px;font-weight:700}
+.b-ok{background:rgba(34,197,94,.2);color:var(--ok)}
+.b-err{background:rgba(239,68,68,.15);color:var(--err)}
+.b-info{background:rgba(0,198,255,.15);color:var(--teal)}
+
+/* Modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99;align-items:center;justify-content:center}
+.overlay.on{display:flex}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:22px;width:460px;max-width:95vw}
+.mtitle{font-size:15px;font-weight:700;color:var(--teal);margin-bottom:18px}
+#qr-video{width:100%;border-radius:8px;background:#000;max-height:190px}
+#qr-canvas{display:none}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:11px 18px;font-size:13px;z-index:999;transform:translateY(80px);transition:transform .25s ease;max-width:300px}
+.toast.up{transform:translateY(0)}.toast.tok{border-color:var(--ok)}.toast.terr{border-color:var(--err)}
+
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Formatting toolbar */
+.fmt-bar{display:flex;gap:3px;align-items:center;background:#ffffff;border:1px solid #d0d7de;border-bottom:none;border-radius:6px 6px 0 0;padding:5px 7px;flex-wrap:wrap}
+.fmt-btn{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;padding:0 7px;border:none;background:transparent;color:#1a1a2e;border-radius:4px;cursor:pointer;font-size:13px;font-weight:700;transition:.12s}
+.fmt-btn:hover{background:#e6edf3}
+.fmt-btn.ital{font-style:italic;font-weight:400}
+.fmt-btn.strike{text-decoration:line-through}
+.fmt-btn.mono{font-family:monospace;font-size:12px}
+.fmt-btn.ubold{font-weight:900;letter-spacing:-.5px}
+.fmt-btn.unbold{font-weight:400;text-decoration:underline dotted;font-size:11px}
+.fmt-sep{width:1px;height:18px;background:#d0d7de;margin:0 3px}
+.fmt-hint{margin-left:auto;font-size:10px;color:#666}
+.fmt-textarea{border-radius:0 0 6px 6px!important;border-top:none!important}
+
+/* Attachment section */
+.attach-bar{display:flex;gap:8px;align-items:center;background:#ffffff;border:1px solid #d0d7de;border-top:none;border-bottom:none;padding:5px 10px;flex-wrap:wrap}
+.attach-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:1px solid #d0d7de;border-radius:5px;background:#f6f8fa;color:#444;font-size:12px;font-weight:600;cursor:pointer;transition:.12s}
+.attach-btn:hover{background:#e6edf3;border-color:#aaa}
+.attach-btn input[type=file]{display:none}
+.attach-preview{display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px;background:#ffffff;border:1px solid #d0d7de;border-top:none;border-bottom:none;min-height:0}
+.attach-preview:empty{display:none}
+.attach-chip{display:inline-flex;align-items:center;gap:6px;background:#e8f4fd;border:1px solid #b3d9f7;border-radius:5px;padding:3px 10px;font-size:12px;color:#1a5276;max-width:240px}
+.attach-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.attach-chip .rm{cursor:pointer;color:#888;font-size:14px;line-height:1;flex-shrink:0}
+.attach-chip .rm:hover{color:#cc0000}
+.fmt-textarea-attach{border-radius:0!important;border-top:none!important}
+
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="logo">ZYVO<em>RCS</em></div>
+  <div class="ver">v7.0</div>
+  <div class="hdr-r">
+    <span id="hdr-badge" class="dbadge no">No Device</span>
+    <span id="hdr-dev"   style="font-size:12px;color:var(--muted)">—</span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="nav on" data-sec="devices"   onclick="nav(this)"><span class="ic">📱</span> Devices</div>
+    <div class="nav"    data-sec="contacts"  onclick="nav(this)"><span class="ic">👥</span> Contacts</div>
+    <div class="nav"    data-sec="templates" onclick="nav(this)"><span class="ic">✍️</span> Templates</div>
+    <div class="nav"    data-sec="send"      onclick="nav(this)"><span class="ic">🚀</span> Send</div>
+    <div class="nav"    data-sec="report"    onclick="nav(this)"><span class="ic">📊</span> Report</div>
+    <div class="nav-foot">ZyvoRCS Sender v7<br>Zyvo Tools</div>
+  </div>
+
+  <div class="main">
+
+    <!-- ═══ DEVICES ══════════════════════════════════════════════ -->
+    <div class="sec on" id="sec-devices">
+      <div class="card">
+        <div class="ctitle">📱 Connected Devices</div>
+        <div id="dev-list"><p style="color:var(--muted);font-size:13px">Loading...</p></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-navy btn-sm" onclick="refreshDevices()">🔄 Refresh</button>
+          <button class="btn btn-teal btn-sm" onclick="openPair()">➕ Pair New Device</button>
+        </div>
+      </div>
+
+      <!-- Diagnostic Test card -->
+      <div class="card">
+        <div class="ctitle">🧪 Send Diagnostics — Test One Message</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          Run a single test send and see exactly which step passes or fails. Use this to find why RCS is not starting on phone.
+        </p>
+        <div class="row3">
+          <div class="fld">
+            <label>Device</label>
+            <select id="diag-device"><option value="">-- Select --</option></select>
+          </div>
+          <div class="fld">
+            <label>Test Mobile Number</label>
+            <input id="diag-mobile" placeholder="9876543210" type="tel">
+          </div>
+          <div class="fld">
+            <label>Test Message</label>
+            <input id="diag-msg" value="ZyvoRCS test message">
+          </div>
+        </div>
+        <button class="btn btn-warn btn-sm" onclick="runDiag()" id="diag-btn">🧪 Run Test Send</button>
+        <button class="btn btn-navy btn-sm" onclick="dumpUI()" id="dump-btn" style="margin-left:8px">🔍 Dump UI XML</button>
+        <div id="diag-results" style="margin-top:14px"></div>
+        <div id="dump-result" style="margin-top:10px;display:none">
+          <div style="font-size:11px;color:var(--teal);font-weight:700;margin-bottom:6px">📄 Current UI XML (clickable nodes)</div>
+          <textarea id="dump-xml" readonly style="width:100%;height:200px;font-size:10px;font-family:monospace;background:var(--bg-input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical"></textarea>
+        </div>
+      </div>
+
+      <!-- SIM Status card -->
+      <div class="card">
+        <div class="ctitle">📶 SIM Slot Status</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          Detect SIM cards on connected device. Use this to confirm subscription IDs before sending.
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="sim-detect-device" style="max-width:220px">
+            <option value="">-- Select Device --</option>
+          </select>
+          <button class="btn btn-navy btn-sm" onclick="detectSims()">🔍 Detect SIMs</button>
+        </div>
+        <div id="sim-status-result" class="sim-status"></div>
+        <div class="info-box" style="margin-top:12px">
+          ℹ️ Subscription IDs may differ per device. If SIM 1 doesn't work, try sub_id = 0 or the value shown above.
+          Android reports IDs as: SIM slot 0 = usually sub_id 1, SIM slot 1 = usually sub_id 2.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ CONTACTS ═════════════════════════════════════════════ -->
+    <div class="sec" id="sec-contacts">
+
+      <!-- Tab switcher -->
+      <div class="tabs">
+        <div class="tab on" id="tab-excel"  onclick="switchTab('excel')">📊 Excel Upload</div>
+        <div class="tab"    id="tab-paste"  onclick="switchTab('paste')">📋 Paste Numbers</div>
+      </div>
+
+      <!-- Excel tab -->
+      <div class="tab-body on" id="tbody-excel">
+        <div class="card">
+          <div class="ctitle">📂 Upload Contacts Excel</div>
+          <div class="drop-zone" onclick="document.getElementById('xl-in').click()">
+            <div class="drop-icon">📊</div>
+            <div class="drop-txt">Click to upload .xlsx file</div>
+            <div class="drop-txt" style="font-size:11px;margin-top:3px">Columns: Name, Mobile, City, State, Company</div>
+          </div>
+          <input type="file" id="xl-in" accept=".xlsx" style="display:none" onchange="uploadXL(this)">
+          <div id="xl-status" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card" id="map-card" style="display:none">
+          <div class="ctitle">🗂️ Map Columns</div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Link Excel headers to template variables</p>
+          <div id="col-map"></div>
+          <button class="btn btn-teal" onclick="saveMap()" style="margin-top:6px">✅ Save & Continue</button>
+        </div>
+      </div>
+
+      <!-- Paste tab -->
+      <div class="tab-body" id="tbody-paste">
+        <div class="card">
+          <div class="ctitle">📋 Paste Numbers — Quick Mode</div>
+          <div class="fld">
+            <label>Paste mobile numbers (one per line, comma separated, or raw text — 10-digit Indian numbers auto-extracted)</label>
+            <textarea class="paste-area" id="paste-input"
+              placeholder="9876543210&#10;9845001234&#10;8765432109&#10;&#10;Or paste any raw text — valid 10-digit numbers will be extracted automatically."></textarea>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-teal" onclick="parsePaste()">🔍 Extract Numbers</button>
+            <button class="btn btn-navy btn-sm" onclick="clearPaste()">🗑 Clear</button>
+            <span id="paste-count" style="font-size:13px;color:var(--muted)"></span>
+          </div>
+          <div id="paste-preview" class="number-preview"></div>
+          <div class="info-box" style="margin-top:12px">
+            ℹ️ Only mobile numbers (6–9 start, 10 digits) are extracted. Duplicates removed automatically.<br>
+            In paste mode, <code style="color:var(--teal)">{name}</code> = same as <code style="color:var(--teal)">{mobile}</code>. Other variables will be blank.
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /contacts -->
+
+    <!-- ═══ TEMPLATES ════════════════════════════════════════════ -->
+    <div class="sec" id="sec-templates">
+      <div class="card" id="tpl-editor-card">
+        <div class="ctitle">✍️ Message Template</div>
+        <div class="fld">
+          <label>Template Name</label>
+          <input id="tpl-name" placeholder="e.g. Insurance Renewal">
+        </div>
+        <div class="fld">
+          <label>Message Content</label>
+          <div class="fmt-bar">
+            <button class="fmt-btn ubold" onclick="applyUnicodeBold('tpl-body')" title="Bold (Unicode — renders bold in RCS)">𝗕</button>
+            <button class="fmt-btn unbold" onclick="applyUnbold('tpl-body')" title="Remove bold (revert Unicode bold to ASCII)">B̶</button>
+            <span class="fmt-sep"></span>
+            <button class="fmt-btn ital" onclick="fmt('tpl-body','_','_')" title="Italic">I</button>
+            <button class="fmt-btn strike" onclick="fmt('tpl-body','~','~')" title="Strikethrough">S</button>
+            <button class="fmt-btn mono" onclick="fmt('tpl-body','`','`')" title="Monospace">&lt;/&gt;</button>
+            <span class="fmt-sep"></span>
+            <button class="fmt-btn" onclick="fmtList('tpl-body','• ')" title="Bullet list">☰</button>
+            <button class="fmt-btn" onclick="fmtList('tpl-body','1. ')" title="Numbered list">№</button>
+            <span class="fmt-hint">Select text → 𝗕 for Unicode bold</span>
+          </div>
+          <textarea id="tpl-body" class="fmt-textarea fmt-textarea-attach" rows="5" placeholder="Hi {name}, your renewal is due. Call us today." oninput="livePreview()"></textarea>
+          <!-- Attachment toolbar -->
+          <div class="attach-bar">
+            <label class="attach-btn" title="Attach file — audio, video, or any document">
+              📎 Attach File
+              <input type="file" accept="*/*" multiple onchange="addAttach(this,'tpl-attach-preview')">
+            </label>
+            <span style="font-size:11px;color:#888;">Audio · Video · Any document</span>
+          </div>
+          <div id="tpl-attach-preview" class="attach-preview"></div>
+          <div style="border:1px solid #d0d7de;border-top:none;border-radius:0 0 6px 6px;height:4px;"></div>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Insert Variables:</div>
+          <div class="vars">
+            <span class="var-pill" onclick="insVar('{name}')">name</span>
+            <span class="var-pill" onclick="insVar('{mobile}')">mobile</span>
+            <span class="var-pill" onclick="insVar('{city}')">city</span>
+            <span class="var-pill" onclick="insVar('{state}')">state</span>
+            <span class="var-pill" onclick="insVar('{company}')">company</span>
+          </div>
+        </div>
+
+        <!-- Custom Buttons -->
+        <div style="margin-bottom:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+            Custom Buttons: <span style="color:#888">click to insert into message · ✎ edit · ✕ delete</span>
+          </div>
+          <div class="cbtn-bar" id="cbtn-bar-tpl"></div>
+          <div class="cbtn-form">
+            <div class="fld f-label">
+              <label>Button Label</label>
+              <input id="cbtn-label" placeholder="e.g. Call Now">
+            </div>
+            <div class="fld f-text">
+              <label>Inserted Text</label>
+              <input id="cbtn-text" placeholder="e.g. Call / WhatsApp: 6385792029">
+            </div>
+            <input type="hidden" id="cbtn-edit-id" value="">
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-teal btn-sm" id="cbtn-save" onclick="saveButton()">➕ Add Button</button>
+              <button class="btn btn-navy btn-sm" onclick="clearButtonForm()">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="fld">
+          <label>Live Preview</label>
+          <div class="prev-wrap"><div class="prev-bubble" id="tpl-prev">Preview appears here...</div></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-teal" onclick="saveTpl()">💾 Save Template</button>
+          <button class="btn btn-navy" onclick="clearTpl()">🗑 Clear</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ctitle">📋 Templates Manager</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn btn-navy btn-sm" onclick="document.getElementById('tpl-import').click()">📥 Import JSON</button>
+          <button class="btn btn-navy btn-sm" onclick="exportTpls()">📤 Export JSON</button>
+          <button class="btn btn-navy btn-sm" onclick="exportTplsTxt()">📄 Export TXT</button>
+          <input type="file" id="tpl-import" accept=".json" style="display:none" onchange="importTpls(this)">
+        </div>
+        <div id="saved-tpls"><p style="color:var(--muted);font-size:13px">No templates saved yet.</p></div>
+      </div>
+    </div>
+
+    <!-- ═══ SEND ══════════════════════════════════════════════════ -->
+    <div class="sec" id="sec-send">
+
+      <!-- Config -->
+      <div class="card">
+        <div class="ctitle">⚙️ Configuration</div>
+        <div class="row2">
+          <div class="fld">
+            <label>Device</label>
+            <select id="s-device" onchange="onDeviceChange()"><option value="">-- Select --</option></select>
+          </div>
+          <div class="fld">
+            <label>Min Delay Between Messages (sec) <span style="color:var(--muted);font-size:11px">recommended: 45+</span></label>
+            <input id="s-min-delay" type="number" value="45" min="10" max="300">
+          </div>
+          <div class="fld">
+            <label>Max Delay Between Messages (sec) <span style="color:var(--muted);font-size:11px">randomized up to this</span></label>
+            <input id="s-max-delay" type="number" value="90" min="10" max="600">
+          </div>
+          <div class="fld">
+            <label>Batch Size <span style="color:var(--muted);font-size:11px">pause after every N messages (0 = off)</span></label>
+            <input id="s-batch-size" type="number" value="0" min="0" max="500">
+          </div>
+          <div class="fld">
+            <label>Batch Pause (sec) <span style="color:var(--muted);font-size:11px">sleep duration after each batch</span></label>
+            <input id="s-batch-pause" type="number" value="30" min="5" max="3600">
+          </div>
+          <div class="fld">
+            <label>Daily Send Limit Per SIM <span style="color:var(--muted);font-size:11px">recommended: 150</span></label>
+            <input id="s-daily-limit" type="number" value="150" min="10" max="500">
+          </div>
+          <div class="fld" style="display:none">
+            <input id="s-delay" type="number" value="5">
+          </div>
+          <div class="fld">
+            <label>Device PIN / Password <span style="color:var(--muted);font-size:11px">(leave blank if no lock screen)</span></label>
+            <input id="s-device-pin" type="password" placeholder="e.g. 1234" autocomplete="off" style="letter-spacing:2px">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="fld">
+            <label>Contact Source</label>
+            <select id="s-source">
+              <option value="excel">📊 Excel Upload</option>
+              <option value="paste">📋 Paste Numbers</option>
+            </select>
+          </div>
+          <div class="fld">
+            <label>Message Template</label>
+            <select id="s-tpl" onchange="loadSendTpl()"><option value="">-- Select --</option></select>
+          </div>
+        </div>
+        <div class="fld">
+          <label>Message (editable before send)</label>
+          <div class="fmt-bar">
+            <button class="fmt-btn ubold" onclick="applyUnicodeBold('s-msg')" title="Bold (Unicode — renders bold in RCS)">𝗕</button>
+            <button class="fmt-btn unbold" onclick="applyUnbold('s-msg')" title="Remove bold (revert Unicode bold to ASCII)">B̶</button>
+            <span class="fmt-sep"></span>
+            <button class="fmt-btn ital" onclick="fmt('s-msg','_','_')" title="Italic">I</button>
+            <button class="fmt-btn strike" onclick="fmt('s-msg','~','~')" title="Strikethrough">S</button>
+            <button class="fmt-btn mono" onclick="fmt('s-msg','`','`')" title="Monospace">&lt;/&gt;</button>
+            <span class="fmt-sep"></span>
+            <button class="fmt-btn" onclick="fmtList('s-msg','• ')" title="Bullet list">☰</button>
+            <button class="fmt-btn" onclick="fmtList('s-msg','1. ')" title="Numbered list">№</button>
+            <span class="fmt-hint">Select text → 𝗕 for Unicode bold</span>
+          </div>
+          <textarea id="s-msg" class="fmt-textarea fmt-textarea-attach" rows="3" placeholder="Select template above or type message..."></textarea>
+          <div style="margin-top:8px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Custom Buttons <span style="color:#888">· click to insert</span></div>
+            <div class="cbtn-bar" id="cbtn-bar-send"></div>
+          </div>
+          <!-- Attachment toolbar -->
+          <div class="attach-bar">
+            <label class="attach-btn" title="Attach file — audio, video, or any document">
+              📎 Attach File
+              <input type="file" accept="*/*" multiple onchange="addAttach(this,'s-attach-preview')">
+            </label>
+            <span style="font-size:11px;color:#888;">Audio · Video · Any document</span>
+          </div>
+          <div id="s-attach-preview" class="attach-preview"></div>
+          <div style="border:1px solid #d0d7de;border-top:none;border-radius:0 0 6px 6px;height:4px;"></div>
+        </div>
+      </div>
+
+      <!-- RCS-Only Notice -->
+      <div style="background:rgba(34,197,94,.1);border:1px solid var(--ok);border-radius:8px;padding:11px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px">📡</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--ok);">RCS-Only Mode — SMS is never sent</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Contacts without RCS enabled are automatically <b>skipped</b>. No SMS fallback, no exceptions.</div>
+        </div>
+      </div>
+
+      <!-- SIM Mode selector -->
+      <div class="card">
+        <div class="ctitle">📶 SIM Mode</div>
+        <div class="sim-grid">
+          <div class="sim-opt on" id="sopt-auto"   onclick="setSim('auto')">
+            <div class="sico">📱</div>
+            <div class="slbl">Auto</div>
+            <div class="sdesc">Device default</div>
+          </div>
+          <div class="sim-opt" id="sopt-sim1"   onclick="setSim('sim1')">
+            <div class="sico">📶</div>
+            <div class="slbl">SIM 1 Only</div>
+            <div class="sdesc">All via SIM 1</div>
+          </div>
+          <div class="sim-opt" id="sopt-sim2"   onclick="setSim('sim2')">
+            <div class="sico">📶</div>
+            <div class="slbl">SIM 2 Only</div>
+            <div class="sdesc">All via SIM 2</div>
+          </div>
+          <div class="sim-opt" id="sopt-rotate" onclick="setSim('rotate')">
+            <div class="sico">🔄</div>
+            <div class="slbl">Rotation</div>
+            <div class="sdesc">1 → 2 → 1 → 2</div>
+          </div>
+        </div>
+
+        <!-- Sub ID fields — shown when not Auto -->
+        <div class="sim-sub-ids row2" id="sim-sub-ids">
+          <div class="fld">
+            <label>SIM 1 Subscription ID</label>
+            <input id="sim1-subid" type="number" value="1" min="0">
+          </div>
+          <div class="fld">
+            <label>SIM 2 Subscription ID</label>
+            <input id="sim2-subid" type="number" value="2" min="0">
+          </div>
+        </div>
+
+        <div class="info-box">
+          📶 Rotation mode sends: contact 1 via SIM 1 → contact 2 via SIM 2 → contact 3 via SIM 1 → …<br>
+          Use <b>Detect SIMs</b> on the Devices page to confirm your subscription IDs.<br>
+          ⏭️ <b>Skipped</b> = contact does not have RCS active. SMS is never sent regardless of SIM mode.
+        </div>
+      </div>
+
+      <!-- Controls + Stats -->
+      <div class="card">
+        <div class="ctitle">🚀 Send Controls</div>
+        <div class="stats" style="grid-template-columns:repeat(6,1fr)">
+          <div class="stat">       <div class="stat-v" id="st-total">0</div><div class="stat-l">Total</div></div>
+          <div class="stat sent">  <div class="stat-v" id="st-sent">0</div> <div class="stat-l">✅ Sent</div></div>
+          <div class="stat">       <div class="stat-v" id="st-skip" style="color:var(--warn)">0</div><div class="stat-l">⏭️ Skipped</div></div>
+          <div class="stat fail">  <div class="stat-v" id="st-fail">0</div> <div class="stat-l">❌ Failed</div></div>
+          <div class="stat">       <div class="stat-v" id="st-balance" style="color:var(--teal)">—</div><div class="stat-l">💳 Balance</div></div>
+          <div class="stat">       <div class="stat-v" id="st-eta">—</div>  <div class="stat-l">⏳ ETA (min)</div></div>
+        </div>
+        <!-- SIM sent counters (shown when not auto) -->
+        <div id="sim-counters" style="display:none;margin-bottom:10px">
+          <div class="row2">
+            <div class="stat" style="margin:0"><div class="stat-v" id="st-sim1" style="font-size:20px">—</div><div class="stat-l">SIM 1 Sent</div></div>
+            <div class="stat" style="margin:0"><div class="stat-v" id="st-sim2" style="font-size:20px">—</div><div class="stat-l">SIM 2 Sent</div></div>
+          </div>
+        </div>
+        <div class="prog-wrap"><div class="prog-bar" id="prog"></div></div>
+        <div id="live-detail-wrap" style="display:none;margin-bottom:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.8">
+          <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+            <span>📤 <b style="color:var(--text)" id="ld-current">—</b></span>
+            <span style="color:var(--ok)">✅ Sent: <b id="ld-sent">0</b></span>
+            <span style="color:var(--warn)">⏭️ Skipped: <b id="ld-skip">0</b></span>
+            <span style="color:var(--err)">❌ Failed: <b id="ld-fail">0</b></span>
+            <span style="color:var(--teal)">⏳ ETA: <b id="ld-eta">—</b> min</span>
+            <span style="color:var(--muted)" id="ld-balance-wrap">💳 Balance: <b id="ld-balance" style="color:var(--teal)">—</b></span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px" id="s-current">Ready to send</div>
+        <div id="countdown-wrap" style="display:none;margin-bottom:12px;background:var(--bg-input);border:1px solid var(--teal);border-radius:10px;padding:12px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div id="cd-label" style="font-size:12px;font-weight:700;color:var(--teal)">⏱️ Next message in</div>
+            <div id="cd-progress-label" style="font-size:11px;color:var(--muted)"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div id="cd-number" style="font-size:48px;font-weight:900;color:var(--teal);min-width:70px;text-align:center;line-height:1;font-variant-numeric:tabular-nums">—</div>
+            <div style="flex:1">
+              <div style="background:var(--border);border-radius:6px;height:14px;overflow:hidden">
+                <div id="cd-bar" style="height:14px;background:linear-gradient(90deg,var(--navy-lt),var(--teal));width:100%;transition:width 1s linear;border-radius:6px"></div>
+              </div>
+              <div id="cd-sublabel" style="font-size:11px;color:var(--muted);margin-top:5px">seconds remaining</div>
+            </div>
+          </div>
+        </div>
+        <div class="ctrl">
+          <button class="btn btn-ok"   id="btn-start" onclick="startSend()">▶ Start Send</button>
+          <button class="btn btn-warn" id="btn-pause" onclick="pauseSend()" disabled>⏸ Pause</button>
+          <button class="btn btn-err"  id="btn-stop"  onclick="stopSend()"  disabled>⏹ Stop</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ctitle">📜 Live Log</div>
+        <div class="log" id="log-box">
+          <div class="log-row"><span class="log-t">--:--:--</span>Waiting to start...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ REPORT ════════════════════════════════════════════════ -->
+    <div class="sec" id="sec-report">
+      <div class="card">
+        <div class="ctitle">📊 Send Report</div>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">Generated automatically after send completes. Includes SIM Used column.</p>
+        <div id="rep-summary"></div>
+        <button class="btn btn-teal" onclick="dlReport()" style="margin-top:14px">⬇ Download Report (.xlsx)</button>
+      </div>
+    </div>
+
+  </div><!-- /.main -->
+</div><!-- /.layout -->
+
+<!-- Pair Modal -->
+<div class="overlay" id="pair-overlay">
+  <div class="modal">
+    <div class="mtitle">📱 Pair New Device — Wireless Debugging</div>
+    <div style="margin-bottom:14px;text-align:center">
+      <video id="qr-video" autoplay playsinline></video>
+      <canvas id="qr-canvas"></canvas>
+      <div id="qr-msg" style="font-size:11px;color:var(--muted);margin-top:5px">
+        Show QR from phone → Wireless Debugging → Pair with QR code
+      </div>
+    </div>
+    <div class="row2">
+      <div class="fld"><label>Phone IP Address</label><input id="p-ip" placeholder="192.168.1.x"></div>
+      <div class="fld"><label>Pairing Port</label><input id="p-port" placeholder="37000"></div>
+    </div>
+    <div class="fld">
+      <label>Pairing Password (auto-filled from QR)</label>
+      <input id="p-pass" placeholder="Scan QR or enter manually">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+      ① Phone → Settings → Developer Options → Wireless Debugging<br>
+      ② Tap <b>Pair device with QR code</b> → show QR to webcam<br>
+      ③ Copy IP from that screen → enter here → Pair
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-teal" onclick="pairDevice()">🔗 Pair & Connect</button>
+      <button class="btn btn-navy" onclick="closePair()">Cancel</button>
+    </div>
+    <div id="pair-res" style="margin-top:10px;font-size:13px"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+const SAMPLE = {name:'Rahul',mobile:'9876543210',city:'Chennai',state:'Tamil Nadu',company:'ABC Corp'};
+let colMap      = {};
+let allTpls     = {};
+let pollTmr     = null;
+let lastLog     = 0;
+let cdTimer     = null;
+let cdTotal     = 0;
+let qrStream    = null;
+let qrTimer     = null;
+let activeTab   = 'excel';
+let simMode     = 'auto';
+let pasteCount  = 0;
+
+// ── Navigation ─────────────────────────────────────────────────────
+function nav(el) {
+  document.querySelectorAll('.nav').forEach(n=>n.classList.remove('on'));
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('sec-'+el.dataset.sec).classList.add('on');
+  const sec = el.dataset.sec;
+  if(sec==='devices')              refreshDevices();
+  if(sec==='templates'||sec==='send'){ loadTpls(); loadButtons(); }
+}
+
+// ── Contact Tab switcher ───────────────────────────────────────────
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.tab-body').forEach(b=>b.classList.remove('on'));
+  document.getElementById('tab-'+tab).classList.add('on');
+  document.getElementById('tbody-'+tab).classList.add('on');
+  // Sync source dropdown
+  document.getElementById('s-source').value = tab;
+}
+
+// ── Diagnostics ────────────────────────────────────────────────────
+async function runDiag(){
+  const device  = document.getElementById('diag-device').value;
+  const mobile  = document.getElementById('diag-mobile').value.trim();
+  const message = document.getElementById('diag-msg').value.trim();
+  const results = document.getElementById('diag-results');
+  const btn     = document.getElementById('diag-btn');
+
+  if(!device){ toast('Select a device first','terr'); return; }
+  if(!mobile){ toast('Enter a test mobile number','terr'); return; }
+
+  btn.disabled=true; btn.textContent='⏳ Running...';
+  results.innerHTML='<p style="color:var(--muted);font-size:12px">Running test send — watch your phone screen...</p>';
+
+  const r = await fetch('/test_send',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({device,mobile,message,device_pin:document.getElementById('s-device-pin').value})}).then(r=>r.json()).catch(e=>({steps:[{step:'Network error',result:e.message,ok:false}]}));
+
+  const rows = r.steps.map(s=>`
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:16px;flex-shrink:0">${s.ok?'✅':'❌'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:${s.ok?'var(--ok)':'var(--err)'}">${s.step}</div>
+        <pre style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:2px;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto;background:var(--bg-input);padding:4px 6px;border-radius:4px">${(s.result||'—').replace(/</g,'&lt;')}</pre>
+      </div>
+    </div>`).join('');
+
+  const failed = r.steps.filter(s=>!s.ok);
+  const summary = failed.length===0
+    ? '<div style="color:var(--ok);font-weight:700;margin-top:10px">✅ All steps passed — message should have sent!</div>'
+    : `<div style="color:var(--err);font-weight:700;margin-top:10px">❌ Failed at: ${failed[0].step}</div>`;
+
+  results.innerHTML = rows + summary;
+  btn.disabled=false; btn.textContent='🧪 Run Test Send';
+}
+
+async function dumpUI(){
+  const device = document.getElementById('diag-device').value;
+  if(!device){ toast('Select a device first','terr'); return; }
+  const btn = document.getElementById('dump-btn');
+  btn.disabled=true; btn.textContent='⏳ Dumping...';
+  const r = await fetch('/dump_ui',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({device})}).then(r=>r.json()).catch(e=>({xml:'Error: '+e.message}));
+  // Extract only clickable nodes for readability
+  const nodes = [...r.xml.matchAll(/<node\s[^>]*clickable="true"[^>]*\/>/gs)].map(m=>m[0]);
+  const out = nodes.length ? nodes.join('\n\n') : r.xml.slice(0,2000);
+  document.getElementById('dump-xml').value = out || '(empty)';
+  document.getElementById('dump-result').style.display='block';
+  btn.disabled=false; btn.textContent='🔍 Dump UI XML';
+}
+
+// ── Devices ────────────────────────────────────────────────────────
+async function refreshDevices() {
+  const r = await fetch('/devices').then(r=>r.json()).catch(()=>({devices:[]}));
+  const list    = document.getElementById('dev-list');
+  const devSel  = document.getElementById('s-device');
+  const dSel2   = document.getElementById('sim-detect-device');
+  const diagSel = document.getElementById('diag-device');
+  const badge   = document.getElementById('hdr-badge');
+  const devLbl  = document.getElementById('hdr-dev');
+
+  devSel.innerHTML = '<option value="">-- Select --</option>';
+  dSel2.innerHTML  = '<option value="">-- Select Device --</option>';
+  diagSel.innerHTML= '<option value="">-- Select --</option>';
+
+  if(!r.devices.length){
+    list.innerHTML='<p style="color:var(--muted);font-size:13px">No devices. Pair a device first.</p>';
+    badge.textContent='No Device'; badge.className='dbadge no';
+    devLbl.textContent='—'; return;
+  }
+
+  list.innerHTML='';
+
+  // Fetch model info for all online devices in parallel
+  const online = r.devices.filter(d=>d.state==='device');
+  const modelMap = {};
+  await Promise.all(online.map(async d=>{
+    try {
+      const info = await fetch('/device_info',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({device:d.serial})}).then(r=>r.json());
+      modelMap[d.serial] = info;
+    } catch(e){ modelMap[d.serial]={name:d.serial,android:''}; }
+  }));
+
+  r.devices.forEach(d=>{
+    const ok = d.state==='device';
+    const info = modelMap[d.serial] || {name:d.serial,android:''};
+    const displayName = ok && info.name ? info.name : d.serial;
+    const androidLine = ok && info.android ? `<span style="font-size:10px;color:var(--muted);margin-left:6px">Android ${info.android}</span>` : '';
+    const serialLine  = ok ? `<div style="font-size:10px;color:var(--muted);margin-top:1px">📟 ${d.serial}</div>` : '';
+
+    list.innerHTML+=`<div class="dev-card ${ok?'ok':''}">
+      <div>
+        <div class="dev-name">📱 ${displayName}${androidLine}</div>
+        ${serialLine}
+        <div class="dev-state">${ok?'🟢 Online':'🔴 '+d.state}</div>
+      </div>
+      ${ok?`<button class="btn btn-navy btn-sm" onclick="disconnect('${d.serial}')">Disconnect</button>`:''}
+    </div>`;
+
+    if(ok){
+      const label = info.name && info.name!==d.serial ? `${info.name} (${d.serial})` : d.serial;
+      devSel.innerHTML  +=`<option value="${d.serial}">${label}</option>`;
+      dSel2.innerHTML   +=`<option value="${d.serial}">${label}</option>`;
+      diagSel.innerHTML +=`<option value="${d.serial}">${label}</option>`;
+    }
+  });
+
+  if(online.length){
+    const firstInfo = modelMap[online[0].serial];
+    const headerLabel = firstInfo && firstInfo.name ? firstInfo.name : online[0].serial;
+    badge.textContent=`${online.length} Device`; badge.className='dbadge ok';
+    devLbl.textContent = headerLabel;
+    devSel.value=online[0].serial;
+    dSel2.value =online[0].serial;
+  } else {
+    badge.textContent='Offline'; badge.className='dbadge no';
+  }
+}
+
+async function disconnect(serial){
+  await fetch('/connect',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ip:serial.replace(':5555',''),disconnect:true})});
+  refreshDevices();
+}
+
+// ── SIM Detection ─────────────────────────────────────────────────
+async function detectSims(){
+  const device=document.getElementById('sim-detect-device').value;
+  const res = document.getElementById('sim-status-result');
+  res.innerHTML='<span style="color:var(--muted);font-size:12px">🔍 Detecting...</span>';
+
+  const r=await fetch('/sims',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({device})}).then(r=>r.json()).catch(()=>({sims:[]}));
+
+  if(!r.sims.length){res.innerHTML='<span style="color:var(--err)">No SIM data returned</span>';return;}
+
+  res.innerHTML=r.sims.map(s=>{
+    const dot=s.active?'dot-ok':s.state==='UNKNOWN'?'dot-uk':'dot-no';
+    return `<div class="sim-pill">
+      <div class="dot ${dot}"></div>
+      <span><b>${s.label}</b> — ${s.state} — sub_id: <b style="color:var(--teal)">${s.sub_id}</b></span>
+    </div>`;
+  }).join('');
+
+  // Auto-fill sub IDs in send section
+  if(r.sims[0]) document.getElementById('sim1-subid').value=r.sims[0].sub_id;
+  if(r.sims[1]) document.getElementById('sim2-subid').value=r.sims[1].sub_id;
+  toast('SIM IDs auto-filled in Send section','tok');
+}
+
+// ── SIM Mode selector ─────────────────────────────────────────────
+function setSim(mode){
+  simMode=mode;
+  try{ localStorage.setItem('zyvo_sim_mode', mode); }catch(e){}
+  document.querySelectorAll('.sim-opt').forEach(o=>o.classList.remove('on'));
+  document.getElementById('sopt-'+mode).classList.add('on');
+  const showSubs = mode!=='auto';
+  document.getElementById('sim-sub-ids').classList.toggle('show', showSubs);
+  document.getElementById('sim-counters').style.display = showSubs?'block':'none';
+}
+
+// Restore SIM mode selection from localStorage on page load
+(function restoreSimMode(){
+  try{
+    const saved = localStorage.getItem('zyvo_sim_mode');
+    if(saved && ['auto','sim1','sim2','rotate'].includes(saved)){
+      setSim(saved);
+    }
+  }catch(e){}
+})();
+
+function onDeviceChange(){}
+
+// ── QR Pairing ────────────────────────────────────────────────────
+function openPair(){ document.getElementById('pair-overlay').classList.add('on'); startQR(); }
+function closePair(){ document.getElementById('pair-overlay').classList.remove('on'); stopQR(); }
+
+async function startQR(){
+  try{
+    qrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    const v=document.getElementById('qr-video'); v.srcObject=qrStream;
+    qrTimer=setInterval(()=>{
+      const c=document.getElementById('qr-canvas');
+      const ctx=c.getContext('2d');
+      c.width=v.videoWidth; c.height=v.videoHeight;
+      ctx.drawImage(v,0,0);
+      const img=ctx.getImageData(0,0,c.width,c.height);
+      const code=jsQR(img.data,img.width,img.height);
+      if(code) parseQR(code.data);
+    },400);
+  }catch(e){document.getElementById('qr-msg').textContent='Camera unavailable — enter details manually.';}
+}
+
+function stopQR(){
+  if(qrTimer){clearInterval(qrTimer);qrTimer=null;}
+  if(qrStream){qrStream.getTracks().forEach(t=>t.stop());qrStream=null;}
+}
+
+function parseQR(txt){
+  const m=txt.match(/P:([^;]+)/);
+  if(m){
+    document.getElementById('p-pass').value=m[1];
+    document.getElementById('qr-msg').textContent='✅ QR scanned! Enter IP & Port from Wireless Debugging screen.';
+    stopQR(); toast('QR scanned!','tok');
+  }
+}
+
+async function pairDevice(){
+  const ip=document.getElementById('p-ip').value.trim();
+  const port=document.getElementById('p-port').value.trim()||'37000';
+  const pass=document.getElementById('p-pass').value.trim();
+  const res=document.getElementById('pair-res');
+  if(!ip||!pass){res.innerHTML='<span style="color:var(--err)">IP and Password required</span>';return;}
+  res.innerHTML='⏳ Pairing...';
+  const r=await fetch('/pair',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ip,port,password:pass})}).then(r=>r.json());
+  if(r.success){
+    res.innerHTML=`<span style="color:var(--ok)">✅ ${r.message}</span>`;
+    setTimeout(()=>{closePair();refreshDevices();toast('Device paired!','tok');},1400);
+  }else{
+    res.innerHTML=`<span style="color:var(--err)">❌ ${r.message}</span>`;
+  }
+}
+
+// ── Excel Upload ───────────────────────────────────────────────────
+async function uploadXL(input){
+  const file=input.files[0]; if(!file)return;
+  const fd=new FormData(); fd.append('file',file);
+  document.getElementById('xl-status').innerHTML='⏳ Uploading...';
+  const r=await fetch('/upload',{method:'POST',body:fd}).then(r=>r.json());
+  if(r.success){
+    document.getElementById('xl-status').innerHTML=
+      `<span class="badge b-ok">✅ ${r.rows} contacts loaded</span>`;
+    const vars=['name','mobile','city','state','company'];
+    document.getElementById('col-map').innerHTML=vars.map(v=>`
+      <div class="map-row">
+        <span class="map-key">{${v}}</span>
+        <select id="map-${v}">
+          <option value="">-- Skip --</option>
+          ${r.columns.map(c=>`<option value="${c}" ${c&&c.toLowerCase().includes(v)?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>`).join('');
+    document.getElementById('map-card').style.display='block';
+    toast(`${r.rows} contacts loaded`,'tok');
+  }else{
+    document.getElementById('xl-status').innerHTML=`<span style="color:var(--err)">❌ ${r.message}</span>`;
+  }
+}
+
+function saveMap(){
+  colMap={};
+  ['name','mobile','city','state','company'].forEach(v=>{
+    const s=document.getElementById('map-'+v);
+    if(s&&s.value) colMap[v]=s.value;
+  });
+  toast('Column mapping saved!','tok');
+  activeTab='excel';
+  document.getElementById('s-source').value='excel';
+}
+
+// ── Paste Numbers ──────────────────────────────────────────────────
+async function parsePaste(){
+  const text=document.getElementById('paste-input').value;
+  if(!text.trim()){toast('Nothing pasted yet','terr');return;}
+
+  const r=await fetch('/paste_contacts',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text})}).then(r=>r.json());
+
+  if(r.success){
+    pasteCount=r.count;
+    document.getElementById('paste-count').innerHTML=
+      `<span class="badge b-ok">✅ ${r.count} numbers found</span>`;
+    const prev=document.getElementById('paste-preview');
+    prev.innerHTML=r.preview.map(n=>`<span class="num-chip">${n}</span>`).join('');
+    if(r.count>5) prev.innerHTML+=`<span class="num-chip" style="color:var(--muted)">+${r.count-5} more</span>`;
+    toast(`${r.count} numbers extracted`,'tok');
+  }
+}
+
+function clearPaste(){
+  document.getElementById('paste-input').value='';
+  document.getElementById('paste-count').innerHTML='';
+  document.getElementById('paste-preview').innerHTML='';
+  pasteCount=0;
+}
+
+// ── Formatting Toolbar ─────────────────────────────────────────────
+function fmt(taId, open, close){
+  const ta=document.getElementById(taId);
+  const s=ta.selectionStart, e=ta.selectionEnd;
+  const sel=ta.value.slice(s,e);
+  if(sel){
+    // Wrap selection
+    ta.value=ta.value.slice(0,s)+open+sel+close+ta.value.slice(e);
+    ta.selectionStart=s+open.length;
+    ta.selectionEnd=e+open.length;
+  }else{
+    // Insert markers with cursor between
+    ta.value=ta.value.slice(0,s)+open+close+ta.value.slice(e);
+    ta.selectionStart=ta.selectionEnd=s+open.length;
+  }
+  ta.focus();
+  if(taId==='tpl-body') livePreview();
+}
+
+function fmtList(taId, prefix){
+  const ta=document.getElementById(taId);
+  const s=ta.selectionStart, e=ta.selectionEnd;
+  const sel=ta.value.slice(s,e);
+  if(sel){
+    // Prefix each line
+    let n=1;
+    const lines=sel.split('\n').map(l=>{
+      if(prefix==='1. ') return (n++)+'. '+l;
+      return prefix+l;
+    });
+    const repl=lines.join('\n');
+    ta.value=ta.value.slice(0,s)+repl+ta.value.slice(e);
+    ta.selectionStart=s; ta.selectionEnd=s+repl.length;
+  }else{
+    ta.value=ta.value.slice(0,s)+'\n'+prefix+ta.value.slice(e);
+    ta.selectionStart=ta.selectionEnd=s+1+prefix.length;
+  }
+  ta.focus();
+  if(taId==='tpl-body') livePreview();
+}
+
+// ── Templates ─────────────────────────────────────────────────────
+function livePreview(){
+  let txt=document.getElementById('tpl-body').value;
+  Object.entries(SAMPLE).forEach(([k,v])=>{txt=txt.replaceAll('{'+k+'}',v);});
+  document.getElementById('tpl-prev').textContent=txt||'Preview appears here...';
+}
+
+// ── ATTACHMENT HANDLING ──────────────────────────────────────────────
+// attachments[previewId] = [{name, file, url}]
+const _attachments = {};
+function addAttach(input, previewId){
+  const files = Array.from(input.files);
+  if(!files.length) return;
+  if(!_attachments[previewId]) _attachments[previewId]=[];
+  files.forEach(f=>{
+    const url = URL.createObjectURL(f);
+    _attachments[previewId].push({name:f.name, file:f, url});
+  });
+  _renderAttachPreview(previewId);
+  input.value=''; // reset so same file can be re-selected
+}
+function _renderAttachPreview(previewId){
+  const wrap = document.getElementById(previewId);
+  if(!wrap) return;
+  wrap.innerHTML='';
+  (_attachments[previewId]||[]).forEach((a,i)=>{
+    const chip=document.createElement('div');
+    chip.className='attach-chip';
+    const icon = a.name.match(/\.(mp4|mov|avi|mkv|webm|flv|3gp)$/i)?'🎬'
+                :a.name.match(/\.(mp3|wav|ogg|aac|m4a|flac|opus)$/i)?'🎵':'📄';
+    chip.innerHTML=`${icon} <span title="${a.name}">${a.name}</span><span class="rm" onclick="_removeAttach('${previewId}',${i})">✕</span>`;
+    wrap.appendChild(chip);
+  });
+}
+function _removeAttach(previewId,idx){
+  if(_attachments[previewId]) _attachments[previewId].splice(idx,1);
+  _renderAttachPreview(previewId);
+}
+// ── END ATTACHMENT HANDLING ──────────────────────────────────────────
+
+// ── UNICODE BOLD SYSTEM ──────────────────────────────────────────────
+// Bold works because Unicode Math Bold glyphs are sent as literal text
+// via set_text() — no formatting API needed. RCS renders them visually
+// bold since they are different glyphs in the Unicode math block.
+const _BOLD_MAP = {};
+const _UNBOLD_MAP = {};
+(()=>{
+  for(let i=0;i<26;i++){
+    // MUST use fromCodePoint (not fromCharCode) — bold glyphs are above U+FFFF
+    // fromCharCode(0x1D5D4) silently truncates to 0xD5D4 = Korean Hangul!
+    _BOLD_MAP[String.fromCodePoint(0x41+i)] = String.fromCodePoint(0x1D5D4+i); // A-Z → 𝗔-𝗭
+    _BOLD_MAP[String.fromCodePoint(0x61+i)] = String.fromCodePoint(0x1D5EE+i); // a-z → 𝗮-𝘇
+    _UNBOLD_MAP[String.fromCodePoint(0x1D5D4+i)] = String.fromCodePoint(0x41+i);
+    _UNBOLD_MAP[String.fromCodePoint(0x1D5EE+i)] = String.fromCodePoint(0x61+i);
+  }
+  for(let i=0;i<10;i++){
+    _BOLD_MAP[String.fromCodePoint(0x30+i)] = String.fromCodePoint(0x1D7EC+i);  // 0-9 → 𝟬-𝟵
+    _UNBOLD_MAP[String.fromCodePoint(0x1D7EC+i)] = String.fromCodePoint(0x30+i);
+  }
+})();
+
+function _toUnicodeBold(str){
+  return [...str].map(c=>_BOLD_MAP[c]||c).join('');
+}
+function _fromUnicodeBold(str){
+  return [...str].map(c=>_UNBOLD_MAP[c]||c).join('');
+}
+// Also process {bold}...{/bold} tags in outgoing message
+function _processBoldTags(msg){
+  return msg.replace(/\{bold\}([\s\S]*?)\{\/bold\}/g, (_,t)=>_toUnicodeBold(t));
+}
+
+function applyUnicodeBold(taId){
+  const ta=document.getElementById(taId);
+  const s=ta.selectionStart, e=ta.selectionEnd;
+  if(s===e){ toast('Select text first, then click 𝗕','terr'); return; }
+  const sel=ta.value.slice(s,e);
+  const bold=_toUnicodeBold(sel);
+  ta.value=ta.value.slice(0,s)+bold+ta.value.slice(e);
+  ta.selectionStart=s; ta.selectionEnd=s+bold.length;
+  ta.focus();
+  if(taId==='tpl-body') livePreview();
+}
+function applyUnbold(taId){
+  const ta=document.getElementById(taId);
+  const s=ta.selectionStart, e=ta.selectionEnd;
+  if(s===e){ toast('Select bold text first, then click B̶','terr'); return; }
+  const sel=ta.value.slice(s,e);
+  const plain=_fromUnicodeBold(sel);
+  ta.value=ta.value.slice(0,s)+plain+ta.value.slice(e);
+  ta.selectionStart=s; ta.selectionEnd=s+plain.length;
+  ta.focus();
+  if(taId==='tpl-body') livePreview();
+}
+// ── END UNICODE BOLD SYSTEM ──────────────────────────────────────────
+
+
+function insVar(v){
+  const ta=document.getElementById('tpl-body');
+  const s=ta.selectionStart,e=ta.selectionEnd;
+  ta.value=ta.value.slice(0,s)+v+ta.value.slice(e);
+  ta.selectionStart=ta.selectionEnd=s+v.length;
+  ta.focus(); livePreview();
+}
+
+// ── Custom Buttons (add / update / delete) ──────────────────────────
+let customButtons=[];
+
+async function loadButtons(){
+  try{
+    const r=await fetch('/buttons').then(r=>r.json());
+    customButtons=r.buttons||[];
+  }catch(e){ customButtons=[]; }
+  renderButtons();
+}
+
+// Insert a button's text into a target textarea at the cursor.
+function insertCustomText(targetId,text){
+  const ta=document.getElementById(targetId);
+  if(!ta) return;
+  const s=ta.selectionStart??ta.value.length, e=ta.selectionEnd??ta.value.length;
+  ta.value=ta.value.slice(0,s)+text+ta.value.slice(e);
+  ta.selectionStart=ta.selectionEnd=s+text.length;
+  ta.focus();
+  if(targetId==='tpl-body') livePreview();
+}
+
+function renderButtons(){
+  // [barId, targetTextarea, showManageControls]
+  [['cbtn-bar-tpl','tpl-body',true],['cbtn-bar-send','s-msg',false]].forEach(([barId,target,manage])=>{
+    const bar=document.getElementById(barId);
+    if(!bar) return;
+    bar.innerHTML='';
+    if(!customButtons.length){
+      const p=document.createElement('span');
+      p.className='cbtn-empty';
+      p.textContent='No custom buttons yet.';
+      bar.appendChild(p);
+      return;
+    }
+    customButtons.forEach(b=>{
+      const chip=document.createElement('span');
+      chip.className='cbtn';
+      const lbl=document.createElement('span');
+      lbl.className='cbtn-lbl';
+      lbl.textContent=b.label;
+      lbl.title='Insert: '+b.text;
+      lbl.onclick=()=>insertCustomText(target,b.text);
+      chip.appendChild(lbl);
+      if(manage){
+        const ed=document.createElement('span');
+        ed.className='cbtn-edit'; ed.textContent='✎'; ed.title='Edit button';
+        ed.onclick=(ev)=>{ev.stopPropagation();editButton(b.id);};
+        const dl=document.createElement('span');
+        dl.className='cbtn-del'; dl.textContent='✕'; dl.title='Delete button';
+        dl.onclick=(ev)=>{ev.stopPropagation();delButton(b.id);};
+        chip.appendChild(ed); chip.appendChild(dl);
+      }
+      bar.appendChild(chip);
+    });
+  });
+}
+
+async function saveButton(){
+  const label=document.getElementById('cbtn-label').value.trim();
+  const text =document.getElementById('cbtn-text').value.trim();
+  const id   =document.getElementById('cbtn-edit-id').value;
+  if(!label||!text){toast('Label & text required','terr');return;}
+  const r=await fetch('/buttons',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id,label,text})}).then(r=>r.json());
+  if(r.success){
+    customButtons=r.buttons||[];
+    renderButtons();
+    clearButtonForm();
+    toast(id?'Button updated':'Button added','tok');
+  }else{
+    toast(r.message||'Could not save button','terr');
+  }
+}
+
+function editButton(id){
+  const b=customButtons.find(x=>x.id===id);
+  if(!b) return;
+  document.getElementById('cbtn-label').value=b.label;
+  document.getElementById('cbtn-text').value=b.text;
+  document.getElementById('cbtn-edit-id').value=b.id;
+  document.getElementById('cbtn-save').textContent='✓ Update Button';
+  document.getElementById('cbtn-label').focus();
+}
+
+async function delButton(id){
+  const b=customButtons.find(x=>x.id===id);
+  if(!confirm(`Delete button "${b?b.label:''}"?`)) return;
+  const r=await fetch('/buttons/'+encodeURIComponent(id),{method:'DELETE'}).then(r=>r.json());
+  if(r.success){
+    customButtons=r.buttons||[];
+    if(document.getElementById('cbtn-edit-id').value===id) clearButtonForm();
+    renderButtons();
+    toast('Button deleted','tok');
+  }else{
+    toast(r.message||'Could not delete','terr');
+  }
+}
+
+function clearButtonForm(){
+  document.getElementById('cbtn-label').value='';
+  document.getElementById('cbtn-text').value='';
+  document.getElementById('cbtn-edit-id').value='';
+  document.getElementById('cbtn-save').textContent='➕ Add Button';
+}
+
+async function saveTpl(){
+  const name=document.getElementById('tpl-name').value.trim();
+  const content=document.getElementById('tpl-body').value.trim();
+  if(!name||!content){toast('Name & content required','terr');return;}
+  await fetch('/template',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,content})});
+  toast('Template saved!','tok'); loadTpls();
+}
+
+async function loadTpls(){
+  const r=await fetch('/template').then(r=>r.json());
+  allTpls=r.templates;
+  const cont=document.getElementById('saved-tpls');
+  const sendSel=document.getElementById('s-tpl');
+  sendSel.innerHTML='<option value="">-- Select --</option>';
+  if(!Object.keys(allTpls).length){
+    cont.innerHTML='<p style="color:var(--muted);font-size:13px">No templates saved yet.</p>';return;
+  }
+  cont.innerHTML='<div class="tpl-grid" id="tpl-grid"></div>';
+  const grid=document.getElementById('tpl-grid');
+  Object.entries(allTpls).forEach(([name,content])=>{
+    const preview=content.replace(/\{[^}]+\}/g,m=>`<span style="color:var(--teal)">${m}</span>`);
+    const div=document.createElement('div');
+    div.className='tpl-card';
+    div.innerHTML=`
+      <div class="tpl-card-name">✍️ ${name}</div>
+      <div class="tpl-card-body">${preview}</div>
+      <div class="tpl-card-actions">
+        <button class="btn btn-navy btn-sm" onclick="editTpl('${name.replace(/'/g,"\\'")}')">✏️ Edit</button>
+        <button class="btn btn-navy btn-sm" onclick="dupTpl('${name.replace(/'/g,"\\'")}')">⎘ Copy</button>
+        <button class="btn btn-err btn-sm" onclick="delTpl('${name.replace(/'/g,"\\'")}')">🗑 Delete</button>
+      </div>`;
+    grid.appendChild(div);
+    sendSel.innerHTML+=`<option value="${name}">${name}</option>`;
+  });
+}
+
+async function dupTpl(name){
+  const copy=name+' (copy)';
+  await fetch('/template',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:copy,content:allTpls[name]})});
+  toast('Duplicated','tok'); loadTpls();
+}
+
+// ── Import / Export ────────────────────────────────────────────────
+function exportTpls(){ window.open('/templates/export','_blank'); }
+
+function exportTplsTxt(){
+  let txt='';
+  Object.entries(allTpls).forEach(([name,content])=>{
+    txt+=`=== ${name} ===\n${content}\n\n`;
+  });
+  const blob=new Blob([txt],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='zyvorcs_templates.txt';
+  a.click();
+  toast('Exported TXT','tok');
+}
+
+async function importTpls(input){
+  const file=input.files[0]; if(!file)return;
+  const fd=new FormData(); fd.append('file',file);
+  const r=await fetch('/templates/import',{method:'POST',body:fd}).then(r=>r.json());
+  if(r.success){
+    toast(`Imported ${r.count} templates (${r.total} total)`,'tok');
+    loadTpls();
+  }else{
+    toast(r.message,'terr');
+  }
+  input.value='';
+}
+
+function editTpl(name){
+  document.getElementById('tpl-name').value=name;
+  document.getElementById('tpl-body').value=allTpls[name];
+  livePreview();
+  // Scroll to editor
+  document.getElementById('tpl-editor-card').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function delTpl(name){
+  if(!confirm(`Delete template "${name}"?`))return;
+  await fetch(`/template/${encodeURIComponent(name)}`,{method:'DELETE'});
+  loadTpls(); toast('Deleted','tok');
+}
+
+function clearTpl(){
+  document.getElementById('tpl-name').value='';
+  document.getElementById('tpl-body').value='';
+  livePreview();
+}
+
+function loadSendTpl(){
+  const n=document.getElementById('s-tpl').value;
+  if(n&&allTpls[n]) document.getElementById('s-msg').value=allTpls[n];
+}
+
+// ── Send ───────────────────────────────────────────────────────────
+async function startSend(){
+  const device     = document.getElementById('s-device').value;
+  const delay      = document.getElementById('s-delay').value;
+  const msg        = document.getElementById('s-msg').value.trim();
+  const source     = document.getElementById('s-source').value;
+  const s1sub      = parseInt(document.getElementById('sim1-subid').value)||1;
+  const s2sub      = parseInt(document.getElementById('sim2-subid').value)||2;
+  const devicePin  = document.getElementById('s-device-pin').value;
+
+  if(!device)             {toast('Select a device','terr');return;}
+  if(!msg)                {toast('Message is empty','terr');return;}
+  if(source==='paste'&&!pasteCount){toast('Extract numbers first in Contacts → Paste Numbers','terr');return;}
+  if(source==='excel'&&!Object.keys(colMap).length){toast('Map Excel columns in Contacts tab first','terr');return;}
+
+  const r=await fetch('/send',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      device,delay,template:msg,column_map:colMap,source,
+        min_delay:parseInt(document.getElementById('s-min-delay').value)||45,
+        max_delay:parseInt(document.getElementById('s-max-delay').value)||90,
+        batch_size:parseInt(document.getElementById('s-batch-size').value)||0,
+        batch_pause:parseInt(document.getElementById('s-batch-pause').value)||30,
+        daily_limit:parseInt(document.getElementById('s-daily-limit').value)||150,
+      sim_mode:simMode,sim1_sub_id:s1sub,sim2_sub_id:s2sub,
+      device_pin:devicePin,
+    })}).then(r=>r.json());
+
+  if(r.success){
+    document.getElementById('st-total').textContent=r.total;
+    document.getElementById('st-sent').textContent=0;
+    document.getElementById('st-skip').textContent=0;
+    document.getElementById('st-fail').textContent=0;
+    document.getElementById('st-balance').textContent=r.total;
+    document.getElementById('st-eta').textContent='—';
+    document.getElementById('btn-start').disabled=true;
+    document.getElementById('btn-pause').disabled=false;
+    document.getElementById('btn-stop').disabled=false;
+    lastLog=0;
+    startPoll();
+    const simLabel={'auto':'Auto','sim1':'SIM 1 Only','sim2':'SIM 2 Only','rotate':'Rotation'}[simMode]||simMode;
+    toast(`Started! ${r.total} contacts | SIM: ${simLabel}`,'tok');
+  }else{
+    toast(r.message,'terr');
+  }
+}
+
+async function pauseSend(){
+  const r=await fetch('/pause',{method:'POST'}).then(r=>r.json());
+  const b=document.getElementById('btn-pause');
+  b.textContent=r.paused?'▶ Resume':'⏸ Pause';
+  toast(r.paused?'Paused':'Resumed','tok');
+}
+
+async function stopSend(){
+  await fetch('/stop',{method:'POST'});
+  toast('Stopping...','tok');
+}
+
+// ── Countdown ──────────────────────────────────────────────────────
+function startCountdown(seconds, label, sublabel){
+  if(cdTimer) clearInterval(cdTimer);
+  cdTotal = seconds;
+  let remain = seconds;
+  const wrap = document.getElementById('countdown-wrap');
+  const num  = document.getElementById('cd-number');
+  const bar  = document.getElementById('cd-bar');
+  const lbl  = document.getElementById('cd-label');
+  const sub  = document.getElementById('cd-sublabel');
+  const pLbl = document.getElementById('cd-progress-label');
+  const isBatch = label && label.includes('Batch');
+  if(lbl) lbl.textContent = label || '⏱️ Next message in';
+  if(sub) sub.textContent = sublabel || 'seconds remaining';
+  // Show sent/total in top-right of countdown
+  if(pLbl){
+    const sent=parseInt(document.getElementById('st-sent').textContent)||0;
+    const total=parseInt(document.getElementById('st-total').textContent)||0;
+    pLbl.textContent = total>0 ? `${sent} / ${total} sent` : '';
+  }
+  const barColor = isBatch ? 'linear-gradient(90deg,#b45309,var(--warn,#f59e0b))' : 'linear-gradient(90deg,var(--navy-lt),var(--teal))';
+  bar.style.background = barColor;
+  wrap.style.display='block';
+  num.textContent=remain;
+  num.style.color=isBatch?'var(--warn)':'var(--teal)';
+  lbl.style.color=isBatch?'var(--warn)':'var(--teal)';
+  wrap.style.borderColor=isBatch?'var(--warn)':'var(--teal)';
+  bar.style.transition='none';
+  bar.style.width='100%';
+  cdTimer=setInterval(()=>{
+    remain--;
+    if(remain<=0){
+      clearInterval(cdTimer); cdTimer=null;
+      wrap.style.display='none';
+      return;
+    }
+    num.textContent=remain;
+    // Turn orange when 10s left
+    if(remain<=10 && !isBatch){
+      num.style.color='var(--warn)';
+      bar.style.background='linear-gradient(90deg,#b45309,var(--warn))';
+    }
+    bar.style.transition='width 1s linear';
+    bar.style.width=(remain/cdTotal*100)+'%';
+  },1000);
+}
+function stopCountdown(){
+  if(cdTimer){clearInterval(cdTimer);cdTimer=null;}
+  document.getElementById('countdown-wrap').style.display='none';
+}
+
+// ── Polling ────────────────────────────────────────────────────────
+function startPoll(){
+  if(pollTmr) clearInterval(pollTmr);
+  pollTmr=setInterval(pollStatus,2000);
+}
+
+async function pollStatus(){
+  try{
+    const d=await fetch('/status').then(r=>r.json());
+    document.getElementById('st-sent').textContent=d.sent;
+    document.getElementById('st-fail').textContent=d.failed;
+    document.getElementById('st-skip').textContent=d.skipped||0;
+    const done=d.sent+d.failed+(d.skipped||0);
+    const pct=d.total>0?(done/d.total*100):0;
+    document.getElementById('prog').style.width=pct+'%';
+    if(d.current) document.getElementById('s-current').textContent='📤 '+d.current;
+    const remain=d.total-done;
+    // Use average of min/max delay for accurate ETA (not the old "delay" field)
+    const minDly=parseInt(document.getElementById('s-min-delay').value)||45;
+    const maxDly=parseInt(document.getElementById('s-max-delay').value)||90;
+    const avgDly=(minDly+maxDly)/2;
+    const eta=remain>0?Math.ceil(remain*avgDly/60):'—';
+    document.getElementById('st-eta').textContent=eta;
+
+    // Balance = remaining to process
+    const balance = d.total > 0 ? Math.max(0, d.total - done) : '—';
+    document.getElementById('st-balance').textContent = balance;
+
+    // Live detail panel
+    const liveWrap=document.getElementById('live-detail-wrap');
+    if(d.running){
+      liveWrap.style.display='block';
+      document.getElementById('ld-current').textContent=d.current||'Processing...';
+      document.getElementById('ld-sent').textContent=d.sent;
+      document.getElementById('ld-skip').textContent=d.skipped||0;
+      document.getElementById('ld-fail').textContent=d.failed;
+      document.getElementById('ld-eta').textContent=eta;
+      document.getElementById('ld-balance').textContent=balance;
+    } else {
+      liveWrap.style.display='none';
+    }
+
+    const box=document.getElementById('log-box');
+    if(d.log.length>lastLog){
+      d.log.slice(lastLog).forEach(e=>{
+        box.innerHTML+=`<div class="log-row"><span class="log-t">${e.time}</span>${e.message}</div>`;
+        const wm=e.message.match(/Waiting (\d+)s before next/);
+        if(wm) startCountdown(parseInt(wm[1]), '⏱️ Next message in', 'seconds until next message');
+        const bm=e.message.match(/pausing (\d+)s/);
+        if(bm) startCountdown(parseInt(bm[1]), '📦 Batch pause — resuming in', 'seconds until next batch');
+        const rm=e.message.includes('Batch pause done') || e.message.includes('resuming');
+        if(e.message.includes('▶️')) stopCountdown();
+        if(e.message.includes('→') && !e.message.includes('Waiting') && !e.message.includes('pausing')) stopCountdown();
+      });
+      box.scrollTop=box.scrollHeight;
+      lastLog=d.log.length;
+    }
+
+    if(!d.running){
+      clearInterval(pollTmr);
+      document.getElementById('btn-start').disabled=false;
+      document.getElementById('btn-pause').disabled=true;
+      document.getElementById('btn-stop').disabled=true;
+      document.getElementById('btn-pause').textContent='⏸ Pause';
+      const skippedFinal=d.skipped||0;
+      document.getElementById('s-current').textContent=
+        `✅ Complete — Sent: ${d.sent} | Skipped: ${skippedFinal} | Failed: ${d.failed} | Total: ${d.total}`;
+      document.getElementById('st-balance').textContent='0';
+      document.getElementById('st-eta').textContent='—';
+      stopCountdown();
+      const rate=d.total>0?Math.round(d.sent/d.total*100):0;
+      document.getElementById('rep-summary').innerHTML=`
+        <div class="stats" style="grid-template-columns:repeat(5,1fr)">
+          <div class="stat">      <div class="stat-v">${d.total}</div><div class="stat-l">Total</div></div>
+          <div class="stat sent"> <div class="stat-v">${d.sent}</div> <div class="stat-l">✅ Sent</div></div>
+          <div class="stat">      <div class="stat-v" style="color:var(--warn)">${skippedFinal}</div><div class="stat-l">⏭️ Skipped</div></div>
+          <div class="stat fail"> <div class="stat-v">${d.failed}</div><div class="stat-l">❌ Failed</div></div>
+          <div class="stat">      <div class="stat-v">${rate}%</div>  <div class="stat-l">📈 Success</div></div>
+        </div>`;
+      if(d.total>0) toast(`Done! ${d.sent} sent, ${skippedFinal} skipped, ${d.failed} failed.`,'tok');
+    }
+  }catch(e){console.warn('poll',e);}
+}
+
+function dlReport(){ window.open('/report','_blank'); }
+
+// ── Toast ──────────────────────────────────────────────────────────
+let toastT;
+function toast(msg,cls='tok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=`toast ${cls} up`;
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('up'),3200);
+}
+
+// ── Init ───────────────────────────────────────────────────────────
+window.addEventListener('load',()=>{ refreshDevices(); loadTpls(); loadButtons(); });
+
+// Sync source select with tab
+document.getElementById('s-source').addEventListener('change',e=>{
+  switchTab(e.target.value);
+});
+</script>
+</body>
+</html>

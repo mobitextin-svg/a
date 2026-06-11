@@ -1,0 +1,5 @@
+# Runtime artifacts
+uploads/
+reports/
+__pycache__/
+*.pyc
