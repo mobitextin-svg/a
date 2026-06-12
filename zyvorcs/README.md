@@ -47,11 +47,51 @@ Browser opens at `http://127.0.0.1:5000` automatically.
 
 ```
 1. Devices    → Pair + connect Android phone
-2. Contacts   → Upload .xlsx → Map columns
+2. Contacts   → Upload .xlsx → Map columns (or Paste Numbers)
 3. Templates  → Write message with {name} {city} etc.
 4. Send       → Select device + delay → Start Send
 5. Report     → Download Excel report
 ```
+
+---
+
+## Crash Recovery (Resume)
+
+Progress is saved to `data/progress.json` after **every** message
+(atomic write — safe against power failure). If the PC loses power, the
+app crashes, or you close it mid-run:
+
+- Reopen the app → a banner shows **"Interrupted job found — 51 of 100 done"**
+- **▶ Resume Job** continues from #52 — already-sent numbers are never re-sent
+- **🗑 Start Fresh** discards the saved job
+- The Excel report is also rewritten after every message, so it is never lost
+- SIM rotation and per-SIM daily counters continue where they left off
+- The checkpoint is deleted automatically when a job finishes completely
+
+(The device PIN is never saved to disk — re-enter it on the Send page
+before resuming if your phone has a lock screen.)
+
+---
+
+## Opt-out / DND List
+
+Contacts → **Opt-out / DND List** card:
+
+- Paste numbers (any format) → **Add to DND List**
+- Listed numbers are **never messaged** — skipped on every send and shown
+  in the report as `Skipped — Opt-out / DND list`
+- Stored in `data/optout.json`; remove single numbers or clear all anytime
+- Add anyone who replies STOP or asks not to be contacted
+
+---
+
+## Sender SIM Number in Reports
+
+The Send page (SIM Mode card) has **SIM 1 / SIM 2 Phone Number** fields.
+Enter each SIM's own number once (saved in the browser) — every report row
+then shows which number sent the message in the **Sender SIM Number**
+column. Auto-detection from the device is also attempted, but Indian SIMs
+rarely expose their own number, so typing them is recommended.
 
 ---
 

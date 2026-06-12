@@ -47,6 +47,7 @@ import random
 import subprocess
 import os
 import re
+import json
 import threading
 from datetime import datetime
 
@@ -391,7 +392,9 @@ def run_bulk_send(contacts, template, delay, device, status, lock, report_dir,
                   sim_mode=SIM_MODE_ROTATE, sim1_sub_id=1, sim2_sub_id=2, device_pin='',
                   daily_limit=100, min_delay=60, max_delay=180,
                   batch_size=20, batch_pause=300, sim1_number='', sim2_number='',
-                  hours_start=9, hours_end=20, hours_enforce=True):
+                  hours_start=9, hours_end=20, hours_enforce=True,
+                  optout=None, checkpoint_path=None, job_meta=None,
+                  start_index=0, prior_results=None, prior_sim_sent=None):
 
     if min_delay > max_delay:          # guard against swapped values
         min_delay, max_delay = max_delay, min_delay
@@ -405,8 +408,38 @@ def run_bulk_send(contacts, template, delay, device, status, lock, report_dir,
             return hours_start <= h < hours_end
         return h >= hours_start or h < hours_end
 
-    results    = []
-    rotate_idx = 0
+    # Resume support: carry over results / per-SIM counters from a checkpoint
+    results    = list(prior_results or [])
+    rotate_idx = start_index
+    optout     = set(optout or [])
+
+    # ── Checkpoint (crash / power-failure recovery) ───────────────────
+    # After EVERY contact we write data/progress.json (atomic replace) with
+    # the full job definition + results so far. If the PC loses power, the
+    # app crashes, or the user closes it mid-run, reopening the app offers
+    # "Resume from #N". The file is deleted only on natural completion.
+    def _save_ckpt(next_index, complete=False):
+        if not checkpoint_path:
+            return
+        try:
+            data = dict(job_meta or {})
+            data.update({
+                'version':    1,
+                'complete':   complete,
+                'updated':    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'next_index': next_index,
+                'total':      len(contacts),
+                'sim_sent':   {str(k): v for k, v in sim_sent.items()},
+                'contacts':   contacts,
+                'results':    results,
+            })
+            tmp = checkpoint_path + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False)
+            os.replace(tmp, checkpoint_path)
+        except Exception as _e:
+            _log(status, lock, f'⚠️  checkpoint save failed: {_e}')
+
     watchdog   = WatchdogThread(device, status, lock)
     watchdog.start()
 
@@ -469,14 +502,28 @@ def run_bulk_send(contacts, template, delay, device, status, lock, report_dir,
          f'🕘 Sending hours: {hours_start:02d}:00–{hours_end:02d}:00 '
          + ('(enforced — auto-waits outside window)' if hours_enforce else '(warn only)'))
 
-    # Per-SIM daily send counters
+    # Per-SIM daily send counters (restored from checkpoint on resume)
     sim_sent = {1: 0, 2: 0, 0: 0}
+    if prior_sim_sent:
+        for k, v in prior_sim_sent.items():
+            sim_sent[int(k)] = int(v)
+
+    if optout:
+        _log(status, lock, f'🚫 Opt-out / DND list active: {len(optout)} numbers will be skipped')
+    if start_index > 0:
+        _log(status, lock, f'▶️  Resuming from contact #{start_index + 1} of {len(contacts)}')
 
     # Batch counter — counts only actual sends (not skips/fails)
     batch_count = 0
 
+    # True only when every contact was processed (no stop / crash)
+    completed_all = False
+
+    _save_ckpt(start_index)   # persist job definition before first send
+
     try:
-        for i, contact in enumerate(contacts):
+        for i in range(start_index, len(contacts)):
+            contact = contacts[i]
 
             with lock:
                 if status['stop_flag']:
@@ -551,11 +598,33 @@ def run_bulk_send(contacts, template, delay, device, status, lock, report_dir,
 
             _log(status, lock, f'{sim_tag} [{i+1}/{len(contacts)}] → {name} ({mobile})')
 
+            # Opt-out / DND list check (matched on last 10 digits)
+            if optout and mobile[-10:] in optout:
+                _log(status, lock, f'🚫 DND/Opt-out → {name} ({mobile}) — skipped')
+                with lock:
+                    status['skipped'] = status.get('skipped', 0) + 1
+                results.append({
+                    'name': name, 'mobile': mobile, 'sim': '—', 'sim_number': '',
+                    'status': 'Skipped', 'message': '',
+                    'time': datetime.now().strftime('%H:%M:%S'),
+                    'error': 'Opt-out / DND list',
+                })
+                _save_ckpt(i + 1)
+                continue
+
             # Daily limit check per SIM
             if sim_sent[sim_key] >= daily_limit:
                 _log(status, lock, f'⚠️  SIM {sim_key} daily limit ({daily_limit}) reached — skipping {name}')
                 with lock:
                     status['failed'] += 1
+                results.append({
+                    'name': name, 'mobile': mobile, 'sim': f'SIM{sim_key}' if sim_key else 'Auto',
+                    'sim_number': _sim_numbers.get(sim_key, ''),
+                    'status': 'Failed', 'message': '',
+                    'time': datetime.now().strftime('%H:%M:%S'),
+                    'error': f'Daily limit ({daily_limit}) reached',
+                })
+                _save_ckpt(i + 1)
                 continue
 
             if sim_key in (1, 2):
@@ -607,6 +676,14 @@ def run_bulk_send(contacts, template, delay, device, status, lock, report_dir,
                 'error': '' if ok else err_msg,
             })
 
+            # Persist progress + live report after EVERY contact, so a crash
+            # or power failure never loses more than the current message.
+            _save_ckpt(i + 1)
+            try:
+                _generate_report(results, report_dir)
+            except Exception as _re_err:
+                _log(status, lock, f'⚠️  live report write failed: {_re_err}')
+
             if i < len(contacts) - 1:
                 with lock:
                     if status['stop_flag']:
@@ -629,6 +706,9 @@ def run_bulk_send(contacts, template, delay, device, status, lock, report_dir,
                             break
                     time.sleep(0.5)
 
+        else:
+            completed_all = True   # every contact processed, no stop
+
     except Exception as e:
         with lock:
             status['error'] = str(e)
@@ -637,6 +717,17 @@ def run_bulk_send(contacts, template, delay, device, status, lock, report_dir,
     finally:
         watchdog.stop()
         _generate_report(results, report_dir)
+        if completed_all:
+            # Job fully done — remove the checkpoint so the app doesn't
+            # offer to resume a finished job.
+            try:
+                if checkpoint_path and os.path.exists(checkpoint_path):
+                    os.remove(checkpoint_path)
+            except Exception:
+                pass
+        else:
+            # Checkpoint stays on disk — the app will offer Resume
+            _log(status, lock, '💾 Progress saved — you can resume this job anytime')
         with lock:
             status['running'] = False
             status['current'] = ''

@@ -228,6 +228,21 @@ textarea{resize:vertical}
 
   <div class="main">
 
+    <!-- ═══ RESUME BANNER (interrupted job recovery) ═════════════ -->
+    <div id="resume-banner" style="display:none;background:rgba(245,158,11,.12);border:1px solid var(--warn,#f59e0b);border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:26px">⚡</span>
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:14px;font-weight:800;color:var(--warn,#f59e0b)">Interrupted job found — you can resume where it stopped</div>
+          <div id="resume-info" style="font-size:12px;color:var(--muted);margin-top:3px">—</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-teal btn-sm" onclick="resumeJob()">▶ Resume Job</button>
+          <button class="btn btn-navy btn-sm" onclick="discardJob()">🗑 Start Fresh</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ DEVICES ══════════════════════════════════════════════ -->
     <div class="sec on" id="sec-devices">
       <div class="card">
@@ -338,6 +353,27 @@ textarea{resize:vertical}
             In paste mode, <code style="color:var(--teal)">{name}</code> = same as <code style="color:var(--teal)">{mobile}</code>. Other variables will be blank.
           </div>
         </div>
+      </div>
+
+      <!-- Opt-out / DND list (applies to both Excel and Paste sources) -->
+      <div class="card">
+        <div class="ctitle">🚫 Opt-out / DND List</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+          Numbers here are <b>never messaged</b> — they are skipped automatically during every send
+          and appear in the report as "Skipped — Opt-out / DND".
+          Add anyone who replies STOP or asks not to be contacted.
+        </p>
+        <div class="fld">
+          <label>Paste numbers to block (any format — 10-digit numbers auto-extracted)</label>
+          <textarea class="paste-area" id="optout-input" style="min-height:70px"
+            placeholder="9876543210, 9845001234&#10;or paste raw text / STOP replies here"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-teal btn-sm" onclick="addOptout()">➕ Add to DND List</button>
+          <button class="btn btn-navy btn-sm" onclick="clearOptout()">🗑 Clear All</button>
+          <span id="optout-count" style="font-size:13px;color:var(--muted)">0 numbers blocked</span>
+        </div>
+        <div id="optout-list" class="number-preview" style="max-height:160px;overflow-y:auto;margin-top:10px"></div>
       </div>
 
     </div><!-- /contacts -->
@@ -546,6 +582,14 @@ textarea{resize:vertical}
           <div class="fld">
             <label>SIM 2 Subscription ID</label>
             <input id="sim2-subid" type="number" value="2" min="0">
+          </div>
+          <div class="fld">
+            <label>SIM 1 Phone Number <span style="color:var(--muted);font-size:11px">shown in report's "Sender SIM Number"</span></label>
+            <input id="sim1-number" type="text" placeholder="e.g. 9876543210" maxlength="13" oninput="saveSimNumbers()">
+          </div>
+          <div class="fld">
+            <label>SIM 2 Phone Number <span style="color:var(--muted);font-size:11px">shown in report's "Sender SIM Number"</span></label>
+            <input id="sim2-number" type="text" placeholder="e.g. 9123456780" maxlength="13" oninput="saveSimNumbers()">
           </div>
         </div>
 
@@ -1259,6 +1303,8 @@ async function startSend(){
         hours_end:parseInt(document.getElementById('s-hours-end').value)||24,
         hours_enforce:parseInt(document.getElementById('s-hours-enforce').value)||0,
       sim_mode:simMode,sim1_sub_id:s1sub,sim2_sub_id:s2sub,
+      sim1_number:document.getElementById('sim1-number').value.trim(),
+      sim2_number:document.getElementById('sim2-number').value.trim(),
       device_pin:devicePin,
     })}).then(r=>r.json());
 
@@ -1362,8 +1408,8 @@ async function pollStatus(){
     if(d.current) document.getElementById('s-current').textContent='📤 '+d.current;
     const remain=d.total-done;
     // Use average of min/max delay for accurate ETA (not the old "delay" field)
-    const minDly=parseInt(document.getElementById('s-min-delay').value)||45;
-    const maxDly=parseInt(document.getElementById('s-max-delay').value)||90;
+    const minDly=parseInt(document.getElementById('s-min-delay').value)||60;
+    const maxDly=parseInt(document.getElementById('s-max-delay').value)||180;
     const avgDly=(minDly+maxDly)/2;
     const eta=remain>0?Math.ceil(remain*avgDly/60):'—';
     document.getElementById('st-eta').textContent=eta;
@@ -1424,11 +1470,119 @@ async function pollStatus(){
           <div class="stat">      <div class="stat-v">${rate}%</div>  <div class="stat-l">📈 Success</div></div>
         </div>`;
       if(d.total>0) toast(`Done! ${d.sent} sent, ${skippedFinal} skipped, ${d.failed} failed.`,'tok');
+      checkResume();   // if the run was stopped midway, offer Resume
     }
   }catch(e){console.warn('poll',e);}
 }
 
 function dlReport(){ window.open('/report','_blank'); }
+
+// ── SIM phone numbers (persisted locally, shown in report) ─────────
+function saveSimNumbers(){
+  try{
+    localStorage.setItem('zyvo_sim1_number', document.getElementById('sim1-number').value.trim());
+    localStorage.setItem('zyvo_sim2_number', document.getElementById('sim2-number').value.trim());
+  }catch(e){}
+}
+(function restoreSimNumbers(){
+  try{
+    document.getElementById('sim1-number').value = localStorage.getItem('zyvo_sim1_number')||'';
+    document.getElementById('sim2-number').value = localStorage.getItem('zyvo_sim2_number')||'';
+  }catch(e){}
+})();
+
+// ── Resume after crash / power failure ─────────────────────────────
+let resumeState=null;
+
+async function checkResume(){
+  try{
+    const r=await fetch('/job_state').then(r=>r.json());
+    const banner=document.getElementById('resume-banner');
+    if(r.exists){
+      resumeState=r;
+      document.getElementById('resume-info').textContent=
+        `${r.done} of ${r.total} done (✅ ${r.sent} sent, ⏭️ ${r.skipped} skipped, ❌ ${r.failed} failed)`
+        +` — last activity ${r.updated||r.started||''}${r.device?` on ${r.device}`:''}.`
+        +` Resume continues from #${r.done+1}.`;
+      banner.style.display='block';
+    }else{
+      resumeState=null;
+      banner.style.display='none';
+    }
+  }catch(e){console.warn('job_state',e);}
+}
+
+async function resumeJob(){
+  const pin=document.getElementById('s-device-pin').value;
+  const r=await fetch('/resume',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({device_pin:pin})}).then(r=>r.json());
+  if(!r.success){ toast(r.message||'Resume failed','terr'); return; }
+  document.getElementById('resume-banner').style.display='none';
+  // Open Send section and arm the live progress UI
+  nav(document.querySelector('.nav[data-sec="send"]'));
+  document.getElementById('st-total').textContent=r.total;
+  if(resumeState){
+    document.getElementById('st-sent').textContent=resumeState.sent;
+    document.getElementById('st-skip').textContent=resumeState.skipped;
+    document.getElementById('st-fail').textContent=resumeState.failed;
+  }
+  document.getElementById('st-eta').textContent='—';
+  document.getElementById('btn-start').disabled=true;
+  document.getElementById('btn-pause').disabled=false;
+  document.getElementById('btn-stop').disabled=false;
+  lastLog=0;
+  startPoll();
+  toast(`Resumed from #${r.resumed_from} of ${r.total}`,'tok');
+}
+
+async function discardJob(){
+  if(!confirm('Delete the saved job progress? The interrupted job cannot be resumed after this.')) return;
+  await fetch('/discard_job',{method:'POST'});
+  document.getElementById('resume-banner').style.display='none';
+  resumeState=null;
+  toast('Saved job discarded','tok');
+}
+
+// ── Opt-out / DND list ──────────────────────────────────────────────
+async function loadOptout(){
+  try{
+    const r=await fetch('/optout').then(r=>r.json());
+    renderOptout(r.numbers||[]);
+  }catch(e){console.warn('optout',e);}
+}
+
+function renderOptout(nums){
+  document.getElementById('optout-count').textContent=`${nums.length} numbers blocked`;
+  const box=document.getElementById('optout-list');
+  box.innerHTML=nums.map(n=>
+    `<span class="num-chip">${n} <span style="cursor:pointer;color:var(--err,#f87171);font-weight:700" `
+    +`onclick="removeOptout('${n}')" title="Remove from DND list">✕</span></span>`).join('');
+}
+
+async function addOptout(){
+  const text=document.getElementById('optout-input').value.trim();
+  if(!text){ toast('Paste numbers to block first','terr'); return; }
+  const r=await fetch('/optout',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text})}).then(r=>r.json());
+  document.getElementById('optout-input').value='';
+  toast(`${r.added||0} added — ${r.count} numbers on DND list`,'tok');
+  loadOptout();
+}
+
+async function removeOptout(n){
+  const r=await fetch('/optout',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({remove:n})}).then(r=>r.json());
+  toast(`Removed — ${r.count} numbers on DND list`,'tok');
+  loadOptout();
+}
+
+async function clearOptout(){
+  if(!confirm('Clear the entire opt-out / DND list?')) return;
+  await fetch('/optout',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({clear:true})}).then(r=>r.json());
+  toast('DND list cleared','tok');
+  loadOptout();
+}
 
 // ── Toast ──────────────────────────────────────────────────────────
 let toastT;
@@ -1439,7 +1593,7 @@ function toast(msg,cls='tok'){
 }
 
 // ── Init ───────────────────────────────────────────────────────────
-window.addEventListener('load',()=>{ refreshDevices(); loadTpls(); });
+window.addEventListener('load',()=>{ refreshDevices(); loadTpls(); checkResume(); loadOptout(); });
 
 // Sync source select with tab
 document.getElementById('s-source').addEventListener('change',e=>{

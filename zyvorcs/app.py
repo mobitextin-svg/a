@@ -13,6 +13,7 @@ import json
 import re
 import threading
 import subprocess
+from datetime import datetime
 from flask import Flask, request, jsonify, render_template, send_file
 import openpyxl
 
@@ -36,6 +37,8 @@ UPLOAD_DIR    = os.path.join(BASE_DIR, 'uploads')
 REPORT_DIR    = os.path.join(BASE_DIR, 'reports')
 DATA_DIR      = os.path.join(BASE_DIR, 'data')
 TEMPLATE_FILE = os.path.join(DATA_DIR, 'templates.json')
+CHECKPOINT_FILE = os.path.join(DATA_DIR, 'progress.json')
+OPTOUT_FILE     = os.path.join(DATA_DIR, 'optout.json')
 
 for d in [UPLOAD_DIR, REPORT_DIR, DATA_DIR]:
     os.makedirs(d, exist_ok=True)
@@ -275,6 +278,30 @@ def start_send():
             'current': '', 'log': [], 'error': '', 'balance': None,
         })
 
+    # Job definition persisted in the checkpoint so an interrupted run
+    # can be resumed after a crash / power failure / app close.
+    # (device_pin is intentionally NOT saved to disk.)
+    job_meta = {
+        'started':     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'device':      device,
+        'template':    template,
+        'delay':       delay,
+        'source':      source,
+        'sim_mode':    sim_mode,
+        'sim1_sub_id': sim1_sub_id,
+        'sim2_sub_id': sim2_sub_id,
+        'sim1_number': sim1_number,
+        'sim2_number': sim2_number,
+        'daily_limit': daily_limit,
+        'min_delay':   min_delay,
+        'max_delay':   max_delay,
+        'batch_size':  batch_size,
+        'batch_pause': batch_pause,
+        'hours_start':   hours_start,
+        'hours_end':     hours_end,
+        'hours_enforce': hours_enforce,
+    }
+
     from adb_engine import run_bulk_send
     send_thread = threading.Thread(
         target=run_bulk_send,
@@ -294,11 +321,160 @@ def start_send():
             'hours_start':   hours_start,
             'hours_end':     hours_end,
             'hours_enforce': hours_enforce,
+            'optout':          _load_optout(),
+            'checkpoint_path': CHECKPOINT_FILE,
+            'job_meta':        job_meta,
         },
         daemon=True
     )
     send_thread.start()
     return jsonify({'success': True, 'total': len(contacts)})
+
+
+# ─── Resume after crash / power failure ──────────────────────────
+
+@app.route('/job_state')
+def job_state():
+    """Report whether an unfinished job checkpoint exists (for the
+    'Resume from #N' banner shown when the app reopens)."""
+    with lock:
+        if status['running']:
+            return jsonify({'exists': False, 'running': True})
+    ck = _load_checkpoint()
+    if not ck:
+        return jsonify({'exists': False})
+    next_index = int(ck.get('next_index', 0))
+    total      = int(ck.get('total', len(ck.get('contacts', []))))
+    if ck.get('complete') or next_index >= total:
+        return jsonify({'exists': False})
+    counts = _result_counts(ck.get('results', []))
+    return jsonify({
+        'exists':  True,
+        'done':    next_index,
+        'total':   total,
+        'sent':    counts['sent'],
+        'skipped': counts['skipped'],
+        'failed':  counts['failed'],
+        'device':  ck.get('device', ''),
+        'started': ck.get('started', ''),
+        'updated': ck.get('updated', ''),
+    })
+
+
+@app.route('/resume', methods=['POST'])
+def resume_job():
+    """Continue an interrupted job from the checkpoint (e.g. from #52)."""
+    global send_thread
+    with lock:
+        if status['running']:
+            return jsonify({'success': False, 'message': 'Already running'})
+
+    ck = _load_checkpoint()
+    if not ck:
+        return jsonify({'success': False, 'message': 'No saved job found'})
+
+    contacts   = ck.get('contacts', [])
+    next_index = int(ck.get('next_index', 0))
+    if not contacts or next_index >= len(contacts):
+        return jsonify({'success': False, 'message': 'Saved job is already complete'})
+
+    device_pin = (request.json or {}).get('device_pin', '')
+    counts     = _result_counts(ck.get('results', []))
+
+    with lock:
+        status.update({
+            'running': True, 'paused': False, 'stop_flag': False,
+            'sent':    counts['sent'],
+            'failed':  counts['failed'],
+            'skipped': counts['skipped'],
+            'total':   len(contacts),
+            'current': '', 'log': [], 'error': '', 'balance': None,
+        })
+
+    from adb_engine import run_bulk_send
+    send_thread = threading.Thread(
+        target=run_bulk_send,
+        args=(contacts, ck.get('template', ''), int(ck.get('delay', 5)),
+              ck.get('device', ''), status, lock, REPORT_DIR),
+        kwargs={
+            'sim_mode':    ck.get('sim_mode', 'rotate'),
+            'sim1_sub_id': int(ck.get('sim1_sub_id', 1)),
+            'sim2_sub_id': int(ck.get('sim2_sub_id', 2)),
+            'device_pin':  device_pin,
+            'daily_limit': int(ck.get('daily_limit', 100)),
+            'min_delay':   int(ck.get('min_delay', 60)),
+            'max_delay':   int(ck.get('max_delay', 180)),
+            'batch_size':  int(ck.get('batch_size', 20)),
+            'batch_pause': int(ck.get('batch_pause', 300)),
+            'sim1_number': ck.get('sim1_number', ''),
+            'sim2_number': ck.get('sim2_number', ''),
+            'hours_start':   int(ck.get('hours_start', 9)),
+            'hours_end':     int(ck.get('hours_end', 20)),
+            'hours_enforce': bool(ck.get('hours_enforce', True)),
+            'optout':          _load_optout(),
+            'checkpoint_path': CHECKPOINT_FILE,
+            'job_meta':        {k: ck.get(k) for k in (
+                'started', 'device', 'template', 'delay', 'source', 'sim_mode',
+                'sim1_sub_id', 'sim2_sub_id', 'sim1_number', 'sim2_number',
+                'daily_limit', 'min_delay', 'max_delay', 'batch_size',
+                'batch_pause', 'hours_start', 'hours_end', 'hours_enforce')},
+            'start_index':    next_index,
+            'prior_results':  ck.get('results', []),
+            'prior_sim_sent': ck.get('sim_sent', {}),
+        },
+        daemon=True
+    )
+    send_thread.start()
+    return jsonify({'success': True, 'total': len(contacts),
+                    'resumed_from': next_index + 1})
+
+
+@app.route('/discard_job', methods=['POST'])
+def discard_job():
+    """Delete the saved checkpoint (user chose Start Fresh)."""
+    try:
+        if os.path.exists(CHECKPOINT_FILE):
+            os.remove(CHECKPOINT_FILE)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+# ─── Opt-out / DND list ──────────────────────────────────────────
+
+@app.route('/optout', methods=['GET', 'POST'])
+def optout_handler():
+    """
+    GET            → current list + count
+    POST {text}    → extract numbers from pasted text and add them
+    POST {remove}  → remove one number
+    POST {clear}   → wipe the whole list
+    """
+    if request.method == 'GET':
+        nums = sorted(_load_optout())
+        return jsonify({'numbers': nums, 'count': len(nums)})
+
+    data = request.json or {}
+    nums = _load_optout()
+
+    if data.get('clear'):
+        _save_optout(set())
+        return jsonify({'success': True, 'count': 0})
+
+    if data.get('remove'):
+        nums.discard(str(data['remove']).strip()[-10:])
+        _save_optout(nums)
+        return jsonify({'success': True, 'count': len(nums)})
+
+    raw   = data.get('text', '')
+    found = re.findall(r'(?:\+?91)?([6-9]\d{9})', raw.replace(' ', '').replace('-', ''))
+    added = 0
+    for n in found:
+        if n not in nums:
+            nums.add(n)
+            added += 1
+    _save_optout(nums)
+    return jsonify({'success': True, 'added': added, 'count': len(nums)})
 
 
 @app.route('/status')
@@ -367,6 +543,39 @@ def download_report():
 # ═══════════════════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════════════════
+
+def _load_checkpoint():
+    """Read the saved job checkpoint, or None if absent/corrupt."""
+    if not os.path.exists(CHECKPOINT_FILE):
+        return None
+    try:
+        with open(CHECKPOINT_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def _result_counts(results):
+    counts = {'sent': 0, 'skipped': 0, 'failed': 0}
+    for r in results:
+        s = r.get('status', '')
+        if   s == 'Sent':    counts['sent'] += 1
+        elif s == 'Skipped': counts['skipped'] += 1
+        else:                counts['failed'] += 1
+    return counts
+
+def _load_optout():
+    """Opt-out / DND numbers as a set of 10-digit strings."""
+    if not os.path.exists(OPTOUT_FILE):
+        return set()
+    try:
+        with open(OPTOUT_FILE, 'r', encoding='utf-8') as f:
+            return set(str(n)[-10:] for n in json.load(f))
+    except Exception:
+        return set()
+
+def _save_optout(nums):
+    with open(OPTOUT_FILE, 'w', encoding='utf-8') as f:
+        json.dump(sorted(nums), f, ensure_ascii=False, indent=1)
 
 def _load_templates():
     if os.path.exists(TEMPLATE_FILE):
