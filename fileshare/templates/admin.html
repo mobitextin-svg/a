@@ -1,0 +1,1577 @@
+{% extends "base.html" %}
+{% block title %}FileShare — Dashboard{% endblock %}
+{% block content %}
+<style>
+/* ── CORPORATE OVERRIDES ─────────────────────────────────────── */
+.stat-card{
+  cursor:pointer;transition:border-color .18s,transform .15s,box-shadow .15s;
+  position:relative;overflow:hidden;
+}
+.stat-card:hover{ transform:translateY(-2px); box-shadow:0 8px 28px rgba(0,0,0,0.35); }
+.stat-card::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:var(--card-accent,var(--acc));opacity:0;transition:opacity .2s;
+}
+.stat-card:hover::after{ opacity:1; }
+
+.kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:.85rem;margin-bottom:2rem;
+}
+@media(max-width:900px){ .kpi-grid{grid-template-columns:repeat(3,1fr)} }
+@media(max-width:600px){ .kpi-grid{grid-template-columns:1fr 1fr} }
+
+.kpi-num{
+  font-size:2.2rem;font-weight:800;
+  font-family:'Space Mono',monospace;
+  line-height:1;margin-bottom:.3rem;
+}
+.kpi-label{
+  font-size:.68rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.1em;color:var(--muted);margin-bottom:.5rem;
+}
+.kpi-action{
+  font-size:.62rem;font-family:'Space Mono',monospace;
+  letter-spacing:.06em;display:flex;align-items:center;gap:4px;
+  margin-top:.45rem;
+}
+.kpi-arrow{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;border-radius:3px;
+  background:currentColor;opacity:.18;font-size:.55rem;
+}
+
+/* Section divider */
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;
+}
+.section-head h2{ margin-bottom:0; }
+
+/* Upload zone improved */
+#dropZone{
+  border:2px dashed rgba(0,212,255,.3);border-radius:14px;
+  padding:2rem 1.5rem;text-align:center;
+  cursor:pointer;transition:all .2s;user-select:none;
+  background:rgba(0,212,255,.02);
+}
+#dropZone:hover,#dropZone.drag-over{
+  border-color:var(--acc);background:rgba(0,212,255,.05);
+}
+.file-btn-row{
+  display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1.1rem;
+}
+.file-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:9px 16px;border-radius:8px;
+  border:1px solid var(--bdr2);background:var(--sur2);
+  color:var(--txt);font-size:.84rem;font-weight:700;
+  cursor:pointer;transition:all .18s;font-family:'Syne',sans-serif;
+  user-select:none;
+}
+.file-btn:hover{ border-color:var(--acc2);color:var(--acc2);background:rgba(124,92,252,.08); }
+
+/* Table improvements */
+#linksTable th{ background:rgba(255,255,255,.025); }
+.link-row-item td{ vertical-align:middle; }
+
+/* Progress bar */
+#progressWrap{
+  background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;
+  padding:1rem;margin-top:1rem;
+}
+</style>
+
+<div style="max-width:980px;margin:0 auto">
+
+  <!-- PAGE HEADER -->
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.75rem">
+    <div>
+      <div style="font-family:'Space Mono',monospace;font-size:.7rem;color:var(--acc2);letter-spacing:.22em;margin-bottom:.35rem;font-weight:700">ADMIN DASHBOARD</div>
+      <h1 style="font-size:1.9rem;font-weight:800;line-height:1.1">FileShare Control</h1>
+      <p class="muted" style="font-size:.85rem;margin-top:.4rem">Manage files · Create links · Approve device requests</p>
+    </div>
+    <div style="display:flex;gap:.6rem;align-items:center;flex-shrink:0">
+      <a href="/admin/history" class="btn btn-ghost btn-sm" style="border-color:rgba(0,212,255,.3);color:var(--acc)">📥 History</a>
+      <a href="/admin/categories" class="btn btn-ghost btn-sm" style="border-color:rgba(124,92,252,.3);color:var(--acc2)">🏷 Categories</a>
+    </div>
+  </div>
+
+  <!-- ── KPI CARDS ────────────────────────────────────────────── -->
+  {% set expired_count = namespace(n=0) %}
+  {% for tok, l in links.items() %}
+    {% if days_left_map.get(tok, 0) < 0 %}{% set expired_count.n = expired_count.n + 1 %}{% endif %}
+  {% endfor %}
+
+  <!-- Refresh Bar -->
+  <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:.75rem">
+    <span id="refresh-ts" style="font-size:.72rem;color:var(--muted);font-family:'Space Mono',monospace"></span>
+    <button id="refresh-btn" onclick="liveRefresh()" title="Reload all stats and links without restarting"
+      style="background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--acc);
+             padding:6px 16px;border-radius:7px;font-size:.82rem;font-weight:700;cursor:pointer;
+             display:flex;align-items:center;gap:6px;transition:all .2s">
+      <span id="refresh-icon">🔄</span> Refresh
+    </button>
+  </div>
+
+  <div class="kpi-grid" id="kpi-grid">
+
+    <div class="stat-card" style="--card-accent:var(--acc)"
+         onclick="filterByView('downloads')"
+         title="View all download records">
+      <div class="kpi-num" style="color:var(--acc)">{{ download_count }}</div>
+      <div class="kpi-label">Total Downloads</div>
+      <div class="kpi-action" style="color:var(--acc)">
+        <span>↗</span> Click to view history
+      </div>
+    </div>
+
+    <div class="stat-card" style="--card-accent:var(--acc3)"
+         onclick="filterByView('active')"
+         title="Filter active links">
+      <div class="kpi-num" style="color:var(--acc3)">{{ active_links }}</div>
+      <div class="kpi-label">Active Links</div>
+      <div class="kpi-action" style="color:var(--acc3)">
+        <span>↗</span> Click to filter
+      </div>
+    </div>
+
+    <div class="stat-card" style="--card-accent:var(--acc2)"
+         onclick="filterByView('all')"
+         title="Show all links">
+      <div class="kpi-num" style="color:var(--acc2)">{{ total_links }}</div>
+      <div class="kpi-label">Total Links</div>
+      <div class="kpi-action" style="color:var(--acc2)">
+        <span>↗</span> Click to show all
+      </div>
+    </div>
+
+    <div class="stat-card" style="--card-accent:var(--warn)"
+         onclick="filterByView('pending')"
+         title="View pending requests">
+      <div class="kpi-num" style="color:var(--warn)">{{ pending_count }}</div>
+      <div class="kpi-label">Pending Requests</div>
+      <div class="kpi-action" style="color:var(--warn)">
+        <span>↗</span> Click to view
+      </div>
+    </div>
+
+    <div class="stat-card"
+         style="--card-accent:#ff4757;{% if expired_count.n > 0 %}border-color:rgba(255,71,87,.3){% endif %}"
+         onclick="filterByView('expired')"
+         title="Filter expired links">
+      <div class="kpi-num" style="color:#ff4757">{{ expired_count.n }}</div>
+      <div class="kpi-label">Expired Links</div>
+      <div class="kpi-action" style="color:#ff4757">
+        <span>↗</span> Click to view
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── GENERATED LINK (after upload) ─────────────────────── -->
+  {% if link_url %}
+  <div class="card" style="border-color:rgba(0,255,157,.35);background:rgba(0,255,157,.03);margin-bottom:1.5rem">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
+      <div style="width:36px;height:36px;border-radius:8px;background:rgba(0,255,157,.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">🎉</div>
+      <div>
+        <div style="font-weight:800;font-size:.95rem;color:var(--acc3)">Link Generated Successfully</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:1px">Ready to share — copy a link below</div>
+      </div>
+    </div>
+    {% if short_url %}
+    <div style="margin-bottom:.85rem">
+      <div style="font-size:.65rem;color:var(--acc);letter-spacing:.14em;font-family:'Space Mono',monospace;margin-bottom:.3rem;font-weight:700">⚡ SHORT LINK (recommended)</div>
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <div class="link-box" style="flex:1;min-width:0;font-size:.9rem;color:var(--acc3)">
+          <a href="{{ short_url }}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">{{ short_url }}</a>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="copyLink(this,'{{ short_url }}')">📋 Copy Short Link</button>
+      </div>
+    </div>
+    {% endif %}
+    <div>
+      <div style="font-size:.65rem;color:var(--muted);letter-spacing:.14em;font-family:'Space Mono',monospace;margin-bottom:.3rem;font-weight:700">FULL LINK</div>
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <div class="link-box" style="flex:1;min-width:0;font-size:.75rem;color:var(--muted)">{{ link_url }}</div>
+        <button class="btn btn-ghost btn-sm" onclick="copyLink(this,'{{ link_url }}')">📋 Copy</button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── PENDING: DEVICE APPROVAL ──────────────────────────── -->
+  {% if pending_device %}
+  <div class="card" id="pendingDeviceSection" style="border-color:rgba(0,212,255,.3);margin-bottom:1.5rem">
+    <div class="section-head">
+      <div>
+        <h2 style="color:var(--acc)">🔐 Device Approval Requests</h2>
+        <p style="color:var(--muted);font-size:.82rem;margin-top:.25rem">Approve to unlock download · User gets button instantly</p>
+      </div>
+      <span class="badge badge-blue" style="font-size:.8rem;padding:5px 13px">{{ pending_device|length }} pending</span>
+    </div>
+    {% for rid, req in pending_device.items() %}
+    <div style="background:var(--sur2);border:1px solid rgba(0,212,255,.18);border-radius:12px;padding:1.2rem;margin-bottom:1rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:.9rem">
+        <div style="background:rgba(0,255,157,.05);border:1px solid rgba(0,255,157,.2);border-radius:8px;padding:.65rem .9rem">
+          <div style="font-size:.6rem;font-weight:700;color:var(--acc3);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;margin-bottom:.3rem">📱 Mobile</div>
+          <div style="font-family:'Space Mono',monospace;font-size:.82rem;color:var(--txt)">
+            {% if req.phone %}{{ req.phone }}{% elif req.mobile %}{{ req.mobile }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}
+          </div>
+        </div>
+        <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.18);border-radius:8px;padding:.65rem .9rem">
+          <div style="font-size:.6rem;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;margin-bottom:.3rem">🖥 Device ID</div>
+          <div style="font-family:'Space Mono',monospace;font-size:.7rem;color:var(--muted);word-break:break-all" title="{{ req.fingerprint }}">{{ req.fingerprint[:20] }}…</div>
+        </div>
+        <div style="background:rgba(124,92,252,.05);border:1px solid rgba(124,92,252,.18);border-radius:8px;padding:.65rem .9rem">
+          <div style="font-size:.6rem;font-weight:700;color:var(--acc2);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;margin-bottom:.3rem">📄 File</div>
+          <div style="font-family:'Space Mono',monospace;font-size:.75rem;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ req.filename }}">{{ req.filename }}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:.85rem">
+        {% if req.name and req.name != '' %}
+          <span style="background:rgba(255,255,255,.06);border:1px solid var(--bdr2);border-radius:6px;padding:3px 10px;font-size:.8rem;color:var(--txt);font-weight:700">{{ req.name }}</span>
+        {% endif %}
+        {% if req.email %}
+          <span style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);border-radius:6px;padding:3px 9px;font-size:.76rem;color:var(--acc);font-family:'Space Mono',monospace">✉ {{ req.email }}</span>
+        {% endif %}
+        <span style="font-size:.72rem;color:var(--muted);font-family:'Space Mono',monospace">{{ req.created_at[:16].replace('T',' ') }} UTC</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <form method="POST" style="flex:1">
+          <input type="hidden" name="action" value="approve_device">
+          <input type="hidden" name="token" value="{{ req.token }}">
+          <input type="hidden" name="fingerprint" value="{{ req.fingerprint }}">
+          <input type="hidden" name="request_id" value="{{ rid }}">
+          <button type="submit" class="btn btn-success btn-sm" style="width:100%">✅ Approve — Unlock Download</button>
+        </form>
+        <form method="POST">
+          <input type="hidden" name="action" value="reject_device">
+          <input type="hidden" name="request_id" value="{{ rid }}">
+          <button type="submit" class="btn btn-danger btn-sm">❌ Reject</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ── PENDING: NEW LINK REQUESTS ─────────────────────────── -->
+  {% if pending_new %}
+  <div class="card" id="pendingNewSection" style="border-color:rgba(255,165,2,.3);margin-bottom:1.5rem">
+    <div class="section-head">
+      <h2 style="color:var(--warn)">⚠ New File Requests</h2>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="badge badge-amber" style="font-size:.8rem;padding:5px 13px">{{ pending_new|length }} new</span>
+        <form method="POST" action="/admin/reset-pending" style="margin:0" onsubmit="return confirm('Clear all pending requests?')">
+          <button type="submit" class="btn btn-sm" style="background:rgba(255,80,80,.15);color:#ff6b6b;border:1px solid rgba(255,80,80,.3);padding:4px 12px;font-size:.78rem">🗑 Reset All</button>
+        </form>
+      </div>
+    </div>
+    {% for rid, req in pending_new.items() %}
+    <div class="req-card">
+      <div class="req-header">
+        <div>
+          <h3>{{ req.name }} <span style="color:var(--muted);font-weight:400">— {{ req.email }}</span></h3>
+          <p style="font-size:.78rem;color:var(--muted);margin-top:3px">
+            Requested: <strong style="color:var(--txt)">{{ req.filename or 'Not specified' }}</strong> &nbsp;·&nbsp; {{ req.created_at[:10] }}
+            {% if req.reason %} &nbsp;·&nbsp; <em>{{ req.reason }}</em>{% endif %}
+          </p>
+        </div>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="action" value="create">
+        <input type="hidden" name="request_id" value="{{ rid }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-top:.75rem">
+          <div>
+            <label style="margin-bottom:5px">Full File Path</label>
+            <input type="text" name="file_path" placeholder="e.g. C:\Files\report.pdf" value="{{ req.filename or '' }}" required>
+          </div>
+          <div>
+            <label style="margin-bottom:5px">Expires (days)</label>
+            <input type="number" name="days" value="30" min="1">
+          </div>
+          <button type="submit" class="btn btn-success btn-sm" style="margin-bottom:1px">Create Link ↗</button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ── UPLOAD & CREATE LINK ──────────────────────────────── -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="section-head" style="margin-bottom:1.1rem">
+      <h2>⚡ Upload &amp; Create Share Link</h2>
+    </div>
+
+    <!-- STEP 1: Drop Zone -->
+    <div style="font-family:'Space Mono',monospace;font-size:.65rem;color:var(--acc2);letter-spacing:.15em;margin-bottom:.5rem">STEP 1 — SELECT FILES OR FOLDER</div>
+    <div id="dropZone">
+      <div style="font-size:2.4rem;margin-bottom:.5rem">📂</div>
+      <div style="font-weight:800;font-size:1rem;color:var(--acc);margin-bottom:.3rem">Drop files or folders here</div>
+      <div style="font-size:.8rem;color:var(--muted)">or use the buttons below · multiple files &amp; different locations supported</div>
+    </div>
+
+    <!-- Hidden file inputs (NOT inside labels — triggered by JS click) -->
+    <input type="file" id="fileInput" multiple style="display:none" tabindex="-1">
+    <input type="file" id="folderInput" webkitdirectory multiple style="display:none" tabindex="-1">
+
+    <!-- Action Buttons -->
+    <div class="file-btn-row" style="margin-top:1rem">
+      <button type="button" class="file-btn" id="btnFiles" onclick="document.getElementById('fileInput').click()">
+        🗂 Select Files
+      </button>
+      <button type="button" class="file-btn" id="btnFolder" onclick="document.getElementById('folderInput').click()">
+        📁 Select Folder
+      </button>
+      <span style="font-size:.75rem;color:var(--muted)">Click <strong style="color:var(--txt)">Select Files</strong> multiple times to add from different locations</span>
+    </div>
+
+    <!-- Selected Files List -->
+    <div id="fileList" style="display:none;margin-bottom:1.1rem;margin-top:.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.45rem">
+        <span style="font-size:.78rem;color:var(--acc);font-family:'Space Mono',monospace;letter-spacing:.05em">
+          FILES: <span id="fileCount">0</span>&nbsp;&nbsp;·&nbsp;&nbsp;SIZE: <span id="totalSize">0 B</span>
+        </span>
+        <button type="button" id="btnClear" style="font-size:.75rem;color:#ff4757;background:none;border:1px solid rgba(255,71,87,.35);border-radius:6px;padding:3px 10px;cursor:pointer">✕ Clear all</button>
+      </div>
+      <div id="fileItems" style="max-height:200px;overflow-y:auto;border:1px solid var(--bdr2);border-radius:10px;padding:.4rem;background:rgba(0,0,0,.2)"></div>
+    </div>
+
+    <div style="height:1px;background:var(--bdr);margin:1.1rem 0"></div>
+
+    <!-- STEP 2: Zip Archive Name (optional) -->
+    <div id="zipNameWrap" style="margin-bottom:1rem">
+      <label style="display:block;font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px">
+        Zip Archive Name <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional — multi-file only)</span>
+      </label>
+      <input type="text" id="zipName" placeholder="e.g. project-files  (leave blank → files.zip)" style="width:100%;max-width:400px">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:.6rem;font-size:.8rem;color:var(--txt);text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer">
+        <input type="checkbox" id="folderShareToggle" style="accent-color:var(--acc2);width:15px;height:15px;cursor:pointer">
+        📁 Share as browsable folder <span style="color:var(--muted)">(recipients browse files online instead of one ZIP)</span>
+      </label>
+    </div>
+
+    <!-- STEP 3 + 4: Expiry & Category side by side -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.1rem;margin-bottom:1rem;align-items:start">
+      <!-- Expiry -->
+      <div>
+        <label style="display:block;font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px">Expires After (days)</label>
+        <div style="display:flex;gap:.35rem;margin-bottom:.45rem;flex-wrap:wrap">
+          <button type="button" onclick="setExpiry(1)"  class="expiry-preset btn btn-ghost btn-sm" style="font-size:.7rem;padding:4px 10px">1d</button>
+          <button type="button" onclick="setExpiry(2)"  class="expiry-preset btn btn-ghost btn-sm" style="font-size:.7rem;padding:4px 10px">2d</button>
+          <button type="button" onclick="setExpiry(7)"  class="expiry-preset btn btn-ghost btn-sm" style="font-size:.7rem;padding:4px 10px">7d</button>
+          <button type="button" onclick="setExpiry(30)" class="expiry-preset btn btn-ghost btn-sm" style="font-size:.7rem;padding:4px 10px">30d</button>
+        </div>
+        <input type="number" id="expiryDays" value="30" min="1" max="365" style="width:100%">
+      </div>
+      <!-- Category -->
+      <div>
+        <label style="display:block;font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px">Category</label>
+        <select id="categorySelect" style="width:100%">
+          <option value="">— None —</option>
+          {% for cat in categories %}
+          <option value="{{ cat | e }}">{{ cat }}</option>
+          {% endfor %}
+        </select>
+        <p class="hint" style="margin-top:5px">Organise links. <a href="/admin/categories" style="color:var(--acc2);text-decoration:none">Manage ↗</a></p>
+      </div>
+    </div>
+
+    <!-- STEP 6: Optional Link Password -->
+    <div style="margin-bottom:1.1rem">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:0">
+        <label style="position:relative;display:inline-flex;align-items:center;cursor:pointer;user-select:none">
+          <input type="checkbox" id="pwToggle" onchange="toggleLinkPw(this)"
+                 style="position:absolute;opacity:0;width:0;height:0">
+          <span id="pwToggleTrack"
+                style="display:inline-block;width:38px;height:20px;border-radius:99px;
+                       background:var(--bdr2);position:relative;transition:background .18s;flex-shrink:0">
+            <span id="pwToggleThumb"
+                  style="position:absolute;top:3px;left:3px;width:14px;height:14px;
+                         border-radius:50%;background:#fff;transition:left .18s"></span>
+          </span>
+        </label>
+        <span style="font-size:.82rem;font-weight:700;color:var(--muted);letter-spacing:.03em">
+          🔒 Password-protect this link <span style="font-weight:400;font-size:.76rem">(optional)</span>
+        </span>
+      </div>
+      <div id="pwFieldWrap" style="display:none;margin-top:.75rem">
+        <label style="display:block;font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px">Link Password</label>
+        <div style="display:flex;gap:.65rem;align-items:center">
+          <input type="password" id="linkPassword" placeholder="Enter password for this link"
+                 style="flex:1;max-width:340px" autocomplete="off">
+          <button type="button" onclick="togglePwVis()" id="pwEyeBtn"
+                  style="padding:10px 13px;border-radius:9px;border:1px solid var(--bdr2);
+                         background:var(--sur2);color:var(--muted);cursor:pointer;font-size:.85rem;
+                         transition:all .2s;flex-shrink:0"
+                  title="Show/hide">👁</button>
+        </div>
+        <p class="hint" style="margin-top:6px">Client must enter this password before downloading. <a href="/admin/link-passwords" style="color:var(--acc2);text-decoration:none">View saved passwords ↗</a></p>
+      </div>
+    </div>
+
+    <div style="height:1px;background:var(--bdr);margin:1.1rem 0"></div>
+
+    <!-- STEP 7: Download Mode -->
+    <div style="margin-bottom:1.3rem">
+      <label style="display:block;font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">
+        Download Mode <span style="color:var(--danger);font-size:.65rem">* required</span>
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+
+        <!-- Option A: With Approval -->
+        <div id="modeLockedBtn" onclick="setMode('locked')"
+             style="display:flex;align-items:flex-start;gap:12px;padding:16px 18px;border-radius:11px;
+                    border:2px solid var(--bdr2);background:transparent;
+                    cursor:pointer;transition:all .18s;user-select:none;position:relative">
+          <div id="dotLocked"
+               style="width:17px;height:17px;border-radius:50%;border:2px solid var(--bdr2);
+                      background:transparent;flex-shrink:0;margin-top:2px;
+                      display:flex;align-items:center;justify-content:center">
+            <div style="width:6px;height:6px;border-radius:50%;background:transparent"></div>
+          </div>
+          <div style="min-width:0">
+            <div style="font-size:.88rem;font-weight:800;color:var(--muted);margin-bottom:7px;letter-spacing:.02em">🔐 WITH APPROVAL</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <span style="font-size:.76rem;color:var(--txt);font-weight:600;display:flex;align-items:center;gap:5px"><span style="color:var(--acc3)">✅</span> Same device → re-download</span>
+              <span style="font-size:.76rem;color:var(--muted);display:flex;align-items:center;gap:5px"><span>🔐</span> New device → admin approval</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Option B: Unlimited Devices -->
+        <div id="modeOpenBtn" onclick="setMode('open')"
+             style="display:flex;align-items:flex-start;gap:12px;padding:16px 18px;border-radius:11px;
+                    border:2px solid var(--bdr2);background:transparent;
+                    cursor:pointer;transition:all .18s;user-select:none;position:relative">
+          <div id="dotOpen"
+               style="width:17px;height:17px;border-radius:50%;border:2px solid var(--bdr2);
+                      background:transparent;flex-shrink:0;margin-top:2px;
+                      display:flex;align-items:center;justify-content:center">
+            <div style="width:6px;height:6px;border-radius:50%;background:transparent"></div>
+          </div>
+          <div style="min-width:0">
+            <div style="font-size:.88rem;font-weight:800;color:var(--muted);margin-bottom:7px;letter-spacing:.02em">🌐 UNLIMITED DEVICES</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <span style="font-size:.76rem;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:5px"><span style="color:var(--acc3)">✅</span> Any device → instant download</span>
+              <span style="font-size:.76rem;color:var(--muted);display:flex;align-items:center;gap:5px"><span>🚫</span> No approval required</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <input type="hidden" id="downloadMode" value="">
+    </div>
+
+    <!-- STEP 8: Upload Button -->
+    <button type="button" id="uploadBtn" class="btn btn-primary" disabled
+      style="min-width:220px;opacity:.4;cursor:not-allowed;font-size:.95rem;padding:.75rem 1.75rem">
+      ⬆&nbsp; Upload &amp; Generate Link
+    </button>
+
+    <div id="progressWrap" style="display:none;margin-top:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:var(--muted);margin-bottom:.4rem">
+        <span id="progressLabel">Uploading…</span>
+        <span id="progressPct" style="color:var(--acc);font-family:'Space Mono',monospace;font-weight:700">0%</span>
+      </div>
+      <div style="background:rgba(255,255,255,.07);border-radius:99px;height:9px;overflow:hidden;position:relative">
+        <div id="progressBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--acc2),var(--acc));border-radius:99px;transition:width .12s linear"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:.3rem;font-size:.7rem;color:var(--muted);font-family:'Space Mono',monospace">
+        <span id="progressFile"></span>
+        <span style="display:flex;gap:.8rem">
+          <span id="progSpeed"></span>
+          <span id="progEta"></span>
+        </span>
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:.65rem">
+        <button id="pauseBtn" type="button" onclick="toggleUploadPause()"
+          style="display:none;padding:6px 14px;font-size:.75rem;border-radius:7px;
+                 border:1px solid rgba(0,212,255,.35);background:rgba(0,212,255,.07);
+                 color:var(--acc);cursor:pointer;font-family:'Syne',sans-serif;font-weight:700">
+          ⏸ Pause
+        </button>
+        <button id="cancelUploadBtn" type="button" onclick="cancelUpload()"
+          style="display:none;padding:6px 14px;font-size:.75rem;border-radius:7px;
+                 border:1px solid rgba(255,71,87,.35);background:rgba(255,71,87,.07);
+                 color:var(--danger);cursor:pointer;font-family:'Syne',sans-serif;font-weight:700">
+          ✕ Cancel
+        </button>
+      </div>
+    </div>
+    <div id="uploadResult" style="display:none;margin-top:1.3rem"></div>
+  </div>
+
+  <!-- ── LINKS TABLE ────────────────────────────────────────── -->
+  {% if links %}
+  <div class="card" id="linksTableCard" style="padding:0;overflow:hidden">
+    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+      <div class="section-label" style="margin-bottom:0">All Links ({{ links|length }})</div>
+      <button id="bulkRevokeBtn" class="btn btn-danger btn-sm" style="display:none" onclick="bulkRevoke()">
+        🗑 Delete Selected (<span id="selCount">0</span>)
+      </button>
+    </div>
+    <!-- Search + Category Filter -->
+    <div style="padding:.85rem 1.5rem;border-bottom:1px solid var(--bdr);display:flex;gap:.65rem;align-items:center;flex-wrap:wrap">
+      <input type="text" id="linkSearch" placeholder="🔍  Search by filename…" oninput="filterLinks()"
+             style="flex:1;min-width:160px;background:rgba(255,255,255,.04);border:1px solid var(--bdr2);border-radius:9px;padding:9px 14px;color:var(--txt);font-size:.86rem;font-family:'Syne',sans-serif;outline:none"
+             onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'">
+      <select id="catFilter" onchange="filterLinks()"
+              style="background:var(--sur2);border:1px solid var(--bdr2);border-radius:9px;padding:9px 12px;color:var(--txt);font-family:'Syne',sans-serif;font-size:.84rem;outline:none;min-width:140px;cursor:pointer"
+              onfocus="this.style.borderColor='var(--acc2)'" onblur="this.style.borderColor='var(--bdr2)'">
+        <option value="">🏷 All Categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat | lower | e }}">{{ cat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <form method="POST" id="bulkForm">
+      <input type="hidden" name="action" value="bulk_revoke">
+      <div style="overflow-x:auto">
+      <table id="linksTable" style="min-width:800px">
+        <thead>
+          <tr>
+            <th style="width:36px;padding:10px 12px 10px 20px">
+              <input type="checkbox" id="selectAll" title="Select all" onchange="toggleAll(this)"
+                     style="accent-color:var(--acc);width:15px;height:15px;cursor:pointer">
+            </th>
+            <th>File</th>
+            <th>Format</th>
+            <th>Category</th>
+            <th style="white-space:nowrap">Expires</th>
+            <th>Status</th>
+            <th>Mode</th>
+            <th>Devices</th>
+            <th style="white-space:nowrap">Share Link</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="linksBody">
+          {% for tok, l in links.items() %}
+          {% set locked = l.locked_to if l.locked_to is iterable and l.locked_to is not string else ([l.locked_to] if l.locked_to else []) %}
+          {% set surl = short_map.get(tok, request.host_url + "download/" + tok) %}
+          {% set dl = days_left_map.get(tok, -999) %}
+          {% set ext = l.filename.rsplit('.', 1)[-1].upper() if '.' in l.filename else 'FILE' %}
+          <tr class="link-row-item"
+              data-filename="{{ l.filename | lower }}"
+              data-category="{{ (l.category or '') | lower }}"
+              data-sc="{{ l.short_code }}"
+              data-dl="{{ dl }}"
+              data-status="{{ 'expired' if dl < 0 else 'active' }}">
+            <td style="padding:10px 12px 10px 20px">
+              <input type="checkbox" name="tokens" value="{{ tok }}" class="row-check"
+                     onchange="updateBulkBtn()"
+                     style="accent-color:var(--acc);width:15px;height:15px;cursor:pointer">
+            </td>
+            <td class="mono" style="font-size:.78rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ l.filename }}">
+              {{ l.filename }}
+              {% if l.get('file_count', 1) > 1 %}
+              <span style="font-size:.65rem;color:var(--muted);margin-left:4px">({{ l.file_count }} files)</span>
+              {% endif %}
+            </td>
+            <td>
+              {% set ext_lower = l.filename.rsplit('.', 1)[-1].lower() if '.' in l.filename else '' %}
+              {% if ext_lower == 'pdf' %}
+                <span class="badge badge-red" style="font-size:.6rem">PDF</span>
+              {% elif ext_lower in ['zip','rar','7z','tar','gz'] %}
+                <span class="badge badge-purple" style="font-size:.6rem">{{ ext }}</span>
+              {% elif ext_lower in ['jpg','jpeg','png','gif','webp','svg'] %}
+                <span class="badge badge-blue" style="font-size:.6rem">{{ ext }}</span>
+              {% elif ext_lower in ['mp4','mkv','avi','mov','wmv'] %}
+                <span class="badge" style="background:rgba(255,165,2,.12);border:1px solid rgba(255,165,2,.3);color:var(--warn);font-size:.6rem">{{ ext }}</span>
+              {% elif ext_lower in ['doc','docx','xls','xlsx','ppt','pptx','txt','csv'] %}
+                <span class="badge badge-green" style="font-size:.6rem">{{ ext }}</span>
+              {% else %}
+                <span class="badge" style="background:rgba(255,255,255,.06);border:1px solid var(--bdr2);color:var(--muted);font-size:.6rem">{{ ext if ext_lower else 'FILE' }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if l.category %}
+                <span style="background:rgba(124,92,252,.1);border:1px solid rgba(124,92,252,.3);border-radius:6px;padding:3px 9px;font-size:.75rem;color:var(--acc2);font-weight:600">{{ l.category }}</span>
+              {% else %}
+                <span style="color:var(--muted);font-size:.75rem">—</span>
+              {% endif %}
+            </td>
+            <td style="font-size:.8rem;white-space:nowrap">
+              {% if dl < 0 %}
+                <span style="color:#ff4757;font-weight:700">EXPIRED</span>
+              {% elif dl == 0 %}
+                <span style="color:#ff4757;font-weight:700">⚠ Today!</span>
+              {% elif dl == 1 %}
+                <span style="color:#ff6b35;font-weight:700">1 day left</span>
+              {% elif dl <= 3 %}
+                <span style="color:var(--warn);font-weight:700">{{ dl }}d left</span>
+              {% elif dl <= 7 %}
+                <span style="color:#f0c040">{{ dl }}d left</span>
+              {% else %}
+                <span style="color:var(--acc3)">{{ dl }}d left</span>
+              {% endif %}
+              <div style="font-size:.68rem;color:var(--muted);margin-top:2px">{{ l.expires_at[:10] }}</div>
+            </td>
+            <td>
+              {% if dl < 0 %}
+                <span class="badge badge-amber">EXPIRED</span>
+              {% else %}
+                <span class="badge badge-green">ACTIVE</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if l.get('mode','locked') == 'open' %}
+                <span class="badge badge-green" style="font-size:.6rem">🌐 Open</span>
+              {% else %}
+                <span class="badge badge-purple" style="font-size:.6rem">🔐 Request</span>
+              {% endif %}
+              {% if l.get('link_password_hash') %}
+                <br><span class="badge badge-amber" style="font-size:.6rem;margin-top:4px">🔒 PW</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if locked %}
+                <span class="badge badge-blue">🔒 {{ locked|length }}dev</span>
+              {% else %}
+                <span style="color:var(--muted);font-size:.72rem">awaiting…</span>
+              {% endif %}
+            </td>
+            <td style="min-width:160px">
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <a href="{{ surl }}" target="_blank" rel="noopener"
+                   style="font-family:'Space Mono',monospace;font-size:.68rem;color:var(--acc3);
+                          background:rgba(0,255,157,.07);border:1px solid rgba(0,255,157,.25);
+                          border-radius:6px;padding:5px 9px;text-decoration:none;
+                          display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                   title="{{ surl }}">🔗 {{ surl }}</a>
+                <button type="button" class="btn btn-ghost btn-sm"
+                        style="padding:4px 10px;font-size:.73rem"
+                        onclick="copyLink(this,'{{ surl }}')">📋 Copy Link</button>
+                {% if slug_map.get(tok) %}
+                {% set branded = request.host_url + slug_map.get(tok) %}
+                <a href="{{ branded }}" target="_blank" rel="noopener"
+                   style="font-family:'Space Mono',monospace;font-size:.68rem;color:var(--acc2);
+                          background:rgba(124,92,252,.08);border:1px solid rgba(124,92,252,.3);
+                          border-radius:6px;padding:5px 9px;text-decoration:none;display:block;
+                          overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ branded }}">🏷 {{ branded }}</a>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              {% set previewable = l.is_folder or ext_lower in ['pdf','png','jpg','jpeg','gif','webp','svg','bmp','mp4','webm','mov','m4v','mkv','mp3','wav','m4a','aac','ogg','flac','txt','md','csv','log','json','xml'] %}
+              <div style="display:flex;flex-direction:column;gap:5px;min-width:150px">
+                <a href="/admin/analytics/{{ tok }}" class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:.72rem;text-decoration:none">📊 Analytics</a>
+                {% if previewable %}
+                <a href="/download/{{ tok }}/view" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:.72rem;text-decoration:none">👁 Preview</a>
+                {% endif %}
+                <div style="display:flex;gap:5px">
+                  <button type="button" class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:.72rem;flex:1"
+                          onclick="showQr('{{ tok }}','{{ surl }}')">📱 QR</button>
+                  <button type="button" class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:.72rem;flex:1"
+                          onclick="showSlug('{{ tok }}','{{ slug_map.get(tok, '') }}')">🏷 Link</button>
+                </div>
+                <button type="button" class="btn btn-danger btn-sm" style="padding:4px 10px;font-size:.72rem" onclick="revokeOne('{{ tok }}')">🗑 Delete</button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div id="noResults" style="display:none;text-align:center;padding:2rem;color:var(--muted);font-size:.88rem">No links match your search.</div>
+    </form>
+    <form method="POST" id="singleRevokeForm" style="display:none">
+      <input type="hidden" name="action" value="revoke">
+      <input type="hidden" name="token" id="singleRevokeToken">
+    </form>
+  </div>
+  {% else %}
+  <div class="card" style="text-align:center;padding:3rem;border-style:dashed">
+    <div style="font-size:3rem;margin-bottom:.75rem">📭</div>
+    <h2 style="color:var(--muted);font-weight:400">No links yet</h2>
+    <p class="muted" style="margin-top:.4rem;font-size:.88rem">Upload a file above to create your first share link.</p>
+  </div>
+  {% endif %}
+
+
+</div><!-- /max-width wrapper -->
+
+<script>
+// ── UNIFIED FILTER STATE ─────────────────────────────────────
+var _statFilter = '';
+
+function filterByView(view) {
+  if (view === 'downloads') {
+    window.location.href = '/admin/history';
+    return;
+  }
+  if (view === 'pending') {
+    var sec = document.getElementById('pendingDeviceSection') || document.getElementById('pendingNewSection');
+    if (sec) { sec.scrollIntoView({behavior:'smooth', block:'start'}); }
+    return;
+  }
+  var statusMap = { active:'active', all:'', expired:'expired' };
+  _statFilter = (statusMap[view] !== undefined) ? statusMap[view] : '';
+  var card = document.getElementById('linksTableCard');
+  if (card) { card.scrollIntoView({behavior:'smooth', block:'start'}); }
+  applyAllFilters();
+}
+
+function applyAllFilters() {
+  var q   = ((document.getElementById('linkSearch') || {}).value || '').toLowerCase().trim();
+  var sf  = _statFilter;
+  var catSel = ((document.getElementById('catFilter') || {}).value || '').toLowerCase().trim();
+  var rows = document.querySelectorAll('.link-row-item');
+  var visible = 0;
+  rows.forEach(function(row) {
+    var fn  = row.getAttribute('data-filename') || '';
+    var cat = row.getAttribute('data-category') || '';
+    var sc  = (row.getAttribute('data-sc') || '').toLowerCase();
+    var st  = row.getAttribute('data-status') || '';
+    var searchOk = !q || fn.includes(q) || cat.includes(q) || sc.includes(q);
+    var sfOk     = !sf || st === sf;
+    var catOk    = !catSel || cat === catSel;
+    var show = searchOk && sfOk && catOk;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  var noRes = document.getElementById('noResults');
+  if (noRes) noRes.style.display = visible === 0 ? 'block' : 'none';
+}
+
+function filterLinks() {
+  _statFilter = '';
+  applyAllFilters();
+}
+
+// ── MODE SELECTOR ────────────────────────────────────────────
+function setMode(mode) {
+  document.getElementById('downloadMode').value = mode;
+  // Persist so the choice survives page reloads
+  try { localStorage.setItem('fileshare_dl_mode', mode); } catch(e) {}
+
+  var locked     = document.getElementById('modeLockedBtn');
+  var open       = document.getElementById('modeOpenBtn');
+  var dotLocked  = document.getElementById('dotLocked');
+  var dotOpen    = document.getElementById('dotOpen');
+
+  if (mode === 'locked') {
+    // Locked card — active
+    locked.style.borderColor = 'var(--acc2)';
+    locked.style.background  = 'rgba(124,92,252,.09)';
+    locked.querySelector('div:last-child div:first-child').style.color = 'var(--acc2)';
+    dotLocked.style.borderColor  = 'var(--acc2)';
+    dotLocked.style.background   = 'var(--acc2)';
+    dotLocked.querySelector('div').style.background = '#fff';
+    // Open card — inactive
+    open.style.borderColor = 'var(--bdr2)';
+    open.style.background  = 'transparent';
+    open.querySelector('div:last-child div:first-child').style.color = 'var(--muted)';
+    dotOpen.style.borderColor = 'var(--bdr2)';
+    dotOpen.style.background  = 'transparent';
+    dotOpen.querySelector('div').style.background = 'transparent';
+  } else {
+    // Open card — active
+    open.style.borderColor = 'var(--acc3)';
+    open.style.background  = 'rgba(0,255,157,.08)';
+    open.querySelector('div:last-child div:first-child').style.color = 'var(--acc3)';
+    dotOpen.style.borderColor = 'var(--acc3)';
+    dotOpen.style.background  = 'var(--acc3)';
+    dotOpen.querySelector('div').style.background = '#fff';
+    // Locked card — inactive
+    locked.style.borderColor = 'var(--bdr2)';
+    locked.style.background  = 'transparent';
+    locked.querySelector('div:last-child div:first-child').style.color = 'var(--muted)';
+    dotLocked.style.borderColor = 'var(--bdr2)';
+    dotLocked.style.background  = 'transparent';
+    dotLocked.querySelector('div').style.background = 'transparent';
+  }
+}
+
+// ── RESTORE saved mode on page load ──────────────────────────
+(function() {
+  try {
+    var saved = localStorage.getItem('fileshare_dl_mode');
+    if (saved === 'open' || saved === 'locked') { setMode(saved); }
+    // No default — user must choose explicitly
+  } catch(e) {}
+})();
+
+// ── EXPIRY PRESETS ───────────────────────────────────────────
+function setExpiry(days) {
+  var el = document.getElementById('expiryDays');
+  if (el) el.value = days;
+  document.querySelectorAll('.expiry-preset').forEach(function(b) {
+    var active = parseInt(b.textContent) === days;
+    b.style.borderColor = active ? 'var(--acc2)' : 'var(--bdr2)';
+    b.style.color       = active ? 'var(--acc2)' : 'var(--muted)';
+    b.style.background  = active ? 'rgba(124,92,252,.1)' : 'transparent';
+  });
+}
+
+// ── LINK PASSWORD TOGGLE ─────────────────────────────────────
+function toggleLinkPw(chk) {
+  var wrap  = document.getElementById('pwFieldWrap');
+  var track = document.getElementById('pwToggleTrack');
+  var thumb = document.getElementById('pwToggleThumb');
+  var inp   = document.getElementById('linkPassword');
+  if (chk.checked) {
+    wrap.style.display  = 'block';
+    track.style.background = 'var(--acc2)';
+    thumb.style.left    = '21px';
+    if (inp) inp.focus();
+  } else {
+    wrap.style.display  = 'none';
+    track.style.background = 'var(--bdr2)';
+    thumb.style.left    = '3px';
+    if (inp) inp.value  = '';
+  }
+}
+
+function togglePwVis() {
+  var inp = document.getElementById('linkPassword');
+  var btn = document.getElementById('pwEyeBtn');
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+
+// ── COPY LINK ────────────────────────────────────────────────
+function copyLink(btn, text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = '✓ Copied!';
+      setTimeout(function(){ btn.textContent = '📋 Copy Link'; }, 2000);
+    });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); btn.textContent='✓ Copied!'; setTimeout(function(){btn.textContent='📋 Copy Link';},2000); }
+    catch(e) { prompt('Copy this link:', text); }
+    document.body.removeChild(ta);
+  }
+}
+
+// ── REVOKE ───────────────────────────────────────────────────
+function revokeOne(tok) {
+  if (!confirm('Delete this link? The download URL will stop working.')) return;
+  document.getElementById('singleRevokeToken').value = tok;
+  document.getElementById('singleRevokeForm').submit();
+}
+
+function toggleAll(cb) {
+  document.querySelectorAll('.row-check').forEach(function(c) { c.checked = cb.checked; });
+  updateBulkBtn();
+}
+
+function updateBulkBtn() {
+  var checked = document.querySelectorAll('.row-check:checked').length;
+  var btn  = document.getElementById('bulkRevokeBtn');
+  var all  = document.getElementById('selectAll');
+  if (document.getElementById('selCount')) document.getElementById('selCount').textContent = checked;
+  if (btn) btn.style.display = checked > 0 ? 'inline-flex' : 'none';
+  var total = document.querySelectorAll('.row-check').length;
+  if (all) {
+    all.indeterminate = checked > 0 && checked < total;
+    all.checked = checked === total && total > 0;
+  }
+}
+
+function bulkRevoke() {
+  var checked = document.querySelectorAll('.row-check:checked').length;
+  if (!confirm('Delete ' + checked + ' selected link(s)? This cannot be undone.')) return;
+  document.getElementById('bulkForm').submit();
+}
+
+// ── FILE UPLOAD MODULE ───────────────────────────────────────
+(function () {
+  'use strict';
+  var picked = [];
+
+  document.getElementById('btnClear').onclick  = clearAll;
+  document.getElementById('uploadBtn').onclick  = doUpload;
+
+  // Click on drop zone → file picker (clicking the zone itself opens file picker)
+  document.getElementById('dropZone').addEventListener('click', function(e) {
+    document.getElementById('fileInput').click();
+  });
+
+  document.getElementById('fileInput').onchange = function() {
+    mergeFiles(Array.from(this.files), false); this.value = '';
+  };
+  document.getElementById('folderInput').onchange = function() {
+    mergeFiles(Array.from(this.files), true); this.value = '';
+  };
+
+  // btnFiles / btnFolder are now <button> tags with onclick= inline, nothing extra needed here
+
+  var dz = document.getElementById('dropZone');
+  dz.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dz.style.borderColor = 'var(--acc)';
+    dz.style.background  = 'rgba(0,212,255,.06)';
+    dz.classList.add('drag-over');
+  });
+  dz.addEventListener('dragleave', function() { resetDZ(); });
+  dz.addEventListener('drop', function(e) {
+    e.preventDefault(); resetDZ();
+    var items = e.dataTransfer.items;
+    if (items && items.length) {
+      var entries = [];
+      for (var i = 0; i < items.length; i++) {
+        var en = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+        if (en) entries.push(en);
+      }
+      readEntries(entries, function(list) { mergeFiles(list, false); });
+    } else {
+      mergeFiles(Array.from(e.dataTransfer.files), false);
+    }
+  });
+
+  function resetDZ() {
+    dz.style.borderColor = 'rgba(0,212,255,.3)';
+    dz.style.background  = 'rgba(0,212,255,.02)';
+    dz.classList.remove('drag-over');
+  }
+
+  function readEntries(entries, cb) {
+    var out = []; var pending = 0;
+    if (!entries.length) { cb(out); return; }
+    function traverse(entry, path) {
+      if (entry.isFile) {
+        pending++;
+        entry.file(function(f) {
+          try { Object.defineProperty(f, 'webkitRelativePath', {value: path+f.name, configurable:true, writable:true}); } catch(e) {}
+          out.push(f); pending--;
+          if (pending === 0) cb(out);
+        });
+      } else if (entry.isDirectory) {
+        pending++;
+        var reader = entry.createReader();
+        (function read() {
+          reader.readEntries(function(subs) {
+            if (!subs.length) { pending--; if (pending === 0) cb(out); return; }
+            subs.forEach(function(s) { traverse(s, path + entry.name + '/'); });
+            read();
+          });
+        })();
+      }
+    }
+    entries.forEach(function(e) { traverse(e, ''); });
+  }
+
+  function mergeFiles(files, fromFolder) {
+    files.forEach(function(f) {
+      var rel = (fromFolder && f.webkitRelativePath) ? f.webkitRelativePath : f.name;
+      var dup = picked.some(function(p) { return p.rel === rel && p.file.size === f.size; });
+      if (!dup) picked.push({file: f, rel: rel});
+    });
+    render();
+  }
+
+  function clearAll() {
+    picked = [];
+    document.getElementById('fileInput').value   = '';
+    document.getElementById('folderInput').value = '';
+    render();
+  }
+
+  function fmt(b) {
+    if (b >= 1073741824) return (b/1073741824).toFixed(1) + ' GB';
+    if (b >= 1048576)    return (b/1048576).toFixed(1) + ' MB';
+    if (b >= 1024)       return (b/1024).toFixed(0) + ' KB';
+    return b + ' B';
+  }
+
+  function render() {
+    var list  = document.getElementById('fileList');
+    var items = document.getElementById('fileItems');
+    var btn   = document.getElementById('uploadBtn');
+    var znw   = document.getElementById('zipNameWrap');
+    if (picked.length === 0) {
+      list.style.display = 'none';
+      btn.disabled = true; btn.style.opacity = '.4'; btn.style.cursor = 'not-allowed';
+      return;
+    }
+    btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+    znw.style.opacity = picked.length > 1 ? '1' : '.4';
+    list.style.display = 'block';
+    document.getElementById('fileCount').textContent = picked.length;
+    var total = picked.reduce(function(s, p) { return s + p.file.size; }, 0);
+    document.getElementById('totalSize').textContent = fmt(total);
+    items.innerHTML = picked.map(function(p, i) {
+      var bg = i % 2 ? 'background:rgba(255,255,255,.025)' : '';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;border-radius:7px;'+bg+'">'
+        + '<div style="display:flex;align-items:center;gap:7px;overflow:hidden;flex:1;min-width:0">'
+        +   '<span style="font-size:.9rem;flex-shrink:0">📄</span>'
+        +   '<span style="font-size:.78rem;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:\'Space Mono\',monospace">'+escH(p.rel)+'</span>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-left:.6rem;flex-shrink:0">'
+        +   '<span style="font-size:.72rem;color:var(--muted)">'+fmt(p.file.size)+'</span>'
+        +   '<button type="button" onclick="removeFile('+i+')" style="background:none;border:none;color:rgba(255,71,87,.7);cursor:pointer;font-size:.8rem;padding:0 2px" title="Remove">✕</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  window.removeFile = function(idx) { picked.splice(idx, 1); render(); };
+
+  function escH(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── CHUNKED UPLOAD ENGINE ────────────────────────────────────────────────────
+  var CHUNK_SIZE = 5 * 1024 * 1024;   // 5 MB
+  var PARALLEL   = 3;                  // concurrent chunks
+  var RETRIES    = 3;                  // per-chunk retries
+  var _paused    = false;
+  var _cancelled = false;
+  var _reader    = null;
+
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  function fmtB(b){
+    if (b>=1073741824) return (b/1073741824).toFixed(2)+' GB';
+    if (b>=1048576)    return (b/1048576).toFixed(1)+' MB';
+    if (b>=1024)       return (b/1024).toFixed(0)+' KB';
+    return b+' B';
+  }
+
+  function genId(){
+    return 'xxxxxxxxxxxx'.replace(/x/g,function(){return (Math.random()*16|0).toString(16);});
+  }
+
+  // ── UI helpers ──────────────────────────────────────────────────────────────
+  var _uploadStart = 0;
+  var _uploadedBytes = 0;
+
+  function setUploadState(state) {
+    var btn    = document.getElementById('uploadBtn');
+    var wrap   = document.getElementById('progressWrap');
+    var pauseBtn = document.getElementById('pauseBtn');
+    var cancelBtnEl = document.getElementById('cancelUploadBtn');
+    if (state === 'uploading') {
+      btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'not-allowed';
+      btn.innerHTML = 'Uploading…';
+      wrap.style.display = 'block';
+      if (pauseBtn)  pauseBtn.style.display = 'inline-flex';
+      if (cancelBtnEl) cancelBtnEl.style.display = 'inline-flex';
+    } else {
+      btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+      btn.innerHTML = '⬆&nbsp; Upload &amp; Generate Link';
+      wrap.style.display = 'none';
+      if (pauseBtn)  { pauseBtn.style.display = 'none'; pauseBtn.textContent = '⏸ Pause'; _paused = false; }
+      if (cancelBtnEl) cancelBtnEl.style.display = 'none';
+      document.getElementById('progressBar').style.width = '0%';
+      document.getElementById('progressPct').textContent = '0%';
+      document.getElementById('progressFile').textContent = '';
+      document.getElementById('progressLabel').textContent = 'Uploading…';
+      document.getElementById('progSpeed') && (document.getElementById('progSpeed').textContent='');
+      document.getElementById('progEta')   && (document.getElementById('progEta').textContent='');
+    }
+  }
+
+  function updateProgress(ratio, label, speed, eta) {
+    var pct = Math.min(100, Math.round(ratio * 100));
+    document.getElementById('progressBar').style.width = pct+'%';
+    document.getElementById('progressPct').textContent = pct+'%';
+    if (label) document.getElementById('progressLabel').textContent = label;
+    var sp = document.getElementById('progSpeed');
+    var et = document.getElementById('progEta');
+    if (sp && speed !== undefined) sp.textContent = speed ? fmtB(speed)+'/s' : '';
+    if (et && eta   !== undefined) et.textContent = eta > 0 ? fmtEtaUp(eta)+' left' : '';
+  }
+
+  function fmtEtaUp(s){
+    if (s>=3600) return Math.floor(s/3600)+'h '+(Math.floor((s%3600)/60))+'m';
+    if (s>=60)   return Math.floor(s/60)+'m '+Math.floor(s%60)+'s';
+    return s+'s';
+  }
+
+  // ── Main upload function ─────────────────────────────────────────────────────
+  async function doUpload() {
+    if (!picked.length) return;
+    _cancelled = false;
+    _paused    = false;
+
+    var days     = document.getElementById('expiryDays').value || 30;
+    var zipName  = document.getElementById('zipName').value.trim();
+    var cat      = (document.getElementById('categorySelect')||{}).value || '';
+    var mode     = (document.getElementById('downloadMode')||{}).value || '';
+    var linkPw   = (document.getElementById('linkPassword')||{}).value || '';
+
+    // Guard: mode must be selected
+    if (!mode) {
+      openModePopup();
+      return;
+    }
+
+    // ── Build upload key for resume (filename+size fingerprint) ──────────────
+    var uploadKey = picked.map(function(p){ return p.file.name+':'+p.file.size; }).join('|');
+    var upload_id = localStorage.getItem('ul_'+uploadKey) || genId();
+    localStorage.setItem('ul_'+uploadKey, upload_id);
+
+    // ── Fetch already-uploaded chunks (resume) ────────────────────────────────
+    var resumedChunks = {};
+    try {
+      var rr = await fetch('/admin/upload-resume/'+upload_id);
+      var rd = await rr.json();
+      resumedChunks = rd.files || {};
+    } catch(e){}
+
+    // ── Calculate totals ──────────────────────────────────────────────────────
+    var totalBytes = picked.reduce(function(s,p){ return s+p.file.size; }, 0);
+    var preSent    = 0;
+    // pre-count already-sent bytes
+    picked.forEach(function(p, fi){
+      var done = resumedChunks[String(fi)] || [];
+      var fullChunks = Math.floor(p.file.size / CHUNK_SIZE);
+      done.forEach(function(ci){
+        preSent += ci < fullChunks ? CHUNK_SIZE : (p.file.size % CHUNK_SIZE || CHUNK_SIZE);
+      });
+    });
+
+    setUploadState('uploading');
+    _uploadStart    = Date.now() - (preSent / (totalBytes||1)) * 1000; // rough offset for ETA
+    _uploadedBytes  = preSent;
+
+    var filesMeta = [];
+
+    // ── Upload each file ──────────────────────────────────────────────────────
+    for (var fi = 0; fi < picked.length; fi++) {
+      if (_cancelled) { setUploadState('idle'); localStorage.removeItem('ul_'+uploadKey); return; }
+
+      var p    = picked[fi];
+      var file = p.file;
+      var rel  = p.rel || file.name;
+      var totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      filesMeta.push({ name: rel, rel: rel, total_chunks: totalChunks });
+
+      var doneSoFar = new Set(resumedChunks[String(fi)] || []);
+
+      // Build pending queue (chunks not yet uploaded)
+      var queue = [];
+      for (var ci = 0; ci < totalChunks; ci++) {
+        if (!doneSoFar.has(ci)) queue.push(ci);
+      }
+
+      if (queue.length === 0) {
+        updateProgress(_uploadedBytes/totalBytes,
+          'Resuming — '+rel+' already done', undefined, undefined);
+        continue;
+      }
+
+      // ── Parallel worker pool ──────────────────────────────────────────────
+      var ptr = 0;
+      var uploadErrors = [];
+
+      async function uploadOneChunk(chunkIdx) {
+        var start = chunkIdx * CHUNK_SIZE;
+        var end   = Math.min(start + CHUNK_SIZE, file.size);
+        var blob  = file.slice(start, end);
+
+        for (var attempt = 0; attempt < RETRIES; attempt++) {
+          if (_cancelled) return;
+          while (_paused) {
+            document.getElementById('progressLabel').textContent = '⏸ Paused…';
+            await sleep(250);
+          }
+          try {
+            var fd2 = new FormData();
+            fd2.append('upload_id',    upload_id);
+            fd2.append('file_index',   fi);
+            fd2.append('chunk_index',  chunkIdx);
+            fd2.append('total_chunks', totalChunks);
+            fd2.append('filename',     rel);
+            fd2.append('chunk',        blob, 'chunk');
+
+            var resp = await fetch('/admin/upload-chunk', {method:'POST', body:fd2});
+            if (resp.ok) {
+              _uploadedBytes += (end - start);
+              var elapsed = (Date.now() - _uploadStart) / 1000 || 0.001;
+              var speed   = _uploadedBytes / elapsed;
+              var remaining = totalBytes - _uploadedBytes;
+              var eta     = speed > 0 ? Math.ceil(remaining / speed) : 0;
+              updateProgress(
+                _uploadedBytes / totalBytes,
+                'Uploading '+rel+' — chunk '+(chunkIdx+1)+'/'+totalChunks,
+                speed, eta
+              );
+              document.getElementById('progressFile').textContent =
+                fmtB(_uploadedBytes)+' / '+fmtB(totalBytes)+
+                (totalChunks>1 ? '  ·  chunk '+(chunkIdx+1)+'/'+totalChunks : '');
+              return;  // success
+            }
+          } catch(e) {}
+          if (attempt < RETRIES - 1) await sleep(800 * (attempt + 1));
+        }
+        uploadErrors.push('Chunk '+chunkIdx+' failed after '+RETRIES+' retries');
+      }
+
+      async function runWorker() {
+        while (ptr < queue.length && !_cancelled) {
+          var idx = queue[ptr++];
+          await uploadOneChunk(idx);
+        }
+      }
+
+      var workerCount = Math.min(PARALLEL, queue.length);
+      var workers = [];
+      for (var w = 0; w < workerCount; w++) workers.push(runWorker());
+      await Promise.all(workers);
+
+      if (uploadErrors.length) {
+        showErr('Upload error: '+uploadErrors[0]);
+        setUploadState('idle');
+        return;
+      }
+      if (_cancelled) { setUploadState('idle'); localStorage.removeItem('ul_'+uploadKey); return; }
+    }
+
+    // ── Finalize ──────────────────────────────────────────────────────────────
+    updateProgress(1, 'Finalizing…', 0, 0);
+    document.getElementById('progressFile').textContent = 'Assembling file on server…';
+
+    try {
+      var fResp = await fetch('/admin/upload-finalize', {
+        method:  'POST',
+        headers: {'Content-Type':'application/json'},
+        body:    JSON.stringify({
+          upload_id:     upload_id,
+          files:         filesMeta,
+          days:          days,
+          category:      cat,
+          mode:          mode,
+          zip_name:      zipName,
+          share_mode:    (document.getElementById('folderShareToggle')||{}).checked ? 'folder' : 'zip',
+          link_password: linkPw
+        })
+      });
+      var fData = await fResp.json();
+      localStorage.removeItem('ul_'+uploadKey);
+      setUploadState('idle');
+      if (fData.error) { showErr(fData.error); return; }
+      buildResult(fData.created);
+      clearAll();
+    } catch(e) {
+      showErr('Finalize failed: '+e.message);
+      setUploadState('idle');
+    }
+  }
+
+  // ── Pause / Resume ────────────────────────────────────────────────────────
+  window.toggleUploadPause = function() {
+    _paused = !_paused;
+    var btn = document.getElementById('pauseBtn');
+    if (btn) btn.textContent = _paused ? '▶ Resume' : '⏸ Pause';
+  };
+
+  // ── Cancel ────────────────────────────────────────────────────────────────
+  window.cancelUpload = function() {
+    if (confirm('Cancel upload? Progress for this session will be lost.')) {
+      _cancelled = true;
+    }
+  };
+
+  function buildResult(created) {
+    var res  = document.getElementById('uploadResult');
+    var html = '<div style="border:1px solid rgba(0,255,157,.35);background:rgba(0,255,157,.03);border-radius:13px;padding:1.3rem">'
+      + '<div style="font-weight:800;color:var(--acc3);font-size:.95rem;margin-bottom:1rem">🎉 '
+      + created.length + ' link' + (created.length > 1 ? 's' : '') + ' created successfully!</div>';
+    created.forEach(function(item, idx) {
+      if (idx > 0) html += '<div style="border-top:1px solid rgba(255,255,255,.07);margin:1rem 0"></div>';
+      html += '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">'
+        + '<span style="font-size:.8rem;color:var(--muted);font-family:\'Space Mono\',monospace">'+escH(item.filename)+'</span>';
+      if (item.file_count > 1)
+        html += '<span style="background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);border-radius:6px;padding:2px 8px;font-size:.72rem;color:var(--acc)">'+item.file_count+' files zipped</span>';
+      if (item.password_protected)
+        html += '<span style="background:rgba(124,92,252,.12);border:1px solid rgba(124,92,252,.4);border-radius:6px;padding:2px 8px;font-size:.72rem;color:var(--acc2)">🔒 Password protected</span>';
+      html += '</div>';
+      html += '<div style="margin-bottom:.5rem">'
+        + '<div style="font-size:.65rem;color:var(--acc);font-family:\'Space Mono\',monospace;letter-spacing:.1em;margin-bottom:.3rem;font-weight:700">⚡ SHORT LINK</div>'
+        + '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">'
+        + '<div style="flex:1;min-width:0;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.25);border-radius:8px;padding:9px 13px;font-family:\'Space Mono\',monospace;font-size:.85rem;color:var(--acc3);word-break:break-all">'+escH(item.short)+'</div>'
+        + '<button class="btn btn-primary btn-sm" onclick="copyLink(this,\''+escH(item.short)+'\')">📋 Copy</button>'
+        + '</div></div>';
+      html += '<div>'
+        + '<div style="font-size:.65rem;color:var(--muted);font-family:\'Space Mono\',monospace;letter-spacing:.1em;margin-bottom:.3rem;font-weight:700">FULL LINK</div>'
+        + '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">'
+        + '<div style="flex:1;min-width:0;background:rgba(255,255,255,.03);border:1px solid var(--bdr2);border-radius:8px;padding:9px 13px;font-family:\'Space Mono\',monospace;font-size:.75rem;color:var(--muted);word-break:break-all">'+escH(item.link)+'</div>'
+        + '<button class="btn btn-ghost btn-sm" onclick="copyLink(this,\''+escH(item.link)+'\')">📋 Copy</button>'
+        + '</div></div>';
+    });
+    html += '<div style="margin-top:1rem;font-size:.75rem;color:var(--muted)">Page refreshing in 3s…</div></div>';
+    res.innerHTML = html; res.style.display = 'block';
+    setTimeout(function() { location.reload(); }, 3000);
+  }
+
+  function showErr(msg) {
+    var res = document.getElementById('uploadResult');
+    res.innerHTML = '<div style="border:1px solid rgba(255,71,87,.4);background:rgba(255,71,87,.07);border-radius:10px;padding:1rem;color:#ff4757">❌ '+escH(msg)+'</div>';
+    res.style.display = 'block';
+  }
+})();
+</script>
+
+<!-- ── QR CODE MODAL ──────────────────────────────────────────────────────── -->
+<div id="qrOverlay" onclick="if(event.target===this)closeQr()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--sur,#0e1118);border:1px solid var(--bdr2,#2a3550);border-radius:16px;padding:24px;width:340px;max-width:94vw;text-align:center">
+    <div style="font-weight:800;font-size:1.02rem;margin-bottom:.3rem">📱 Scan to open</div>
+    <div style="font-size:.74rem;color:var(--muted);font-family:'Space Mono',monospace;word-break:break-all;margin-bottom:1rem" id="qrUrl">—</div>
+    <img id="qrImg" alt="QR code" width="240" height="240" style="background:#fff;border-radius:12px;padding:10px;max-width:100%">
+    <div style="display:flex;gap:.5rem;margin-top:1.1rem">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="copyLink(this, document.getElementById('qrUrl').textContent)">📋 Copy link</button>
+      <a id="qrDownload" class="btn btn-primary btn-sm" style="flex:1;text-decoration:none;justify-content:center" download>⬇ Download QR</a>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:.6rem;width:100%" onclick="closeQr()">Close</button>
+  </div>
+</div>
+
+<!-- ── CUSTOM LINK (BRANDING) MODAL ───────────────────────────────────────── -->
+<div id="slugOverlay" onclick="if(event.target===this)closeSlug()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:center;justify-content:center;padding:1rem">
+  <form method="POST" id="slugForm" action="/admin/set-slug/"
+        style="background:var(--sur,#0e1118);border:1px solid var(--bdr2,#2a3550);border-radius:16px;padding:24px;width:400px;max-width:94vw">
+    <div style="font-weight:800;font-size:1.02rem;margin-bottom:.3rem">🏷 Custom branded link</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">Replace the random link with a memorable one.</div>
+    <div style="display:flex;align-items:center;gap:6px;background:var(--sur2,#141820);border:1px solid var(--bdr2,#2a3550);border-radius:9px;padding:6px 10px">
+      <span style="font-family:'Space Mono',monospace;font-size:.82rem;color:var(--muted)" id="slugBase">/</span>
+      <input type="text" name="slug" id="slugInput" placeholder="invoice"
+             pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"
+             style="flex:1;background:transparent;border:none;outline:none;color:var(--acc2);font-family:'Space Mono',monospace;font-size:.9rem">
+    </div>
+    <p class="hint" style="margin-top:8px">3–50 lowercase letters, numbers or hyphens. e.g. <code>/invoice</code>, <code>/product-demo</code>. Leave blank to remove.</p>
+    <div style="display:flex;gap:.5rem;margin-top:1.1rem">
+      <button type="button" class="btn btn-ghost btn-sm" style="flex:1" onclick="closeSlug()">Cancel</button>
+      <button type="submit" class="btn btn-primary btn-sm" style="flex:1">Save link</button>
+    </div>
+  </form>
+</div>
+
+<script>
+function showQr(token, url){
+  document.getElementById('qrUrl').textContent = url;
+  document.getElementById('qrImg').src = '/qr/'+token+'.png';
+  document.getElementById('qrDownload').href = '/qr/'+token+'.png?dl=1';
+  document.getElementById('qrOverlay').style.display = 'flex';
+}
+function closeQr(){ document.getElementById('qrOverlay').style.display = 'none'; }
+function showSlug(token, current){
+  var f = document.getElementById('slugForm');
+  f.action = '/admin/set-slug/'+token;
+  document.getElementById('slugBase').textContent = location.origin.replace(/^https?:\/\//,'')+'/';
+  document.getElementById('slugInput').value = current || '';
+  document.getElementById('slugOverlay').style.display = 'flex';
+  setTimeout(function(){ document.getElementById('slugInput').focus(); }, 60);
+}
+function closeSlug(){ document.getElementById('slugOverlay').style.display = 'none'; }
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ closeQr(); closeSlug(); } });
+</script>
+
+<!-- ── MODE SELECTION POPUP ───────────────────────────────────────────────── -->
+<div id="modePopupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
+     z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--card);border:1px solid var(--bdr2);border-radius:16px;
+              padding:28px 28px 22px;width:360px;max-width:92vw;box-shadow:0 8px 40px rgba(0,0,0,.45)">
+
+    <div style="font-size:1.05rem;font-weight:800;color:var(--txt);margin-bottom:6px">
+      Select a download mode
+    </div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:20px;line-height:1.5">
+      Choose how this link will work before generating.
+    </div>
+
+    <!-- Option: Single Device (With Approval) -->
+    <div id="popupOptLocked" onclick="popupSelect('locked')"
+         style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:11px;
+                border:2px solid var(--bdr2);background:transparent;cursor:pointer;
+                margin-bottom:10px;transition:all .18s">
+      <div id="popupDotLocked"
+           style="width:17px;height:17px;border-radius:50%;border:2px solid var(--bdr2);
+                  background:transparent;flex-shrink:0;margin-top:2px;
+                  display:flex;align-items:center;justify-content:center">
+        <div id="popupDotLockedInner" style="width:6px;height:6px;border-radius:50%;background:transparent"></div>
+      </div>
+      <div>
+        <div style="font-size:.88rem;font-weight:800;color:var(--muted);margin-bottom:5px">🔐 Single Device</div>
+        <div style="font-size:.76rem;color:var(--muted);line-height:1.6">
+          ✅ Same device → re-download<br>🔐 New device → admin approval
+        </div>
+      </div>
+    </div>
+
+    <!-- Option: Multi Device (Unlimited) -->
+    <div id="popupOptOpen" onclick="popupSelect('open')"
+         style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:11px;
+                border:2px solid var(--bdr2);background:transparent;cursor:pointer;
+                margin-bottom:0;transition:all .18s">
+      <div id="popupDotOpen"
+           style="width:17px;height:17px;border-radius:50%;border:2px solid var(--bdr2);
+                  background:transparent;flex-shrink:0;margin-top:2px;
+                  display:flex;align-items:center;justify-content:center">
+        <div id="popupDotOpenInner" style="width:6px;height:6px;border-radius:50%;background:transparent"></div>
+      </div>
+      <div>
+        <div style="font-size:.88rem;font-weight:800;color:var(--muted);margin-bottom:5px">🌐 Multi Device</div>
+        <div style="font-size:.76rem;color:var(--muted);line-height:1.6">
+          ✅ Any device → instant download<br>✅ No approval required
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      <button onclick="closeModePopup()"
+              style="background:none;border:1px solid var(--bdr2);border-radius:8px;
+                     padding:8px 18px;font-size:.85rem;color:var(--muted);cursor:pointer">
+        Cancel
+      </button>
+      <button id="popupConfirmBtn" onclick="confirmModePopup()" disabled
+              style="background:var(--acc2);color:#fff;border:none;border-radius:8px;
+                     padding:8px 20px;font-size:.85rem;font-weight:700;cursor:not-allowed;
+                     opacity:.45;transition:opacity .15s">
+        Continue ↗
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var _popupMode = null;
+
+  window.openModePopup = function() {
+    _popupMode = null;
+    // Reset popup state
+    ['popupOptLocked','popupOptOpen'].forEach(function(id) {
+      var el = document.getElementById(id);
+      el.style.borderColor = 'var(--bdr2)';
+      el.style.background  = 'transparent';
+      el.querySelector('div:first-child').style.borderColor = 'var(--bdr2)';
+      el.querySelector('div:first-child').style.background  = 'transparent';
+      el.querySelector('div:first-child div').style.background = 'transparent';
+      el.querySelector('div:last-child div:first-child').style.color = 'var(--muted)';
+    });
+    var btn = document.getElementById('popupConfirmBtn');
+    btn.disabled = true; btn.style.opacity = '.45'; btn.style.cursor = 'not-allowed';
+    document.getElementById('modePopupOverlay').style.display = 'flex';
+  };
+
+  window.closeModePopup = function() {
+    document.getElementById('modePopupOverlay').style.display = 'none';
+  };
+
+  window.popupSelect = function(mode) {
+    _popupMode = mode;
+
+    // Reset both
+    var lockedCard = document.getElementById('popupOptLocked');
+    var openCard   = document.getElementById('popupOptOpen');
+    lockedCard.style.borderColor = 'var(--bdr2)'; lockedCard.style.background = 'transparent';
+    lockedCard.querySelector('div:first-child').style.borderColor = 'var(--bdr2)';
+    lockedCard.querySelector('div:first-child').style.background  = 'transparent';
+    lockedCard.querySelector('div:first-child div').style.background = 'transparent';
+    lockedCard.querySelector('div:last-child div:first-child').style.color = 'var(--muted)';
+    openCard.style.borderColor = 'var(--bdr2)'; openCard.style.background = 'transparent';
+    openCard.querySelector('div:first-child').style.borderColor = 'var(--bdr2)';
+    openCard.querySelector('div:first-child').style.background  = 'transparent';
+    openCard.querySelector('div:first-child div').style.background = 'transparent';
+    openCard.querySelector('div:last-child div:first-child').style.color = 'var(--muted)';
+
+    // Highlight selected
+    var selCard = mode === 'locked' ? lockedCard : openCard;
+    var selColor = mode === 'locked' ? 'var(--acc2)' : 'var(--acc3)';
+    var selBg    = mode === 'locked' ? 'rgba(124,92,252,.09)' : 'rgba(0,255,157,.08)';
+    selCard.style.borderColor = selColor;
+    selCard.style.background  = selBg;
+    selCard.querySelector('div:first-child').style.borderColor = selColor;
+    selCard.querySelector('div:first-child').style.background  = selColor;
+    selCard.querySelector('div:first-child div').style.background = '#fff';
+    selCard.querySelector('div:last-child div:first-child').style.color = selColor;
+
+    var btn = document.getElementById('popupConfirmBtn');
+    btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+  };
+
+  window.confirmModePopup = function() {
+    if (!_popupMode) return;
+    // Apply chosen mode to the main selector and close popup
+    setMode(_popupMode);
+    closeModePopup();
+    // Now run the actual upload
+    document.getElementById('uploadBtn').click();
+  };
+
+  // ── Gate the Generate button: if no mode chosen, open popup ──────────────
+  var _origUploadBtnHandler = null;
+  document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('uploadBtn');
+    if (!btn) return;
+    // Wrap the existing onclick
+    var _orig = btn.onclick;
+    btn.onclick = function(e) {
+      var mode = (document.getElementById('downloadMode') || {}).value || '';
+      if (!mode) {
+        e.stopImmediatePropagation();
+        openModePopup();
+        return false;
+      }
+      if (_orig) return _orig.call(this, e);
+    };
+  });
+})();
+</script>
+
+<script>
+// ── LIVE REFRESH (no restart needed) ────────────────────────────────────────
+function liveRefresh() {
+  var btn  = document.getElementById('refresh-btn');
+  var icon = document.getElementById('refresh-icon');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  if (icon) icon.textContent = '⏳';
+
+  fetch('/admin/stats')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) { location.reload(); return; }
+
+      // Update KPI numbers
+      var nums = document.querySelectorAll('.kpi-num');
+      var labels = document.querySelectorAll('.kpi-label');
+      var map = {};
+      labels.forEach(function(l, i) { map[l.textContent.trim()] = nums[i]; });
+      if (map['Total Downloads'])   map['Total Downloads'].textContent   = d.download_count;
+      if (map['Active Links'])      map['Active Links'].textContent      = d.active_links;
+      if (map['Total Links'])       map['Total Links'].textContent       = d.total_links;
+      if (map['Pending Requests'])  map['Pending Requests'].textContent  = d.pending_count;
+      if (map['Expired Links'])     map['Expired Links'].textContent     = d.expired_count;
+
+      // Show auto-delete notice
+      if (d.auto_deleted > 0) {
+        var bar = document.createElement('div');
+        bar.className = 'alert alert-info';
+        bar.textContent = '🗑 ' + d.auto_deleted + ' expired link(s) auto-deleted.';
+        var main = document.querySelector('.main') || document.body;
+        main.insertBefore(bar, main.firstChild);
+        setTimeout(function(){ bar.remove(); }, 4000);
+      }
+
+      // Timestamp
+      var ts = document.getElementById('refresh-ts');
+      if (ts) ts.textContent = 'Updated ' + new Date().toLocaleTimeString();
+    })
+    .catch(function() { /* silently ignore */ })
+    .finally(function() {
+      if (btn)  { btn.disabled = false; btn.style.opacity = '1'; }
+      if (icon) icon.textContent = '🔄';
+    });
+}
+// Show initial timestamp
+document.addEventListener('DOMContentLoaded', function() {
+  var ts = document.getElementById('refresh-ts');
+  if (ts) ts.textContent = 'Loaded ' + new Date().toLocaleTimeString();
+});
+</script>
+{% endblock %}

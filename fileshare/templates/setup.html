@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}FileShare — Setup{% endblock %}
+{% block content %}
+<div style="max-width:440px;margin:4rem auto">
+  <div style="text-align:center;margin-bottom:2.5rem">
+    <div style="font-family:'Space Mono',monospace;font-size:.85rem;color:var(--acc2);letter-spacing:.2em;margin-bottom:.75rem">FILESHARE v2.0</div>
+    <h1 style="font-size:2rem">First-Time Setup</h1>
+    <p class="muted" style="margin-top:.5rem;font-size:.9rem">Create your admin password to get started.</p>
+  </div>
+
+  {% if error %}<div class="alert alert-error">❌ {{ error }}</div>{% endif %}
+
+  <div class="card">
+    <h2>🔐 Create Admin Password</h2>
+    <form method="POST">
+      <div class="form-group">
+        <label>Admin Password</label>
+        <input type="password" name="password" placeholder="Min 6 characters" required autofocus>
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" name="confirm" placeholder="Repeat password" required>
+      </div>
+      <div class="form-group">
+        <label>Recovery Phrase</label>
+        <input type="text" name="recovery_phrase" placeholder="E.g. my-secret-phrase-2024" required>
+        <p class="hint">🔑 Used to reset your password if forgotten. Keep it safe!</p>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" style="margin-top:1rem">
+        ✅ Set Password &amp; Launch
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

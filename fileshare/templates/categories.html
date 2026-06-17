@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}FileShare — Categories{% endblock %}
+{% block content %}
+<div style="max-width:680px;margin:0 auto">
+
+  <div style="margin-bottom:1.75rem">
+    <div style="font-family:'Space Mono',monospace;font-size:.72rem;color:var(--acc2);letter-spacing:.2em;margin-bottom:.4rem">ADMIN DASHBOARD</div>
+    <h1>🏷 Categories</h1>
+    <p class="muted" style="font-size:.88rem;margin-top:.3rem">Create and manage categories to organise your shared links.</p>
+  </div>
+
+  <!-- ADD CATEGORY CARD -->
+  <div class="card" style="border-color:rgba(0,212,255,0.25)">
+    <h2 style="color:var(--acc);margin-bottom:1rem">+ Add New Category</h2>
+    <form method="POST" action="/admin/categories" style="display:flex;gap:.75rem;align-items:flex-end">
+      <input type="hidden" name="action" value="add">
+      <div style="flex:1">
+        <label>Category Name</label>
+        <input type="text" name="name" id="addInput" placeholder="e.g. Marketing, Reports, School…" required
+               autocomplete="off" style="width:100%">
+      </div>
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap;margin-bottom:1px">
+        + Add Category
+      </button>
+    </form>
+  </div>
+
+  <!-- CATEGORIES LIST -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <h2 style="margin-bottom:0;color:var(--txt)">All Categories</h2>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:2px">
+          {{ categories|length }} categor{{ 'y' if categories|length == 1 else 'ies' }} — listed A→Z &nbsp;·&nbsp; drag to reorder
+        </div>
+      </div>
+      {% if categories %}
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="reorder-status" style="font-size:.72rem;color:var(--acc3);display:none">✓ Saved</span>
+        <div style="font-size:.72rem;color:var(--muted);font-family:'Space Mono',monospace">
+          TOTAL {{ categories|length }}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if not categories %}
+    <div style="padding:3rem;text-align:center">
+      <div style="font-size:2.5rem;margin-bottom:.75rem">🏷</div>
+      <div style="color:var(--muted);font-size:.9rem">No categories yet.</div>
+      <div style="color:var(--muted);font-size:.82rem;margin-top:.35rem">Add your first one above.</div>
+    </div>
+    {% else %}
+    <table style="width:100%;border-collapse:collapse" id="cat-table">
+      <thead>
+        <tr style="background:rgba(255,255,255,0.02)">
+          <th style="padding:10px 12px;text-align:left;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;border-bottom:1px solid var(--bdr);width:30px">⠿</th>
+          <th style="padding:10px 20px;text-align:left;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;border-bottom:1px solid var(--bdr)">#</th>
+          <th style="padding:10px 16px;text-align:left;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;border-bottom:1px solid var(--bdr)">Category Name</th>
+          <th style="padding:10px 16px;text-align:left;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;border-bottom:1px solid var(--bdr)">Links Using</th>
+          <th style="padding:10px 20px;text-align:right;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;border-bottom:1px solid var(--bdr)">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="cat-tbody">
+        {% for cat in categories %}
+        <tr id="row-{{ loop.index }}" data-cat="{{ cat | e }}"
+            draggable="true"
+            style="border-bottom:{% if not loop.last %}1px solid var(--bdr){% else %}none{% endif %};cursor:grab">
+
+          <!-- Drag handle -->
+          <td style="padding:14px 12px;color:var(--muted);font-size:1rem;text-align:center;user-select:none">⠿</td>
+
+          <!-- # -->
+          <td style="padding:14px 20px;color:var(--muted);font-family:'Space Mono',monospace;font-size:.75rem;width:40px" class="row-num">
+            {{ loop.index }}
+          </td>
+
+          <!-- Name (static view) -->
+          <td style="padding:14px 16px" id="view-{{ loop.index }}">
+            <span style="background:rgba(124,92,252,0.1);border:1px solid rgba(124,92,252,0.3);
+                         border-radius:7px;padding:5px 13px;font-size:.88rem;
+                         color:var(--acc2);font-weight:600">
+              🏷 {{ cat }}
+            </span>
+          </td>
+
+          <!-- Name (edit input — hidden by default) -->
+          <td style="padding:10px 16px;display:none" id="edit-{{ loop.index }}">
+            <form method="POST" action="/admin/categories" style="display:flex;gap:.5rem;align-items:center">
+              <input type="hidden" name="action" value="edit">
+              <input type="hidden" name="old_name" value="{{ cat | e }}">
+              <input type="text" name="name" value="{{ cat | e }}"
+                     style="width:100%;padding:7px 11px;font-size:.88rem"
+                     id="edit-input-{{ loop.index }}" required autocomplete="off">
+              <button type="submit" class="btn btn-success btn-sm" style="white-space:nowrap">✓ Save</button>
+              <button type="button" onclick="cancelEdit({{ loop.index }})"
+                      class="btn btn-ghost btn-sm" style="white-space:nowrap">✕</button>
+            </form>
+          </td>
+
+          <!-- Links using this category -->
+          <td style="padding:14px 16px" id="links-{{ loop.index }}">
+            {% set count = cat_link_counts.get(cat, 0) %}
+            {% if count > 0 %}
+              <span style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);
+                           border-radius:6px;padding:3px 10px;font-size:.78rem;color:var(--acc);
+                           font-family:'Space Mono',monospace">{{ count }} link{{ 's' if count != 1 }}</span>
+            {% else %}
+              <span style="color:var(--muted);font-size:.78rem">—</span>
+            {% endif %}
+          </td>
+
+          <!-- Actions -->
+          <td style="padding:14px 20px;text-align:right;white-space:nowrap" id="actions-{{ loop.index }}">
+            <button type="button" onclick="startEdit({{ loop.index }})"
+                    class="btn btn-ghost btn-sm" style="margin-right:6px">
+              ✏ Edit
+            </button>
+            <button type="button" onclick="confirmDelete('{{ cat | e }}')"
+                    class="btn btn-danger btn-sm">
+              🗑 Delete
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <div style="margin-top:.75rem">
+    <a href="/admin" class="btn btn-ghost btn-sm">← Back to Dashboard</a>
+  </div>
+
+</div>
+
+<!-- DELETE CONFIRMATION MODAL -->
+<div id="deleteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);
+     z-index:999;align-items:center;justify-content:center">
+  <div style="background:var(--sur);border:1px solid rgba(255,71,87,0.4);border-radius:14px;
+              padding:1.75rem;width:100%;max-width:380px;margin:1rem;text-align:center">
+    <div style="font-size:2rem;margin-bottom:.75rem">🗑</div>
+    <h3 style="margin-bottom:.5rem">Delete Category?</h3>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:1.4rem">
+      Category <strong id="deleteNameDisplay" style="color:var(--danger)"></strong> will be removed.
+      Existing links with this category will show <em>None</em>.
+    </p>
+    <div style="display:flex;gap:.75rem">
+      <button type="button" onclick="closeDeleteModal()"
+              class="btn btn-ghost" style="flex:1;justify-content:center">Cancel</button>
+      <form method="POST" action="/admin/categories" style="flex:2">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="name" id="deleteNameInput">
+        <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">
+          🗑 Yes, Delete
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── INLINE EDIT ──────────────────────────────────────────────────────────────
+function startEdit(idx) {
+  document.getElementById('view-' + idx).style.display    = 'none';
+  document.getElementById('links-' + idx).style.display   = 'none';
+  document.getElementById('actions-' + idx).style.display = 'none';
+  var editCell = document.getElementById('edit-' + idx);
+  editCell.style.display = 'table-cell';
+  editCell.setAttribute('colspan', '3');
+  var inp = document.getElementById('edit-input-' + idx);
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+function cancelEdit(idx) {
+  document.getElementById('view-' + idx).style.display    = 'table-cell';
+  document.getElementById('links-' + idx).style.display   = 'table-cell';
+  document.getElementById('actions-' + idx).style.display = 'table-cell';
+  document.getElementById('edit-' + idx).style.display    = 'none';
+}
+
+// ── DELETE MODAL ─────────────────────────────────────────────────────────────
+function confirmDelete(name) {
+  document.getElementById('deleteNameDisplay').textContent = '"' + name + '"';
+  document.getElementById('deleteNameInput').value = name;
+  document.getElementById('deleteModal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('deleteModal').style.display = 'none';
+}
+
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+  if (e.target === this) closeDeleteModal();
+});
+
+// ── DRAG-TO-REORDER ──────────────────────────────────────────────────────────
+(function() {
+  var tbody = document.getElementById('cat-tbody');
+  if (!tbody) return;
+  var dragging = null;
+
+  function renum() {
+    var rows = tbody.querySelectorAll('tr');
+    rows.forEach(function(r, i) {
+      var n = r.querySelector('.row-num');
+      if (n) n.textContent = i + 1;
+    });
+  }
+
+  function saveOrder() {
+    var rows = tbody.querySelectorAll('tr[data-cat]');
+    var order = Array.from(rows).map(function(r){ return r.getAttribute('data-cat'); });
+    var st = document.getElementById('reorder-status');
+    fetch('/admin/categories/reorder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({order: order})
+    }).then(function(r){ return r.json(); }).then(function(){
+      if (st) { st.style.display='inline'; setTimeout(function(){ st.style.display='none'; }, 2000); }
+    }).catch(function(){});
+  }
+
+  tbody.addEventListener('dragstart', function(e) {
+    dragging = e.target.closest('tr');
+    if (dragging) { dragging.style.opacity = '.4'; }
+  });
+  tbody.addEventListener('dragend', function(e) {
+    if (dragging) { dragging.style.opacity = '1'; dragging = null; }
+    renum();
+    saveOrder();
+  });
+  tbody.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    var target = e.target.closest('tr');
+    if (!target || target === dragging) return;
+    var rect = target.getBoundingClientRect();
+    var after = e.clientY > rect.top + rect.height / 2;
+    tbody.insertBefore(dragging, after ? target.nextSibling : target);
+  });
+})();
+</script>
+{% endblock %}
