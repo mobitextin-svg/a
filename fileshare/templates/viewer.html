@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Preview — {{ label }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#080a0f;--sur:#0e1118;--sur2:#141820;--bdr:#1e2535;--bdr2:#2a3550;
+  --acc:#00d4ff;--acc2:#7c5cfc;--acc3:#00ff9d;--txt:#e8eaf2;--muted:#6b7494;--danger:#ff4757;--warn:#ffa502}
+body{background:var(--bg);color:var(--txt);font-family:'Syne',sans-serif;min-height:100vh;padding:1rem}
+a{color:var(--acc3)}
+.bar{max-width:1100px;margin:0 auto 1rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
+.bar .title{font-weight:800;font-size:1.05rem;display:flex;align-items:center;gap:.5rem;min-width:0}
+.bar .title .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw}
+.btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:9px;padding:9px 15px;
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;text-decoration:none;transition:all .15s}
+.btn-dl{background:linear-gradient(135deg,var(--acc2),var(--acc));color:#fff}
+.btn-dl:hover{opacity:.88}
+.btn-ghost{background:var(--sur2);border:1px solid var(--bdr2);color:var(--txt)}
+.btn-ghost:hover{border-color:var(--acc)}
+.stage{max-width:1100px;margin:0 auto;background:var(--sur);border:1px solid var(--bdr);border-radius:16px;
+  overflow:hidden;min-height:60vh;display:flex;align-items:center;justify-content:center;position:relative}
+.center{text-align:center;padding:3rem 1.5rem;color:var(--muted)}
+.spin{display:inline-block;width:22px;height:22px;border:3px solid rgba(0,212,255,.25);
+  border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* image viewer */
+#imgWrap{width:100%;height:78vh;display:flex;align-items:center;justify-content:center;overflow:auto;background:#05070b}
+#imgWrap img{max-width:100%;max-height:100%;transition:transform .2s;cursor:zoom-in}
+#imgWrap img.zoom{max-width:none;max-height:none;cursor:zoom-out}
+.gal-ctrl{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:.5rem;
+  background:rgba(8,10,15,.82);border:1px solid var(--bdr2);border-radius:12px;padding:8px 10px;backdrop-filter:blur(8px)}
+.gal-ctrl button{background:var(--sur2);border:1px solid var(--bdr2);color:var(--txt);border-radius:8px;
+  padding:7px 12px;font-size:.85rem;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700}
+.gal-ctrl button:hover{border-color:var(--acc)}
+.gal-count{position:absolute;top:14px;right:16px;background:rgba(8,10,15,.8);border:1px solid var(--bdr2);
+  border-radius:8px;padding:5px 11px;font-family:'Space Mono',monospace;font-size:.78rem;color:var(--acc)}
+video,audio{width:100%}
+video{max-height:78vh;background:#000}
+audio{margin:2rem auto;display:block;max-width:560px}
+iframe{width:100%;height:82vh;border:0;background:#fff}
+pre.txt{width:100%;max-height:78vh;overflow:auto;padding:1.4rem;font-family:'Space Mono',monospace;
+  font-size:.82rem;line-height:1.6;color:#cfd6e6;white-space:pre-wrap;word-break:break-word}
+/* folder */
+.fwrap{width:100%;padding:1.2rem}
+.fsec-h{font-size:.7rem;letter-spacing:.12em;color:var(--acc2);font-family:'Space Mono',monospace;margin:.4rem 0 .7rem}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.7rem;margin-bottom:1.4rem}
+.thumb{aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid var(--bdr2);cursor:pointer;background:#05070b;position:relative}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb:hover{border-color:var(--acc)}
+.flist{display:flex;flex-direction:column;gap:.45rem}
+.frow{display:flex;align-items:center;gap:.7rem;background:var(--sur2);border:1px solid var(--bdr);
+  border-radius:10px;padding:.6rem .8rem}
+.frow .fi{font-size:1.2rem}
+.frow .fn{flex:1;min-width:0;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow a{font-size:.76rem;text-decoration:none;border:1px solid var(--bdr2);border-radius:7px;padding:5px 10px;color:var(--txt)}
+.frow a:hover{border-color:var(--acc)}
+/* password gate */
+.gate{max-width:420px;margin:3rem auto;background:var(--sur);border:1px solid var(--bdr2);border-radius:14px;padding:1.6rem}
+.gate input{width:100%;background:var(--sur2);border:1px solid var(--bdr2);border-radius:9px;padding:11px 14px;
+  color:var(--txt);font-family:'Syne',sans-serif;font-size:.95rem;margin:.8rem 0;outline:none}
+.gate input:focus{border-color:var(--acc2)}
+.err{color:var(--danger);font-size:.82rem;margin-top:.4rem;display:none}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="title">👁 <span class="nm">{{ label }}</span></div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <a class="btn btn-ghost" href="/download/{{ token }}">← Download page</a>
+    <a class="btn btn-dl" id="dlMain" href="/download/{{ token }}">⬇ Download</a>
+  </div>
+</div>
+
+<div class="stage" id="stage">
+  <div class="center"><span class="spin"></span><div style="margin-top:1rem">Verifying access…</div></div>
+</div>
+
+<!-- password gate (hidden until needed) -->
+<div class="gate" id="gate" style="display:none">
+  <div style="font-weight:800;color:var(--acc2)">🔒 Password protected</div>
+  <p style="color:var(--muted);font-size:.85rem;margin-top:.4rem">Enter the link password to preview these files.</p>
+  <input type="password" id="pwInput" placeholder="Link password" onkeydown="if(event.key==='Enter')submitPw()">
+  <button class="btn btn-dl" style="width:100%;justify-content:center" onclick="submitPw()">Unlock →</button>
+  <div class="err" id="pwErr">❌ Incorrect password. Try again.</div>
+</div>
+
+<script>
+(function(){
+  var TOKEN     = {{ token | tojson }};
+  var KIND      = {{ kind | tojson }};
+  var IS_FOLDER = {{ is_folder | tojson }};
+  var FILES     = {{ files | tojson }};
+  var FILENAME  = {{ filename | tojson }};
+  var PW_REQ    = {{ password_protected | tojson }};
+
+  var stage = document.getElementById('stage');
+  var gate  = document.getElementById('gate');
+  var pwErr = document.getElementById('pwErr');
+  var linkPw = '';
+
+  var parts = [navigator.userAgent, navigator.language, screen.width+'x'+screen.height,
+               screen.colorDepth, new Date().getTimezoneOffset(),
+               navigator.hardwareConcurrency||'', navigator.platform||''];
+  var FP = btoa(unescape(encodeURIComponent(parts.join('|')))).slice(0,64);
+
+  function rawUrl(){ return '/download/'+TOKEN+'/raw'; }
+  function fileUrl(p, dl){ return '/download/'+TOKEN+'/file?p='+encodeURIComponent(p)+(dl?'&dl=1':''); }
+  function icon(kind, name){
+    var e=(name.split('.').pop()||'').toLowerCase();
+    if(kind==='image')return '🖼'; if(kind==='video')return '🎬'; if(kind==='audio')return '🎵';
+    if(kind==='pdf')return '📄'; if(kind==='text')return '📝';
+    if(['zip','rar','7z','gz','tar'].indexOf(e)>=0)return '🗜';
+    return '📦';
+  }
+
+  /* ── Access flow: check password, then verify device ── */
+  if (PW_REQ) { showGate(); }
+  else { verify(); }
+
+  function showGate(){
+    stage.style.display='none';
+    gate.style.display='block';
+    setTimeout(function(){ document.getElementById('pwInput').focus(); }, 60);
+  }
+  window.submitPw = function(){
+    linkPw = document.getElementById('pwInput').value || '';
+    if(!linkPw) return;
+    gate.style.display='none'; stage.style.display='flex';
+    stage.innerHTML = '<div class="center"><span class="spin"></span><div style="margin-top:1rem">Verifying…</div></div>';
+    verify();
+  };
+
+  function verify(){
+    var fd = new FormData();
+    fd.append('fingerprint', FP);
+    fd.append('mobile','');
+    if (linkPw) fd.append('link_password', linkPw);
+    fetch('/download/'+TOKEN+'/verify', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) { render(); }
+        else if (d.error === 'wrong_password') {
+          linkPw=''; pwErr.style.display='block'; showGate();
+          document.getElementById('pwInput').value='';
+        }
+        else if (d.pending) {
+          stage.innerHTML = '<div class="center">⏳ This link needs admin approval for your device.<br>Redirecting…</div>';
+          setTimeout(function(){ window.location.href = d.redirect; }, 1200);
+        }
+        else { fail(d.error || 'Access denied.'); }
+      })
+      .catch(function(){ fail('Network error — please refresh.'); });
+  }
+
+  function fail(msg){
+    stage.innerHTML = '<div class="center" style="color:var(--danger)">❌ '+msg+'</div>';
+  }
+
+  /* ── Render the right viewer ── */
+  function render(){
+    if (IS_FOLDER) return renderFolder();
+    if (KIND === 'image') return renderGallery([{path:null,name:FILENAME}], 0);
+    if (KIND === 'video') return renderVideo(rawUrl(), null);
+    if (KIND === 'audio') return renderAudio(rawUrl(), FILENAME);
+    if (KIND === 'pdf')   return renderPdf(rawUrl());
+    if (KIND === 'text')  return renderText(rawUrl());
+    return renderOther();
+  }
+
+  function srcFor(item){ return item.path ? fileUrl(item.path,false) : rawUrl(); }
+
+  /* ── Image gallery (next / prev / zoom / slideshow) ── */
+  var gal = { items:[], i:0, show:null, slideTimer:null };
+  function renderGallery(items, start){
+    gal.items = items; gal.i = start||0;
+    stage.innerHTML =
+      '<div class="gal-count" id="galCount"></div>'+
+      '<div id="imgWrap"><img id="galImg" alt=""></div>'+
+      '<div class="gal-ctrl">'+
+        '<button onclick="gPrev()">‹ Prev</button>'+
+        '<button onclick="gZoom()" id="zoomBtn">🔍 Zoom</button>'+
+        '<button onclick="gSlide()" id="slideBtn">▶ Slideshow</button>'+
+        '<button onclick="gNext()">Next ›</button>'+
+      '</div>';
+    var img = document.getElementById('galImg');
+    img.onclick = gZoom;
+    gal.show = function(){
+      var it = gal.items[gal.i];
+      img.classList.remove('zoom');
+      document.getElementById('zoomBtn').textContent='🔍 Zoom';
+      img.src = srcFor(it);
+      img.alt = it.name;
+      document.getElementById('dlMain').href = it.path ? fileUrl(it.path,true) : '/download/'+TOKEN;
+      document.getElementById('galCount').textContent = (gal.i+1)+' / '+gal.items.length+'  ·  '+it.name;
+      document.querySelector('.gal-ctrl').style.display = gal.items.length>1 ? 'flex' : 'flex';
+    };
+    gal.show();
+  }
+  window.gPrev=function(){ gal.i=(gal.i-1+gal.items.length)%gal.items.length; gal.show(); };
+  window.gNext=function(){ gal.i=(gal.i+1)%gal.items.length; gal.show(); };
+  window.gZoom=function(){
+    var img=document.getElementById('galImg'); if(!img) return;
+    img.classList.toggle('zoom');
+    document.getElementById('zoomBtn').textContent = img.classList.contains('zoom')?'🔍 Reset':'🔍 Zoom';
+  };
+  window.gSlide=function(){
+    var b=document.getElementById('slideBtn');
+    if(gal.slideTimer){ clearInterval(gal.slideTimer); gal.slideTimer=null; b.textContent='▶ Slideshow'; return; }
+    b.textContent='⏸ Stop'; gal.slideTimer=setInterval(gNext, 2800);
+  };
+  document.addEventListener('keydown', function(e){
+    if(!gal.items.length) return;
+    if(e.key==='ArrowLeft') gPrev();
+    else if(e.key==='ArrowRight') gNext();
+    else if(e.key==='z'||e.key==='Z') gZoom();
+  });
+
+  function renderVideo(src, subSrc){
+    var sub = subSrc ? '<track kind="subtitles" srclang="en" label="Subtitles" src="'+subSrc+'" default>' : '';
+    stage.innerHTML = '<video controls playsinline preload="metadata">'+
+      '<source src="'+src+'">'+sub+'Your browser cannot play this video.</video>';
+  }
+  function renderAudio(src, name){
+    stage.innerHTML = '<div style="width:100%;text-align:center">'+
+      '<div style="font-size:3.4rem;margin:1rem 0">🎵</div>'+
+      '<div style="font-weight:800;margin-bottom:.4rem">'+name+'</div>'+
+      '<audio controls preload="metadata" src="'+src+'"></audio></div>';
+  }
+  function renderPdf(src){ stage.innerHTML = '<iframe src="'+src+'#view=FitH" title="PDF"></iframe>'; }
+  function renderText(src){
+    stage.innerHTML='<div class="center"><span class="spin"></span></div>';
+    fetch(src).then(function(r){return r.text();}).then(function(t){
+      var pre=document.createElement('pre'); pre.className='txt'; pre.textContent=t;
+      stage.innerHTML=''; stage.appendChild(pre);
+    }).catch(function(){ renderOther(); });
+  }
+  function renderOther(){
+    stage.innerHTML='<div class="center">'+
+      '<div style="font-size:3rem;margin-bottom:.8rem">📦</div>'+
+      '<div style="font-weight:700;color:var(--txt)">No inline preview for this file type.</div>'+
+      '<a class="btn btn-dl" style="margin-top:1.1rem" href="/download/'+TOKEN+'">⬇ Download instead</a></div>';
+  }
+
+  /* ── Folder browser ── */
+  function renderFolder(){
+    var imgs = FILES.filter(function(f){ return f.kind==='image'; });
+    var html = '<div class="fwrap">';
+    if (imgs.length){
+      html += '<div class="fsec-h">🖼 IMAGES ('+imgs.length+')</div><div class="thumbs" id="thumbs"></div>';
+    }
+    html += '<div class="fsec-h">📁 ALL FILES ('+FILES.length+')</div><div class="flist">';
+    FILES.forEach(function(f, idx){
+      var viewable = ['image','video','audio','pdf','text'].indexOf(f.kind)>=0;
+      html += '<div class="frow"><span class="fi">'+icon(f.kind,f.name)+'</span>'+
+        '<span class="fn" title="'+escAttr(f.path)+'">'+escHtml(f.path)+'</span>'+
+        (viewable ? '<a href="#" data-idx="'+idx+'" class="vlink">👁 View</a>' : '')+
+        '<a href="'+fileUrl(f.path,true)+'">⬇</a></div>';
+    });
+    html += '</div></div>';
+    stage.style.alignItems='stretch';
+    stage.innerHTML = html;
+
+    if (imgs.length){
+      var tc=document.getElementById('thumbs');
+      imgs.forEach(function(f, k){
+        var d=document.createElement('div'); d.className='thumb';
+        var im=document.createElement('img'); im.src=fileUrl(f.path,false); im.alt=f.name;
+        d.appendChild(im);
+        d.onclick=function(){ openFolderItem(f); };
+        tc.appendChild(d);
+      });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.vlink'), function(a){
+      a.onclick=function(e){ e.preventDefault(); openFolderItem(FILES[+a.getAttribute('data-idx')]); };
+    });
+  }
+
+  function openFolderItem(f){
+    stage.style.alignItems='center';
+    var back = '<div style="position:absolute;top:12px;left:14px;z-index:5">'+
+      '<button class="btn btn-ghost" onclick="renderFolderBack()">← Folder</button></div>';
+    if (f.kind==='image'){
+      var imgs = FILES.filter(function(x){return x.kind==='image';});
+      var start = imgs.indexOf(f);
+      renderGallery(imgs, start<0?0:start);
+      stage.insertAdjacentHTML('afterbegin', back);
+    } else if (f.kind==='video'){ renderVideo(fileUrl(f.path,false), findSub(f)); stage.insertAdjacentHTML('afterbegin', back); }
+    else if (f.kind==='audio'){ renderAudio(fileUrl(f.path,false), f.name); stage.insertAdjacentHTML('afterbegin', back); }
+    else if (f.kind==='pdf'){ renderPdf(fileUrl(f.path,false)); stage.insertAdjacentHTML('afterbegin', back); }
+    else if (f.kind==='text'){ renderText(fileUrl(f.path,false)); stage.insertAdjacentHTML('afterbegin', back); }
+    document.getElementById('dlMain').href = fileUrl(f.path,true);
+  }
+  window.renderFolderBack=function(){
+    if(gal.slideTimer){ clearInterval(gal.slideTimer); gal.slideTimer=null; }
+    document.getElementById('dlMain').href='/download/'+TOKEN;
+    renderFolder();
+  };
+  function findSub(f){
+    var base=f.path.replace(/\.[^.]+$/,'');
+    var hit=FILES.filter(function(x){ return x.path===base+'.vtt'; })[0];
+    return hit ? fileUrl(hit.path,false) : null;
+  }
+
+  function escHtml(s){ return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function escAttr(s){ return escHtml(s); }
+})();
+</script>
+</body>
+</html>

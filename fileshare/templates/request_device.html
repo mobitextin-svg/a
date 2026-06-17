@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Access Requested</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0f;--sur:#0e1118;--sur2:#141820;--bdr:#1e2535;--bdr2:#2a3550;
+  --acc:#00d4ff;--acc2:#7c5cfc;--acc3:#00ff9d;
+  --txt:#e8eaf2;--muted:#6b7494;--warn:#ffa502;--danger:#ff4757
+}
+body{background:var(--bg);color:var(--txt);font-family:'Syne',sans-serif;
+     min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem}
+body::before{content:'';position:fixed;inset:0;
+  background:radial-gradient(ellipse 80% 50% at 20% 10%,rgba(124,92,252,.06) 0%,transparent 60%),
+             radial-gradient(ellipse 60% 40% at 80% 80%,rgba(0,212,255,.04) 0%,transparent 60%);
+  pointer-events:none;z-index:0}
+
+.wrap{position:relative;z-index:1;width:100%;max-width:480px}
+
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:18px;
+      padding:2rem 1.75rem;position:relative;overflow:hidden;margin-bottom:1rem}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,212,255,.4),transparent)}
+
+.icon{font-size:2.8rem;margin-bottom:.6rem;display:block;text-align:center}
+h1{font-size:1.3rem;font-weight:800;margin-bottom:.4rem;text-align:center}
+
+/* ── Info grid ── */
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:.85rem 0}
+.info-cell{background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;padding:.65rem .85rem}
+.info-label{font-size:.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace;margin-bottom:.22rem}
+.info-val{font-size:.83rem;font-weight:700;color:var(--txt)}
+.info-val.acc{color:var(--acc)}.info-val.green{color:var(--acc3)}.info-val.warn{color:var(--warn)}
+
+/* Copy link */
+.copy-row{display:flex;gap:.5rem;align-items:center;margin:.65rem 0}
+.copy-box{flex:1;background:var(--bg);border:1px solid var(--bdr2);border-radius:8px;
+  padding:7px 11px;font-family:'Space Mono',monospace;font-size:.7rem;color:var(--acc);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.copy-btn{flex-shrink:0;padding:7px 13px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);
+  border-radius:8px;color:var(--acc);font-size:.76rem;font-weight:700;cursor:pointer;
+  font-family:'Syne',sans-serif;transition:all .18s}
+.copy-btn:hover{background:rgba(0,212,255,.2)}
+.copy-btn.copied{background:rgba(0,255,157,.1);border-color:rgba(0,255,157,.3);color:var(--acc3)}
+
+/* Countdown */
+.countdown-bar{background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;
+  padding:.65rem .9rem;margin:.6rem 0;display:flex;align-items:center;gap:.7rem}
+.cd-label{font-size:.68rem;color:var(--muted);white-space:nowrap}
+.cd-val{font-family:'Space Mono',monospace;font-size:.85rem;font-weight:700;color:var(--warn);white-space:nowrap}
+.cd-track{flex:1;height:5px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden}
+.cd-fill{height:100%;background:linear-gradient(90deg,var(--acc2),var(--warn));border-radius:99px;transition:width 1s linear}
+
+/* file name badge */
+.filename{font-family:'Space Mono',monospace;font-size:.78rem;color:var(--acc);
+  background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.2);
+  border-radius:9px;padding:9px 13px;margin:.65rem 0;word-break:break-all;text-align:center;line-height:1.5}
+
+/* Alert boxes */
+.box{border-radius:11px;padding:.85rem 1rem;text-align:left;margin:.65rem 0;font-size:.84rem}
+.box-warn{background:rgba(255,165,2,.07);border:1px solid rgba(255,165,2,.3);color:var(--warn)}
+.box-ok{background:rgba(0,255,157,.06);border:1px solid rgba(0,255,157,.3);color:var(--acc3)}
+
+/* Mobile section */
+.mobile-section{background:rgba(124,92,252,.07);border:1px solid rgba(124,92,252,.3);
+  border-radius:13px;padding:1.2rem;text-align:left;margin:.85rem 0}
+.mobile-section .sec-label{font-size:.66rem;font-weight:700;color:var(--acc2);
+  text-transform:uppercase;letter-spacing:.12em;font-family:'Space Mono',monospace;display:block;margin-bottom:.45rem}
+.mobile-section .sec-hint{font-size:.74rem;color:var(--muted);margin-bottom:.8rem;display:block}
+.mobile-input{width:100%;background:rgba(255,255,255,.05);border:1.5px solid var(--bdr2);
+  border-radius:9px;padding:12px 14px;color:var(--txt);font-size:1rem;
+  font-family:'Syne',sans-serif;outline:none;transition:border .2s;letter-spacing:.04em;text-align:center}
+.mobile-input:focus{border-color:var(--acc2);box-shadow:0 0 0 3px rgba(124,92,252,.12)}
+.mobile-input::placeholder{color:var(--muted);font-size:.88rem;letter-spacing:0}
+
+/* Buttons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  border:none;border-radius:10px;padding:13px 18px;font-size:.92rem;font-weight:700;
+  font-family:'Syne',sans-serif;cursor:pointer;transition:all .18s;text-decoration:none;margin-top:.6rem}
+.btn-submit{background:linear-gradient(135deg,var(--acc2),#5a3cc4);color:#fff}
+.btn-submit:hover{opacity:.87;transform:translateY(-1px)}
+.btn-submit:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-download{background:linear-gradient(135deg,var(--acc2),var(--acc));color:#fff;
+  font-size:1.05rem;padding:15px 18px;margin-top:.5rem;box-shadow:0 6px 22px rgba(0,212,255,.2)}
+.btn-download:hover{opacity:.87;transform:translateY(-1px);box-shadow:0 10px 30px rgba(0,212,255,.35)}
+
+/* Progress block */
+#progressBlock{display:none;margin:.9rem 0}
+.prog-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;font-size:.82rem}
+.prog-label{color:var(--txt);font-weight:700}.prog-pct{color:var(--acc);font-family:'Space Mono',monospace;font-weight:700}
+.prog-track{background:rgba(255,255,255,.07);border-radius:99px;height:10px;overflow:hidden;margin-bottom:.4rem}
+.prog-bar{height:100%;width:0%;border-radius:99px;transition:width .1s linear;background:linear-gradient(90deg,var(--acc2),var(--acc));position:relative}
+.prog-bar.paused{background:linear-gradient(90deg,var(--muted),var(--bdr2))}
+.prog-bar::after{content:'';position:absolute;right:0;top:0;bottom:0;width:30px;
+  background:rgba(255,255,255,.22);border-radius:99px;animation:shine .7s linear infinite}
+.prog-bar.paused::after{display:none}
+@keyframes shine{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
+.prog-stats{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);font-family:'Space Mono',monospace;flex-wrap:wrap;gap:.2rem}
+.speed-meter{display:flex;align-items:center;gap:.4rem;margin-top:.6rem;
+  background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.12);border-radius:8px;padding:.5rem .8rem}
+.speed-val{font-family:'Space Mono',monospace;font-size:.88rem;font-weight:700;color:var(--acc);margin-left:auto}
+.speed-bar-wrap{width:60px;height:4px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden;margin-left:.5rem}
+.speed-bar{height:100%;border-radius:99px;background:var(--acc);transition:width .3s}
+
+/* State boxes */
+.state-box{border-radius:12px;padding:.85rem 1rem;text-align:center;margin-bottom:.8rem;font-size:.86rem;display:none;line-height:1.5}
+.state-done{background:rgba(0,255,157,.06);border:1px solid rgba(0,255,157,.25);color:var(--acc3)}
+.state-error{background:rgba(255,71,87,.07);border:1px solid rgba(255,71,87,.3);color:var(--danger)}
+.state-paused{background:rgba(124,92,252,.07);border:1px solid rgba(124,92,252,.3);color:var(--acc2)}
+
+/* DL action row */
+.btn-row{display:flex;gap:.5rem;margin-top:.5rem}
+.btn-pause{flex:1;background:rgba(124,92,252,.12);color:var(--acc2);border:1px solid rgba(124,92,252,.35);font-size:.85rem;padding:10px;display:none;border-radius:10px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700}
+.btn-pause:hover{background:rgba(124,92,252,.22)}
+.btn-cancel-dl{flex:1;background:rgba(255,71,87,.09);color:var(--danger);border:1px solid rgba(255,71,87,.3);font-size:.85rem;padding:10px;display:none;border-radius:10px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700}
+.btn-cancel-dl:hover{background:rgba(255,71,87,.18)}
+.btn-reconnect{width:100%;background:rgba(255,165,2,.1);color:var(--warn);border:1px solid rgba(255,165,2,.3);font-size:.88rem;padding:11px;margin-top:.5rem;display:none;border-radius:10px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700}
+.btn-reconnect:hover{background:rgba(255,165,2,.2)}
+
+/* Status pill */
+.status-pill{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);
+  border-radius:10px;padding:.8rem 1rem;margin:.9rem 0}
+.status-pill .s-label{font-size:.82rem;color:var(--muted);font-weight:600}
+.pulse-dot{width:9px;height:9px;border-radius:50%;background:var(--warn);flex-shrink:0;animation:pulse 1.1s infinite}
+.pulse-dot.approved{background:var(--acc3);animation:none}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.8)}}
+
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,212,255,.3);
+  border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="card">
+
+{% if already %}
+<!-- ══════════ ALREADY PENDING ══════════ -->
+<span class="icon">⏳</span>
+<h1>Waiting for Approval</h1>
+<div class="filename">{{ filename }}</div>
+
+{% if contact_saved %}
+  <div class="box box-ok">✅ Mobile number saved — admin can see it.</div>
+{% else %}
+  <div class="box box-warn">⚠ Request pending. Admin will approve your device shortly.</div>
+{% endif %}
+
+<div class="status-pill" id="statusPill">
+  <span class="s-label" id="statusLabel">⏱ Auto-checking every second…</span>
+  <span class="pulse-dot" id="statusDot"></span>
+</div>
+
+{% if not contact_saved %}
+<div class="mobile-section" id="mobileSection">
+  <span class="sec-label">📱 Your Mobile Number</span>
+  <span class="sec-hint">Enter your number so admin can identify and approve you.</span>
+  <input type="tel" class="mobile-input" id="mobileInput"
+         value="{{ mobile or '' }}"
+         placeholder="e.g. 9876543210" maxlength="15" autocomplete="tel">
+  <button type="button" class="btn btn-submit" id="submitBtn" onclick="doSubmit()">
+    📨 Submit Request
+  </button>
+</div>
+{% endif %}
+
+<!-- ✅ Approved reveal -->
+<div id="approvedReveal" style="display:none">
+  <div class="box box-ok" style="text-align:center;padding:1rem">
+    <div style="font-size:2rem;margin-bottom:.3rem">✅</div>
+    <strong>Approved!</strong><br>
+    <span style="font-size:.82rem">Your device has been approved. Download the file below.</span>
+  </div>
+
+  <!-- File info grid shown on approval -->
+  <div class="info-grid" id="approvedInfoGrid">
+    <div class="info-cell"><div class="info-label">📦 File Size</div><div class="info-val acc" id="approvedSize">—</div></div>
+    <div class="info-cell"><div class="info-label">📅 Expires</div><div class="info-val warn" id="approvedExpiry">—</div></div>
+    <div class="info-cell"><div class="info-label">⬇ Downloads</div><div class="info-val green" id="approvedDownloads">—</div></div>
+    <div class="info-cell"><div class="info-label">🏷 Type</div><div class="info-val" id="approvedType">—</div></div>
+  </div>
+
+  <!-- Copy link -->
+  <div class="copy-row">
+    <div class="copy-box" id="approvedCopyBox">—</div>
+    <button class="copy-btn" id="approvedCopyBtn" onclick="copyApprovedLink()">📋 Copy</button>
+  </div>
+
+  <!-- Expiry countdown -->
+  <div class="countdown-bar" id="approvedCdBar" style="display:none">
+    <span class="cd-label">⏳ Expires in</span>
+    <div class="cd-track"><div class="cd-fill" id="approvedCdFill" style="width:100%"></div></div>
+    <span class="cd-val" id="approvedCdVal">—</span>
+  </div>
+
+  <!-- State messages -->
+  <div class="state-box state-done"   id="approvedStDone">✅ Download complete!</div>
+  <div class="state-box state-error"  id="approvedStErr"></div>
+  <div class="state-box state-paused" id="approvedStPaused">⏸ Paused. Press Resume to continue.</div>
+
+  <!-- Progress -->
+  <div id="approvedProgressBlock" style="display:none;margin:.9rem 0">
+    <div class="prog-row">
+      <span class="prog-label" id="approvedProgLabel">Downloading…</span>
+      <span class="prog-pct" id="approvedProgPct">0%</span>
+    </div>
+    <div class="prog-track"><div class="prog-bar" id="approvedProgBar"></div></div>
+    <div class="prog-stats">
+      <span id="approvedProgBytes">0 B / —</span>
+      <span id="approvedProgEta">—</span>
+    </div>
+    <div class="speed-meter">
+      <span style="font-size:.9rem">⚡</span>
+      <span style="font-size:.68rem;color:var(--muted);font-family:'Space Mono',monospace">SPEED</span>
+      <span class="speed-val" id="approvedSpeedVal">— B/s</span>
+      <div class="speed-bar-wrap"><div class="speed-bar" id="approvedSpeedBar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Download button -->
+  <button class="btn btn-download" id="approvedDlBtn" onclick="startApprovedDownload()">
+    ⬇ Download File
+  </button>
+  <!-- Pause/Cancel -->
+  <div class="btn-row">
+    <button class="btn-pause" id="approvedPauseBtn" onclick="toggleApprovedPause()">⏸ Pause</button>
+    <button class="btn-cancel-dl" id="approvedCancelBtn" onclick="cancelApprovedDl()">✕ Cancel</button>
+  </div>
+  <button class="btn-reconnect" id="approvedReconnBtn" onclick="approvedReconnect()">🔄 Reconnect &amp; Resume</button>
+</div>
+
+{% else %}
+<!-- ══════════ FIRST TIME new-device page ══════════ -->
+<span class="icon">🔐</span>
+<h1>New Device Detected</h1>
+<div class="filename">{{ filename }}</div>
+<div class="box box-warn">⚠ This link was opened on a different device. Your request has been sent to the admin.</div>
+
+<div class="mobile-section" id="mobileSectionNew">
+  <span class="sec-label">📱 Your Mobile Number</span>
+  <span class="sec-hint">Helps admin identify and approve you faster.</span>
+  <input type="tel" class="mobile-input" id="mobileInputNew"
+         value="{{ mobile or '' }}"
+         placeholder="e.g. 9876543210" maxlength="15" autocomplete="tel">
+  <button type="button" class="btn btn-submit" id="submitBtnNew" onclick="doSubmitNew()">
+    📨 Submit Request
+  </button>
+</div>
+
+<div class="status-pill" id="statusPillNew">
+  <span class="s-label" id="statusLabelNew">⏱ Auto-checking for approval…</span>
+  <span class="pulse-dot" id="statusDotNew"></span>
+</div>
+
+<!-- ✅ Approved reveal (new device flow) -->
+<div id="approvedRevealNew" style="display:none">
+  <div class="box box-ok" style="text-align:center;padding:1rem">
+    <div style="font-size:2rem;margin-bottom:.3rem">✅</div>
+    <strong>Approved!</strong><br>
+    <span style="font-size:.82rem">Download the file below.</span>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-cell"><div class="info-label">📦 File Size</div><div class="info-val acc" id="newApprovedSize">—</div></div>
+    <div class="info-cell"><div class="info-label">📅 Expires</div><div class="info-val warn" id="newApprovedExpiry">—</div></div>
+    <div class="info-cell"><div class="info-label">⬇ Downloads</div><div class="info-val green" id="newApprovedDownloads">—</div></div>
+    <div class="info-cell"><div class="info-label">🏷 Type</div><div class="info-val" id="newApprovedType">—</div></div>
+  </div>
+
+  <div class="copy-row">
+    <div class="copy-box" id="newCopyBox">—</div>
+    <button class="copy-btn" id="newCopyBtn" onclick="copyNewLink()">📋 Copy</button>
+  </div>
+
+  <div class="countdown-bar" id="newCdBar" style="display:none">
+    <span class="cd-label">⏳ Expires in</span>
+    <div class="cd-track"><div class="cd-fill" id="newCdFill" style="width:100%"></div></div>
+    <span class="cd-val" id="newCdVal">—</span>
+  </div>
+
+  <div class="state-box state-done"   id="newStDone">✅ Download complete!</div>
+  <div class="state-box state-error"  id="newStErr"></div>
+  <div class="state-box state-paused" id="newStPaused">⏸ Paused. Press Resume to continue.</div>
+
+  <div id="newProgressBlock" style="display:none;margin:.9rem 0">
+    <div class="prog-row">
+      <span class="prog-label" id="newProgLabel">Downloading…</span>
+      <span class="prog-pct" id="newProgPct">0%</span>
+    </div>
+    <div class="prog-track"><div class="prog-bar" id="newProgBar"></div></div>
+    <div class="prog-stats">
+      <span id="newProgBytes">0 B / —</span>
+      <span id="newProgEta">—</span>
+    </div>
+    <div class="speed-meter">
+      <span style="font-size:.9rem">⚡</span>
+      <span style="font-size:.68rem;color:var(--muted);font-family:'Space Mono',monospace">SPEED</span>
+      <span class="speed-val" id="newSpeedVal">— B/s</span>
+      <div class="speed-bar-wrap"><div class="speed-bar" id="newSpeedBar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <button class="btn btn-download" id="newDlBtn" onclick="startNewDownload()">
+    ⬇ Download File
+  </button>
+  <div class="btn-row">
+    <button class="btn-pause" id="newPauseBtn" onclick="toggleNewPause()">⏸ Pause</button>
+    <button class="btn-cancel-dl" id="newCancelBtn" onclick="cancelNewDl()">✕ Cancel</button>
+  </div>
+  <button class="btn-reconnect" id="newReconnBtn" onclick="newReconnect()">🔄 Reconnect &amp; Resume</button>
+</div>
+
+{% endif %}
+</div><!-- /card -->
+</div><!-- /wrap -->
+
+<script>
+(function(){
+  var TOKEN    = {{ token | tojson }};
+  var FP       = {{ fingerprint | tojson }};
+  var FILENAME = {{ filename | tojson }};
+  var approved = false;
+
+  /* ── Helpers ── */
+  function fmtB(b){
+    if(b>=1073741824)return(b/1073741824).toFixed(2)+' GB';
+    if(b>=1048576)return(b/1048576).toFixed(1)+' MB';
+    if(b>=1024)return(b/1024).toFixed(0)+' KB';
+    return b+' B';
+  }
+  function fmtEta(s){
+    if(s>=3600)return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m left';
+    if(s>=60)return Math.floor(s/60)+'m '+Math.floor(s%60)+'s left';
+    return s+'s left';
+  }
+  function startCountdown(expiresAt, fillEl, valEl, barEl){
+    var expiryTs=new Date(expiresAt).getTime();
+    var totalMs=expiryTs-Date.now();
+    if(totalMs<=0)return;
+    barEl.style.display='flex';
+    function tick(){
+      var rem=expiryTs-Date.now();
+      if(rem<=0){valEl.textContent='Expired';fillEl.style.width='0%';return;}
+      fillEl.style.width=Math.max(0,Math.min(100,rem/totalMs*100))+'%';
+      var s=Math.floor(rem/1000),d=Math.floor(s/86400);s-=d*86400;
+      var h=Math.floor(s/3600);s-=h*3600;var m=Math.floor(s/60);s-=m*60;
+      valEl.textContent=d>0?d+'d '+h+'h':h>0?h+'h '+m+'m':m+'m '+s+'s';
+      if(rem<3600000)valEl.style.color='var(--danger)';
+      setTimeout(tick,1000);
+    }
+    tick();
+  }
+  function loadFileInfo(sizeEl, expiryEl, downloadsEl, typeEl, copyBoxEl, cdFillEl, cdValEl, cdBarEl){
+    fetch('/download/'+TOKEN+'/stream',{method:'HEAD'})
+      .then(function(r){var cl=r.headers.get('Content-Length');if(cl)sizeEl.textContent=fmtB(parseInt(cl,10));})
+      .catch(function(){});
+    fetch('/download/'+TOKEN+'/info')
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.expires_at){
+          var exp=new Date(d.expires_at);
+          expiryEl.textContent=String(exp.getUTCDate()).padStart(2,'0')+'/'+String(exp.getUTCMonth()+1).padStart(2,'0')+'/'+exp.getUTCFullYear();
+          startCountdown(d.expires_at,cdFillEl,cdValEl,cdBarEl);
+        }
+        if(typeof d.download_count!=='undefined') downloadsEl.textContent=d.download_count+' time'+(d.download_count!==1?'s':'');
+      }).catch(function(){});
+    var ext=FILENAME.split('.').pop().toUpperCase();
+    if(typeEl) typeEl.textContent=ext||'—';
+    var url=window.location.origin+'/download/'+TOKEN;
+    if(copyBoxEl) copyBoxEl.textContent=url;
+  }
+  function makeCopyFn(copyBoxEl, copyBtnEl){
+    return function(){
+      var url=copyBoxEl.textContent;
+      navigator.clipboard.writeText(url).catch(function(){
+        var ta=document.createElement('textarea');ta.value=url;
+        document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+      });
+      copyBtnEl.textContent='✅ Copied!';copyBtnEl.classList.add('copied');
+      setTimeout(function(){copyBtnEl.textContent='📋 Copy';copyBtnEl.classList.remove('copied');},2000);
+    };
+  }
+
+  /* ── Download engine factory ── */
+  function makeDownloader(ids){
+    var dlBtn=document.getElementById(ids.dlBtn);
+    var pauseBtn=document.getElementById(ids.pauseBtn);
+    var cancelBtn=document.getElementById(ids.cancelBtn);
+    var reconnBtn=document.getElementById(ids.reconnBtn);
+    var progBlk=document.getElementById(ids.progBlk);
+    var progBar=document.getElementById(ids.progBar);
+    var progPct=document.getElementById(ids.progPct);
+    var progLbl=document.getElementById(ids.progLbl);
+    var progBytes=document.getElementById(ids.progBytes);
+    var progEta=document.getElementById(ids.progEta);
+    var speedValEl=document.getElementById(ids.speedVal);
+    var speedBarEl=document.getElementById(ids.speedBar);
+    var stDone=document.getElementById(ids.stDone);
+    var stErr=document.getElementById(ids.stErr);
+    var stPaused=document.getElementById(ids.stPaused);
+
+    var activeReader=null,cancelled=false,paused=false,pauseResolve=null;
+    var receivedSoFar=0,totalSize=0,allChunks=[];
+    var maxSpeed=1;
+
+    function showState(el,msg){
+      [stDone,stErr,stPaused].forEach(function(e){if(e)e.style.display='none';});
+      if(el){el.style.display='block';if(msg)el.textContent=msg;}
+    }
+    function updateSpeed(bps){
+      if(speedValEl)speedValEl.textContent=fmtB(bps)+'/s';
+      if(bps>maxSpeed)maxSpeed=bps;
+      if(speedBarEl)speedBarEl.style.width=Math.min(100,bps/maxSpeed*100)+'%';
+    }
+    function resetUI(){
+      progBlk.style.display='none';
+      if(pauseBtn){pauseBtn.style.display='none';}
+      if(cancelBtn){cancelBtn.style.display='none';}
+      if(reconnBtn){reconnBtn.style.display='none';}
+      dlBtn.disabled=false;
+    }
+
+    function _stream(){
+      dlBtn.disabled=true;
+      if(pauseBtn)pauseBtn.style.display='flex';
+      if(cancelBtn)cancelBtn.style.display='flex';
+      if(reconnBtn)reconnBtn.style.display='none';
+      progBlk.style.display='block';
+      progLbl.textContent='Downloading…';
+      if(progBar)progBar.classList.remove('paused');
+      showState(null);
+      var startTime=Date.now();
+
+      fetch('/download/'+TOKEN+'/stream')
+        .then(function(response){
+          if(!response.ok)throw new Error('Server error '+response.status);
+          var cl=response.headers.get('Content-Length');
+          if(cl&&!totalSize)totalSize=parseInt(cl,10);
+          var reader=response.body.getReader();
+          activeReader=reader;
+
+          function read(){
+            if(cancelled){reader.cancel();resetUI();return;}
+            if(paused){return new Promise(function(res){pauseResolve=res;}).then(read);}
+            return reader.read().then(function(ref){
+              if(ref.done){
+                var blob=new Blob(allChunks);
+                var url=URL.createObjectURL(blob);
+                var a=document.createElement('a');a.href=url;a.download=FILENAME;
+                document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+                progBar.style.width='100%';progPct.textContent='100%';
+                progLbl.textContent='✅ Complete!';
+                updateSpeed(0);
+                dlBtn.disabled=false;
+                if(pauseBtn)pauseBtn.style.display='none';
+                if(cancelBtn)cancelBtn.style.display='none';
+                if(reconnBtn)reconnBtn.style.display='none';
+                showState(stDone);
+                return;
+              }
+              allChunks.push(ref.value);
+              receivedSoFar+=ref.value.length;
+              var elapsed=Math.max(0.001,(Date.now()-startTime)/1000);
+              var speed=receivedSoFar/elapsed;
+              var pct=totalSize?Math.round(receivedSoFar/totalSize*100):0;
+              var eta=(totalSize&&speed>0)?Math.ceil((totalSize-receivedSoFar)/speed):0;
+              progBar.style.width=(totalSize?pct:0)+'%';
+              progPct.textContent=(totalSize?pct:'?')+'%';
+              progBytes.textContent=fmtB(receivedSoFar)+' / '+(totalSize?fmtB(totalSize):'?');
+              progEta.textContent=eta>0?fmtEta(eta):'';
+              updateSpeed(speed);
+              return read();
+            });
+          }
+          return read();
+        })
+        .catch(function(e){
+          if(!cancelled&&!paused){
+            showState(stErr,'❌ Error: '+e.message);
+            resetUI();
+            if(reconnBtn)reconnBtn.style.display='flex';
+          }
+        });
+    }
+
+    return {
+      start: function(){receivedSoFar=0;allChunks=[];cancelled=false;paused=false;totalSize=0;_stream();},
+      togglePause: function(){
+        if(!paused){
+          paused=true;
+          if(progBar)progBar.classList.add('paused');
+          if(pauseBtn){pauseBtn.textContent='▶ Resume';pauseBtn.style.background='rgba(0,255,157,.1)';pauseBtn.style.color='var(--acc3)';pauseBtn.style.borderColor='rgba(0,255,157,.3)';}
+          showState(stPaused);
+        } else {
+          paused=false;
+          if(progBar)progBar.classList.remove('paused');
+          if(pauseBtn){pauseBtn.textContent='⏸ Pause';pauseBtn.style.background='';pauseBtn.style.color='';pauseBtn.style.borderColor='';}
+          showState(null);
+          if(pauseResolve){var r=pauseResolve;pauseResolve=null;r();}
+        }
+      },
+      cancel: function(){
+        cancelled=true;paused=false;
+        if(pauseResolve){var r=pauseResolve;pauseResolve=null;r();}
+        if(activeReader){try{activeReader.cancel();}catch(e){}}
+        allChunks=[];receivedSoFar=0;resetUI();showState(null);
+      },
+      reconnect: function(){
+        if(reconnBtn)reconnBtn.style.display='none';
+        allChunks=[];receivedSoFar=0;cancelled=false;paused=false;_stream();
+      }
+    };
+  }
+
+  /* ── 1-second approval poll ── */
+  function poll(){
+    if(approved)return;
+    fetch('/download/'+TOKEN+'/status?fp='+encodeURIComponent(FP))
+      .then(function(r){return r.json();})
+      .then(function(d){if(d.approved)onApproved();})
+      .catch(function(){});
+  }
+  setInterval(poll,1000);
+
+  function onApproved(){
+    if(approved)return;
+    approved=true;
+    ['statusDot','statusDotNew'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.add('approved');});
+    ['statusLabel','statusLabelNew'].forEach(function(id){var el=document.getElementById(id);if(el){el.textContent='✅ Approved!';el.style.color='var(--acc3)';}});
+    ['mobileSection','mobileSectionNew'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});
+
+    // Show the appropriate reveal div
+    var reveal=document.getElementById('approvedReveal')||document.getElementById('approvedRevealNew');
+    if(reveal)reveal.style.display='block';
+
+    // Load file info for the revealed panel
+    var isAlready = !!document.getElementById('approvedReveal');
+    if(isAlready){
+      loadFileInfo(
+        document.getElementById('approvedSize'),
+        document.getElementById('approvedExpiry'),
+        document.getElementById('approvedDownloads'),
+        document.getElementById('approvedType'),
+        document.getElementById('approvedCopyBox'),
+        document.getElementById('approvedCdFill'),
+        document.getElementById('approvedCdVal'),
+        document.getElementById('approvedCdBar')
+      );
+      var copyBtnEl=document.getElementById('approvedCopyBtn');
+      var copyBoxEl=document.getElementById('approvedCopyBox');
+      copyBoxEl.textContent=window.location.origin+'/download/'+TOKEN;
+      window.copyApprovedLink=makeCopyFn(copyBoxEl,copyBtnEl);
+
+      // Build downloader
+      var dl=makeDownloader({
+        dlBtn:'approvedDlBtn',pauseBtn:'approvedPauseBtn',cancelBtn:'approvedCancelBtn',
+        reconnBtn:'approvedReconnBtn',progBlk:'approvedProgressBlock',
+        progBar:'approvedProgBar',progPct:'approvedProgPct',progLbl:'approvedProgLabel',
+        progBytes:'approvedProgBytes',progEta:'approvedProgEta',
+        speedVal:'approvedSpeedVal',speedBar:'approvedSpeedBar',
+        stDone:'approvedStDone',stErr:'approvedStErr',stPaused:'approvedStPaused'
+      });
+      window.startApprovedDownload=dl.start;
+      window.toggleApprovedPause=dl.togglePause;
+      window.cancelApprovedDl=dl.cancel;
+      window.approvedReconnect=dl.reconnect;
+    } else {
+      loadFileInfo(
+        document.getElementById('newApprovedSize'),
+        document.getElementById('newApprovedExpiry'),
+        document.getElementById('newApprovedDownloads'),
+        document.getElementById('newApprovedType'),
+        document.getElementById('newCopyBox'),
+        document.getElementById('newCdFill'),
+        document.getElementById('newCdVal'),
+        document.getElementById('newCdBar')
+      );
+      var copyBtnEl2=document.getElementById('newCopyBtn');
+      var copyBoxEl2=document.getElementById('newCopyBox');
+      copyBoxEl2.textContent=window.location.origin+'/download/'+TOKEN;
+      window.copyNewLink=makeCopyFn(copyBoxEl2,copyBtnEl2);
+
+      var dl2=makeDownloader({
+        dlBtn:'newDlBtn',pauseBtn:'newPauseBtn',cancelBtn:'newCancelBtn',
+        reconnBtn:'newReconnBtn',progBlk:'newProgressBlock',
+        progBar:'newProgBar',progPct:'newProgPct',progLbl:'newProgLabel',
+        progBytes:'newProgBytes',progEta:'newProgEta',
+        speedVal:'newSpeedVal',speedBar:'newSpeedBar',
+        stDone:'newStDone',stErr:'newStErr',stPaused:'newStPaused'
+      });
+      window.startNewDownload=dl2.start;
+      window.toggleNewPause=dl2.togglePause;
+      window.cancelNewDl=dl2.cancel;
+      window.newReconnect=dl2.reconnect;
+    }
+  }
+
+  /* ── Mobile submit ── */
+  window.doSubmit=function(){
+    var val=(document.getElementById('mobileInput')||{}).value;
+    if(!val||!val.trim()){alert('Please enter your mobile number.');return;}
+    sendContact(val.trim(),'submitBtn','mobileInput');
+  };
+  window.doSubmitNew=function(){
+    var val=(document.getElementById('mobileInputNew')||{}).value;
+    if(!val||!val.trim()){alert('Please enter your mobile number.');return;}
+    sendContact(val.trim(),'submitBtnNew','mobileInputNew');
+  };
+  function sendContact(val,btnId,inputId){
+    var btn=document.getElementById(btnId),inp=document.getElementById(inputId);
+    if(btn){btn.disabled=true;btn.textContent='Submitting…';}
+    var fd=new FormData();fd.append('fingerprint',FP);fd.append('contact',val);
+    fetch('/download/'+TOKEN+'/contact',{method:'POST',body:fd})
+      .then(function(r){
+        if(r.ok||r.redirected){
+          if(btn){btn.textContent='✅ Submitted — waiting for admin…';btn.style.background='rgba(0,255,157,.12)';btn.style.color='var(--acc3)';btn.style.border='1px solid rgba(0,255,157,.35)';btn.disabled=true;}
+          if(inp)inp.disabled=true;
+        } else {if(btn){btn.disabled=false;btn.textContent='📨 Submit Request';}}
+      }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📨 Submit Request';}});
+  }
+})();
+</script>
+</body>
+</html>

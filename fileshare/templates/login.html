@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}FileShare — Login{% endblock %}
+{% block content %}
+<div style="max-width:400px;margin:5rem auto">
+  <div style="text-align:center;margin-bottom:2.5rem">
+    <div style="font-family:'Space Mono',monospace;font-size:.85rem;color:var(--acc2);letter-spacing:.2em;margin-bottom:.75rem">FILESHARE v2.0</div>
+    <h1 style="font-size:2rem">Admin Login</h1>
+    {% if step == "totp" %}
+    <p class="muted" style="margin-top:.5rem;font-size:.9rem">Enter the 6-digit code from Google Authenticator.</p>
+    {% else %}
+    <p class="muted" style="margin-top:.5rem;font-size:.9rem">Enter your admin password to continue.</p>
+    {% endif %}
+  </div>
+
+  {% if error %}<div class="alert alert-error">❌ {{ error }}</div>{% endif %}
+
+  {% if step == "totp" %}
+  <div class="card">
+    <form method="POST">
+      <input type="hidden" name="action" value="totp">
+      <div class="form-group" style="text-align:center">
+        <div style="font-size:2.5rem;margin-bottom:.75rem">📱</div>
+        <label style="display:block;margin-bottom:.5rem">Authenticator Code</label>
+        <input type="text" name="totp_code" placeholder="000000"
+               maxlength="6" inputmode="numeric" pattern="[0-9]*"
+               autocomplete="one-time-code" required autofocus
+               style="text-align:center;font-size:1.5rem;letter-spacing:.3em">
+        <p class="muted" style="font-size:.8rem;margin-top:.5rem">Open Google Authenticator and enter the 6-digit code for FileShare.</p>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">✅ Verify Code</button>
+    </form>
+    <div style="text-align:center;margin-top:1rem">
+      <a href="/login" style="color:var(--acc2);font-size:.85rem;text-decoration:none">← Back to password</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <form method="POST">
+      <input type="hidden" name="action" value="password">
+      <div class="form-group">
+        <label>Admin Password</label>
+        <input type="password" name="password" placeholder="Your admin password" required autofocus>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">🔓 Login</button>
+    </form>
+    <div style="text-align:center;margin-top:1.25rem">
+      <a href="/forgot" style="color:var(--acc2);font-size:.85rem;text-decoration:none">Forgot password?</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

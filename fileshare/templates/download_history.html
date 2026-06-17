@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block title %}FileShare — Download History{% endblock %}
+{% block content %}
+<div style="max-width:980px;margin:0 auto">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.75rem">
+    <div>
+      <div style="font-family:'Space Mono',monospace;font-size:.72rem;color:var(--acc2);letter-spacing:.2em;margin-bottom:.4rem">ADMIN DASHBOARD</div>
+      <h1>📥 Download History</h1>
+      <p class="muted" style="font-size:.88rem;margin-top:.3rem">Every file download — mobile number, filename, device ID.</p>
+    </div>
+    <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+      <span style="font-family:'Space Mono',monospace;font-size:.8rem;color:var(--muted)">{{ rows|length }} record{% if rows|length != 1 %}s{% endif %}</span>
+      {% if rows %}
+      <button onclick="exportCSV()" class="btn btn-ghost btn-sm" style="border-color:rgba(0,255,157,0.4);color:var(--acc3)">
+        ⬇ Export CSV
+      </button>
+      <form method="POST" action="/admin/history/clear" onsubmit="return confirm('Clear all download history?')" style="margin:0">
+        <button type="submit" class="btn btn-danger btn-sm">🗑 Clear All</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not rows %}
+  <div class="card" style="text-align:center;padding:3rem">
+    <div style="font-size:3rem;margin-bottom:1rem">📭</div>
+    <h2 style="color:var(--muted);font-weight:400">No downloads yet</h2>
+    <p class="muted" style="margin-top:.5rem;font-size:.88rem">Download records will appear here once someone downloads a file.</p>
+  </div>
+
+  {% else %}
+
+  <!-- TOGGLE: show all vs deduplicated -->
+  <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+    <div style="display:flex;gap:.3rem;background:var(--sur2);border:1px solid var(--bdr2);border-radius:8px;padding:3px">
+      <button id="tabAll"    onclick="setView('all')"   style="padding:5px 14px;font-size:.78rem;border-radius:6px;border:none;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700;background:var(--acc);color:#080a0f;transition:all .15s">All Downloads</button>
+      <button id="tabDedup" onclick="setView('dedup')" style="padding:5px 14px;font-size:.78rem;border-radius:6px;border:none;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700;background:transparent;color:var(--muted);transition:all .15s">Unique Links Only</button>
+    </div>
+    <span id="viewDesc" style="font-size:.78rem;color:var(--muted)">Showing every individual download event.</span>
+  </div>
+
+  <!-- SEARCH -->
+  <div style="margin-bottom:.85rem">
+    <input type="text" id="histSearch" placeholder="🔍  Search by mobile, filename or device ID…"
+           oninput="filterHist()"
+           style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--bdr2);border-radius:9px;padding:9px 14px;color:var(--txt);font-size:.88rem;font-family:'Syne',sans-serif;outline:none"
+           onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'">
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <table id="histTable">
+      <thead>
+        <tr>
+          <th style="padding:14px 16px">#</th>
+          <th>📱 Mobile</th>
+          <th>📄 Filename</th>
+          <th>🖥 Device ID</th>
+          <th>🔗 Token</th>
+          <th>⬇ Downloads</th>
+          <th>🕒 Last Download</th>
+        </tr>
+      </thead>
+      <tbody id="histBody">
+        {% for i, row in rows | enumerate %}
+        <tr class="hist-row"
+            data-mobile="{{ row.mobile | lower }}"
+            data-filename="{{ row.filename | lower }}"
+            data-device="{{ row.device_id | lower }}"
+            data-token="{{ row.token | lower }}">
+          <td style="color:var(--muted);font-family:'Space Mono',monospace;font-size:.75rem;padding:12px 16px" class="row-num">{{ i + 1 }}</td>
+          <td>
+            {% if row.mobile and row.mobile != '—' %}
+              <span style="background:rgba(0,255,157,0.08);border:1px solid rgba(0,255,157,0.3);border-radius:6px;padding:3px 10px;font-family:'Space Mono',monospace;font-size:.82rem;color:var(--acc3)">📱 {{ row.mobile }}</span>
+            {% else %}
+              <span style="color:var(--muted);font-size:.8rem">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span style="font-family:'Space Mono',monospace;font-size:.8rem;color:var(--txt)">{{ row.filename }}</span>
+          </td>
+          <td>
+            <span style="font-family:'Space Mono',monospace;font-size:.72rem;color:var(--muted)"
+                  title="{{ row.device_id }}">{{ row.device_id[:20] }}…</span>
+          </td>
+          <td>
+            <span style="font-family:'Space Mono',monospace;font-size:.7rem;color:var(--muted)" title="{{ row.token }}">{{ row.token[:10] }}…</span>
+          </td>
+          <td class="dl-count" style="text-align:center">
+            <span class="badge badge-blue" style="font-size:.7rem">1</span>
+          </td>
+          <td style="font-size:.82rem;color:var(--muted)">
+            {{ row.downloaded_at[:19].replace('T', ' ') }} <span style="color:var(--bdr2)">UTC</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div id="noHistResults" style="display:none;text-align:center;padding:2rem;color:var(--muted);font-size:.88rem">No records match your search.</div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+// ── RAW DATA from server ──────────────────────────────────────────────────────
+var allRows = [
+  {% for row in rows %}
+  {
+    mobile:    {{ row.mobile | tojson }},
+    filename:  {{ row.filename | tojson }},
+    device_id: {{ row.device_id | tojson }},
+    token:     {{ row.token | tojson }},
+    downloaded_at: {{ row.downloaded_at | tojson }}
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+// ── VIEW MODE ─────────────────────────────────────────────────────────────────
+var currentView = 'all';
+
+function setView(mode) {
+  currentView = mode;
+  var tabAll   = document.getElementById('tabAll');
+  var tabDedup = document.getElementById('tabDedup');
+  var desc     = document.getElementById('viewDesc');
+
+  if (mode === 'all') {
+    tabAll.style.background = 'var(--acc)'; tabAll.style.color = '#080a0f';
+    tabDedup.style.background = 'transparent'; tabDedup.style.color = 'var(--muted)';
+    desc.textContent = 'Showing every individual download event.';
+  } else {
+    tabDedup.style.background = 'var(--acc2)'; tabDedup.style.color = '#fff';
+    tabAll.style.background = 'transparent'; tabAll.style.color = 'var(--muted)';
+    desc.textContent = 'Grouped by link (token) — showing unique links with total download count.';
+  }
+  renderTable();
+}
+
+// ── BUILD DEDUPLICATED DATA ───────────────────────────────────────────────────
+function buildDedup() {
+  var map = {};
+  allRows.forEach(function(r) {
+    var key = r.token;
+    if (!map[key]) {
+      map[key] = { mobile: r.mobile, filename: r.filename, device_id: r.device_id, token: r.token, downloaded_at: r.downloaded_at, count: 0 };
+    }
+    map[key].count++;
+    // keep latest date
+    if (r.downloaded_at > map[key].downloaded_at) map[key].downloaded_at = r.downloaded_at;
+    // prefer non-dash mobile
+    if (r.mobile && r.mobile !== '—' && (!map[key].mobile || map[key].mobile === '—')) map[key].mobile = r.mobile;
+  });
+  return Object.values(map).sort(function(a,b){ return b.downloaded_at.localeCompare(a.downloaded_at); });
+}
+
+// ── RENDER TABLE ──────────────────────────────────────────────────────────────
+function renderTable() {
+  var q = (document.getElementById('histSearch') || {}).value;
+  q = q ? q.toLowerCase() : '';
+  var data = currentView === 'dedup' ? buildDedup() : allRows;
+  var body = document.getElementById('histBody');
+  var visible = 0;
+  var html = '';
+
+  data.forEach(function(row, i) {
+    var ml = (row.mobile || '').toLowerCase();
+    var fn = (row.filename || '').toLowerCase();
+    var dv = (row.device_id || '').toLowerCase();
+    var tk = (row.token || '').toLowerCase();
+    if (q && !ml.includes(q) && !fn.includes(q) && !dv.includes(q) && !tk.includes(q)) return;
+    visible++;
+
+    var mobileHtml = (row.mobile && row.mobile !== '—')
+      ? '<span style="background:rgba(0,255,157,0.08);border:1px solid rgba(0,255,157,0.3);border-radius:6px;padding:3px 10px;font-family:\'Space Mono\',monospace;font-size:.82rem;color:var(--acc3)">📱 '+escH(row.mobile)+'</span>'
+      : '<span style="color:var(--muted);font-size:.8rem">—</span>';
+
+    var count = row.count || 1;
+    var countBadge = currentView === 'dedup' && count > 1
+      ? '<span style="background:rgba(124,92,252,0.15);border:1px solid rgba(124,92,252,0.4);border-radius:6px;padding:3px 9px;font-family:\'Space Mono\',monospace;font-size:.78rem;color:var(--acc2);font-weight:700">×'+count+'</span>'
+      : '<span style="background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.25);border-radius:6px;padding:3px 9px;font-family:\'Space Mono\',monospace;font-size:.78rem;color:var(--acc)">1</span>';
+
+    var dt = row.downloaded_at ? row.downloaded_at.substring(0,19).replace('T',' ') : '—';
+    var label = currentView === 'dedup' && count > 1 ? 'Last:' : '';
+
+    html += '<tr>'
+      + '<td style="color:var(--muted);font-family:\'Space Mono\',monospace;font-size:.75rem;padding:12px 16px">'+(i+1)+'</td>'
+      + '<td>'+mobileHtml+'</td>'
+      + '<td><span style="font-family:\'Space Mono\',monospace;font-size:.8rem;color:var(--txt)">'+escH(row.filename)+'</span></td>'
+      + '<td><span style="font-family:\'Space Mono\',monospace;font-size:.72rem;color:var(--muted)" title="'+escH(row.device_id)+'">'+escH((row.device_id||'').substring(0,20))+'…</span></td>'
+      + '<td><span style="font-family:\'Space Mono\',monospace;font-size:.7rem;color:var(--muted)" title="'+escH(row.token)+'">'+escH((row.token||'').substring(0,10))+'…</span></td>'
+      + '<td style="text-align:center">'+countBadge+'</td>'
+      + '<td style="font-size:.82rem;color:var(--muted)"><span style="font-size:.68rem;color:var(--muted);margin-right:3px">'+label+'</span>'+dt+' <span style="color:var(--bdr2)">UTC</span></td>'
+      + '</tr>';
+  });
+
+  body.innerHTML = html;
+  document.getElementById('noHistResults').style.display = visible === 0 ? 'block' : 'none';
+}
+
+function filterHist() { renderTable(); }
+
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── EXPORT CSV ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  var data = currentView === 'dedup' ? buildDedup() : allRows;
+  var q = (document.getElementById('histSearch') || {}).value.toLowerCase();
+
+  // Filter same as view
+  if (q) {
+    data = data.filter(function(r) {
+      return (r.mobile||'').toLowerCase().includes(q) ||
+             (r.filename||'').toLowerCase().includes(q) ||
+             (r.device_id||'').toLowerCase().includes(q) ||
+             (r.token||'').toLowerCase().includes(q);
+    });
+  }
+
+  var headers = ['#','Mobile','Filename','Device ID','Token','Downloads','Downloaded At'];
+  var lines = [headers.join(',')];
+  data.forEach(function(r, i) {
+    var count = r.count || 1;
+    var dt = r.downloaded_at ? r.downloaded_at.substring(0,19).replace('T',' ') : '';
+    lines.push([
+      i+1,
+      csvCell(r.mobile),
+      csvCell(r.filename),
+      csvCell(r.device_id),
+      csvCell(r.token),
+      count,
+      csvCell(dt)
+    ].join(','));
+  });
+
+  var csv = lines.join('\r\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+
+  // Filename: "history - <filename context> - <current date> - export date"
+  var today = new Date();
+  var dd = String(today.getDate()).padStart(2,'0');
+  var mm = String(today.getMonth()+1).padStart(2,'0');
+  var yyyy = today.getFullYear();
+  var dateStr = yyyy+'-'+mm+'-'+dd;
+  var fname = 'download-history-' + dateStr + '.csv';
+
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(val) {
+  var s = String(val || '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// Initial render
+{% if rows %}renderTable();{% endif %}
+</script>
+{% endblock %}
