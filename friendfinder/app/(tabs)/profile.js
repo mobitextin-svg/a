@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,7 @@ import { Avatar, Card, Tag, Button, SectionTitle, ProgressBar } from '../../src/
 import EducationCard from '../../src/components/EducationCard';
 import { colors, radius } from '../../src/theme';
 import { useApp } from '../../src/store';
-import { getUser, formatDOB, profileCompleteness } from '../../src/data';
+import { getUser, formatDOB, profileCompleteness, PREMIUM_FEATURES } from '../../src/data';
 
 // One labelled row inside a category card.
 function InfoRow({ icon, label, value, hidden }) {
@@ -29,6 +29,18 @@ function InfoRow({ icon, label, value, hidden }) {
   );
 }
 
+// A tappable Social Discovery row with a count badge.
+function DiscoveryRow({ icon, label, count, onPress }) {
+  return (
+    <Pressable style={styles.discoveryRow} onPress={onPress}>
+      <Ionicons name={icon} size={18} color={colors.primary} style={{ marginRight: 12 }} />
+      <Text style={[styles.infoValue, { flex: 1 }]}>{label}</Text>
+      <View style={styles.countBadge}><Text style={styles.countText}>{count}</Text></View>
+      <Ionicons name="chevron-forward" size={16} color={colors.muted} style={{ marginLeft: 6 }} />
+    </Pressable>
+  );
+}
+
 // Read-only tag cloud for skills / interests.
 function TagCloud({ items }) {
   if (!items || !items.length) return null;
@@ -41,7 +53,7 @@ function TagCloud({ items }) {
 
 export default function Profile() {
   const router = useRouter();
-  const { state, friendsList, logout } = useApp();
+  const { state, friendsList, batchmates, suggestions, logout } = useApp();
   const me = state.me || {};
   const edit = () => router.push('/edit-profile');
   const editSection = (section) => router.push({ pathname: '/edit-profile', params: { section } });
@@ -51,6 +63,14 @@ export default function Profile() {
   const social = me.social || {};
   const privacy = me.privacy || {};
   const account = me.account || {};
+  const timeline = me.timeline || {};
+  const matching = me.matching || {};
+  const eduMemory = me.eduMemory || {};
+  const unique = me.unique || {};
+  const hobbies = me.hobbies || [];
+  const customTags = me.customTags || [];
+  const lookingFor = me.lookingFor || [];
+  const hidden = !!unique.hiddenFields;
 
   const mobile = contact.mobile ?? me.mobile;
   const email = contact.email ?? me.email;
@@ -173,12 +193,108 @@ export default function Profile() {
           )}
 
           {/* 6 — Interests */}
-          {(me.interests || []).length > 0 && (
-            <>
-              <SectionTitle action="Edit" onAction={() => editSection('interests')}>Interests</SectionTitle>
-              <Card><TagCloud items={me.interests} /></Card>
-            </>
-          )}
+          <SectionTitle action="Edit" onAction={() => editSection('interests')}>Interests</SectionTitle>
+          <Card>
+            {(me.interests || []).length > 0 && (
+              <View style={{ marginBottom: hobbies.length || customTags.length ? 12 : 0 }}>
+                <Text style={styles.infoLabel}>Personal Interests</Text>
+                <View style={{ marginTop: 6 }}><TagCloud items={me.interests} /></View>
+              </View>
+            )}
+            {hobbies.length > 0 && (
+              <View style={{ marginBottom: customTags.length ? 12 : 0 }}>
+                <Text style={styles.infoLabel}>Hobbies</Text>
+                <View style={{ marginTop: 6 }}><TagCloud items={hobbies} /></View>
+              </View>
+            )}
+            {customTags.length > 0 && (
+              <View>
+                <Text style={styles.infoLabel}>Custom Tags</Text>
+                <View style={{ marginTop: 6 }}><TagCloud items={customTags} /></View>
+              </View>
+            )}
+            {!(me.interests || []).length && !hobbies.length && !customTags.length && (
+              <Text style={styles.meta}>Tap Edit to add interests, hobbies and custom tags.</Text>
+            )}
+          </Card>
+
+          {/* Personal Timeline */}
+          <SectionTitle action="Edit" onAction={() => editSection('timeline')}>Personal Timeline</SectionTitle>
+          <Card>
+            <InfoRow icon="calendar-outline" label="School Joined Year" value={timeline.schoolJoined} />
+            <InfoRow icon="calendar-outline" label="School Left Year" value={timeline.schoolLeft} />
+            <InfoRow icon="calendar-outline" label="College Joined Year" value={timeline.collegeJoined} />
+            <InfoRow icon="calendar-outline" label="College Passed Out Year" value={timeline.collegePassed} />
+            <InfoRow icon="briefcase-outline" label="First Job Year" value={timeline.firstJob} />
+            <InfoRow icon="location-outline" label="Current City" value={timeline.currentCity} />
+            <InfoRow icon="trophy-outline" label="Achievements" value={timeline.achievements} />
+            {!Object.values(timeline).some(Boolean) && <Text style={styles.meta}>Tap Edit to build your timeline.</Text>}
+          </Card>
+
+          {/* Friend Matching */}
+          <SectionTitle action="Edit" onAction={() => editSection('matching')}>Friend Matching</SectionTitle>
+          <Card>
+            {lookingFor.length > 0 && (
+              <View style={{ marginBottom: 10 }}>
+                <Text style={styles.infoLabel}>Looking For</Text>
+                <View style={{ marginTop: 6 }}><TagCloud items={lookingFor} /></View>
+              </View>
+            )}
+            <InfoRow icon="people-outline" label="Missing Friends List" value={matching.missingFriends} />
+            <InfoRow icon="business-outline" label="Last Seen Institution" value={matching.lastSeenInstitution} />
+            <InfoRow icon="checkmark-done-outline" label="Number of Friends Found" value={String(friendsList.length)} />
+          </Card>
+
+          {/* Education Memory */}
+          <SectionTitle action="Edit" onAction={() => editSection('memory')}>Education Memory</SectionTitle>
+          <Card>
+            <InfoRow icon="person-outline" label="Favorite Teacher" value={eduMemory.favoriteTeacher} />
+            <InfoRow icon="book-outline" label="Favorite Subject" value={eduMemory.favoriteSubject} />
+            <InfoRow icon="grid-outline" label="Classroom / Block Name" value={eduMemory.classroom} />
+            <InfoRow icon="bed-outline" label="Hostel Name" value={eduMemory.hostelName} />
+            <InfoRow icon="bus-outline" label="Bus Route Number" value={eduMemory.busRoute} />
+            {!!(eduMemory.batchPhoto || eduMemory.farewellPhoto || eduMemory.convocationPhoto) && (
+              <View style={styles.photoStrip}>
+                {[eduMemory.batchPhoto, eduMemory.farewellPhoto, eduMemory.convocationPhoto].filter(Boolean).map((uri, i) => (
+                  <Image key={i} source={{ uri }} style={styles.memoryPhoto} />
+                ))}
+              </View>
+            )}
+            {!Object.values(eduMemory).some(Boolean) && <Text style={styles.meta}>Tap Edit to add classroom & hostel memories.</Text>}
+          </Card>
+
+          {/* Memory Wall & Unique Features */}
+          <SectionTitle action="Edit" onAction={() => editSection('unique')}>Memory Wall &amp; Unique Features</SectionTitle>
+          <Card>
+            {hidden ? (
+              <View style={styles.infoRow}>
+                <Ionicons name="eye-off" size={18} color={colors.muted} style={{ marginRight: 12 }} />
+                <Text style={styles.meta}>These memory details are hidden (private).</Text>
+              </View>
+            ) : (<>
+              <InfoRow icon="help-circle-outline" label='"Do You Remember Me?"' value={unique.doYouRememberMe ? 'On' : null} />
+              <InfoRow icon="book-outline" label="Batch Memories" value={unique.batchMemories} />
+              <InfoRow icon="time-outline" label="Lost Contact Since" value={unique.lostContactSince} />
+              <InfoRow icon="people-outline" label="Bench Mate" value={unique.benchMate} />
+              <InfoRow icon="bed-outline" label="Hostel Mate" value={unique.hostelMate} />
+              <InfoRow icon="home-outline" label="Roommate" value={unique.roommate} />
+              <InfoRow icon="construct-outline" label="Project Team" value={unique.projectTeam} />
+              <InfoRow icon="bus-outline" label="Bus Friend" value={unique.busFriend} />
+              <InfoRow icon="flask-outline" label="Lab Partner" value={unique.labPartner} />
+              <InfoRow icon="ribbon-outline" label="Class Monitor" value={unique.classMonitor} />
+              {!Object.entries(unique).some(([k, v]) => k !== 'hiddenFields' && v) && <Text style={styles.meta}>Tap Edit to share memories and find your bench/hostel/lab mates.</Text>}
+            </>)}
+          </Card>
+
+          {/* Social Discovery */}
+          <SectionTitle>Social Discovery</SectionTitle>
+          <Card>
+            <DiscoveryRow icon="people-circle-outline" label="Mutual Batchmates" count={batchmates.length} onPress={() => router.push('/(tabs)/search')} />
+            <DiscoveryRow icon="business-outline" label="Mutual Institutions" count={(me.education || []).length} onPress={() => router.push('/(tabs)/alumni')} />
+            <DiscoveryRow icon="git-network-outline" label="Common Friends" count={friendsList.length} onPress={() => router.push('/(tabs)/search')} />
+            <DiscoveryRow icon="navigate-outline" label="Nearby Batchmates" count={suggestions.length} onPress={() => router.push('/(tabs)/search')} />
+            <DiscoveryRow icon="sparkles-outline" label="Recently Joined Batchmates" count={suggestions.length} onPress={() => router.push('/(tabs)/search')} />
+          </Card>
 
           {/* 7 — Privacy Settings */}
           <SectionTitle action="Edit" onAction={() => editSection('privacy')}>Privacy Settings</SectionTitle>
@@ -219,6 +335,17 @@ export default function Profile() {
             </View>
             <Ionicons name="chevron-forward" size={22} color="#fff" />
           </Pressable>
+          <Card style={{ marginTop: 10 }}>
+            {PREMIUM_FEATURES.map((f, i) => (
+              <View key={f.label} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                <Ionicons name={f.icon} size={18} color={colors.gold} style={{ marginRight: 12 }} />
+                <Text style={[styles.infoValue, { flex: 1 }]}>{f.label}</Text>
+                {state.premium
+                  ? <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                  : <Ionicons name="lock-closed" size={15} color={colors.muted} />}
+              </View>
+            ))}
+          </Card>
           <Text style={styles.subTitle}>Who Viewed Your Profile</Text>
           <Card>
             {state.profileViewers.slice(0, 3).map((id, i) => {
@@ -273,4 +400,9 @@ const styles = StyleSheet.create({
   subTitle: { fontSize: 16, fontWeight: '800', color: colors.ink, marginTop: 16, marginBottom: 10 },
   viewerRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
   blur: { letterSpacing: 2 },
+  photoStrip: { flexDirection: 'row', marginTop: 10 },
+  memoryPhoto: { width: 72, height: 72, borderRadius: 10, marginRight: 8, backgroundColor: colors.border },
+  discoveryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  countBadge: { minWidth: 26, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.primarySoft, alignItems: 'center' },
+  countText: { color: colors.primary, fontWeight: '800', fontSize: 12.5 },
 });

@@ -12,7 +12,7 @@ const STATUS_COLOR = {
   Discontinued: colors.danger,
 };
 
-export default function EducationCard({ entry, onRemove }) {
+export default function EducationCard({ entry, onRemove, onEdit }) {
   const e = entry;
   const meta = typeMeta(e.type || e.level);
   const summary = eduSummary(e);
@@ -29,6 +29,11 @@ export default function EducationCard({ entry, onRemove }) {
           <Text style={styles.title} numberOfLines={1}>{e.name || e.course || e.type}</Text>
           {!!summary && <Text style={styles.sub} numberOfLines={1}>{summary}</Text>}
         </View>
+        {onEdit ? (
+          <Pressable onPress={onEdit} hitSlop={8} style={styles.trash}>
+            <Ionicons name="create-outline" size={18} color={colors.primary} />
+          </Pressable>
+        ) : null}
         {onRemove ? (
           <Pressable onPress={onRemove} hitSlop={8} style={styles.trash}>
             <Ionicons name="trash-outline" size={18} color={colors.danger} />

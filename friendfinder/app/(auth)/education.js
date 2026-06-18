@@ -31,9 +31,7 @@ export default function Education() {
       email: params.email || '',
       mobileHidden: params.mobileHidden === '1',
       emailHidden: params.emailHidden === '1',
-      city: params.city,
-      state: params.state,
-      headline: first ? [first.course, first.department, first.batch].filter(Boolean).join(' • ') || 'BatchMate member' : 'BatchMate member',
+      headline: first ? [first.name, first.batch].filter(Boolean).join(' • ') || 'BatchMate member' : 'BatchMate member',
       verified: false,
       education: entries,
     });
@@ -45,15 +43,16 @@ export default function Education() {
       <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
         <Text style={styles.step}>STEP 2 OF 2</Text>
         <Text style={styles.title}>Your education history</Text>
-        <Text style={styles.sub}>Add your school, diploma, college, university, professional or coaching records to find batchmates.</Text>
+        <Text style={styles.sub}>Pick your education type, location and institution to find batchmates. You can add the rest of the details later from your profile.</Text>
 
-        <EducationForm onAdd={addEntry} />
+        <EducationForm mode="first" onAdd={addEntry} />
 
         {entries.length > 0 && (
           <View style={{ marginTop: 18 }}>
             {entries.map((e, i) => (
               <EducationCard key={i} entry={e} onRemove={() => removeEntry(i)} />
             ))}
+            <Text style={styles.addMore}>Add another institution above, or finish below.</Text>
           </View>
         )}
 
@@ -71,5 +70,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '900', color: colors.ink, marginTop: 6 },
   sub: { color: colors.body, fontSize: 15, marginTop: 6, marginBottom: 20, lineHeight: 22 },
   meta: { color: colors.muted, fontSize: 13, marginTop: 2 },
+  addMore: { color: colors.muted, fontSize: 13, textAlign: 'center', marginTop: 4 },
   skip: { textAlign: 'center', color: colors.muted, fontWeight: '700', marginTop: 14 },
 });

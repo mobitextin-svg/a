@@ -18,8 +18,6 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [mobileHidden, setMobileHidden] = useState(true);
   const [emailHidden, setEmailHidden] = useState(true);
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
 
   const next = () => {
     if (!name.trim()) return;
@@ -34,8 +32,6 @@ export default function Register() {
         email: email.trim(),
         mobileHidden: mobileHidden ? '1' : '',
         emailHidden: emailHidden ? '1' : '',
-        city: city.trim(),
-        state: state.trim(),
       },
     });
   };
@@ -65,9 +61,6 @@ export default function Register() {
 
         <Field label="Email ID" icon="mail-outline" keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" value={email} onChangeText={setEmail} />
         <Toggle label="Hide email ID" hint="Keep your email private from other members." icon="eye-off-outline" value={emailHidden} onValueChange={setEmailHidden} />
-
-        <Field label="City" icon="location-outline" placeholder="e.g. Chennai" value={city} onChangeText={setCity} />
-        <Field label="State" icon="map-outline" placeholder="e.g. Tamil Nadu" value={state} onChangeText={setState} />
 
         <Button title="Next: Education" icon="arrow-forward" onPress={next} disabled={!name.trim()} style={{ marginTop: 8 }} />
         <View style={{ height: 24 }} />
