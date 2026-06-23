@@ -38,6 +38,7 @@ from . import tasks
 from . import rotation as ROT
 from . import sending as SEND
 from . import deliverability as DELIV
+from . import deliver_ai as DAI
 from .nav import (NAV, NAV_BY_KEY, USER_GROUPS, ADMIN_GROUPS, ADMIN_ONLY,
                   ESSENTIAL, ONBOARDING_STEPS)
 from .verify import verify_email, verify_bulk
@@ -1361,6 +1362,127 @@ def register_modules(app):
             return render_template("dmarc.html", admin=True, domains=domains, fails=fails)
         domains = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY id", (aid,))
         return render_template("dmarc.html", admin=False, domains=domains)
+
+    # ---- Deliverability AI (predictive + recommendations + auto-clean) --- #
+    def _account_signals(aid):
+        agg = D.query("SELECT COALESCE(SUM(sent),0) sent, COALESCE(SUM(bounces),0) b"
+                      " FROM campaigns WHERE account_id=?", (aid,), one=True)
+        sent = agg["sent"] or 0
+        ncomp = D.query("SELECT COUNT(*) c FROM complaints WHERE account_id=? AND"
+                        " kind='complaint'", (aid,), one=True)["c"]
+        contacts = D.query("SELECT email, status FROM contacts WHERE account_id=?", (aid,))
+        n = len(contacts) or 1
+        verified = D.query("SELECT COUNT(DISTINCT v.email) c FROM verifications v WHERE"
+                           " v.account_id=? AND v.result='valid'", (aid,), one=True)["c"]
+        roles = sum(1 for c in contacts if c["email"].split("@")[0]
+                    in {"info", "support", "admin", "sales", "contact", "office"})
+        dom = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY reputation DESC"
+                      " LIMIT 1", (aid,), one=True)
+        rep = dom["reputation"] if dom else 85
+        auth_ok = bool(dom and dom["spf"] and dom["dkim"] and dom["dmarc"])
+        warming = D.query("SELECT COUNT(*) c FROM smtp_servers WHERE account_id=? AND"
+                          " warmup NOT IN ('Completed','Not started')", (aid,),
+                          one=True)["c"]
+        bl = DELIV.blacklist_status(dom["domain"] if dom else "example.com")
+        return {
+            "reputation": rep,
+            "bounce_rate": round(100 * agg["b"] / sent, 2) if sent else 0,
+            "complaint_rate": round(100 * ncomp / sent, 3) if sent else 0,
+            "auth_ok": auth_ok,
+            "warmup_pending": warming > 0,
+            "unverified_pct": round(100 * max(0, n - verified) / n, 1),
+            "role_pct": round(100 * roles / n, 1),
+            "blacklisted": not bl["clean"],
+            "list_size": len(contacts),
+        }
+
+    @app.route("/deliverability-ai", methods=["GET", "POST"])
+    @login_required
+    def deliverability_ai():
+        admin = is_admin_user()
+        aid = current_account()["id"]
+        cleaned = None
+        if request.method == "POST" and request.form.get("action") == "autoclean":
+            # Remove bounced + unsubscribed; suppress role/disposable addresses.
+            removed = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
+                              " status IN ('bounced','unsubscribed')", (aid,),
+                              one=True)["c"]
+            D.execute("DELETE FROM contacts WHERE account_id=? AND status IN"
+                      " ('bounced','unsubscribed')", (aid,))
+            # Suppress risky (disposable/role) active contacts.
+            risky = 0
+            for c in D.query("SELECT id, email FROM contacts WHERE account_id=? AND"
+                             " status='active'", (aid,)):
+                r = verify_email(c["email"])
+                if r["result"] == "invalid" or not r["checks"].get("disposable", True) \
+                        or not r["checks"].get("not_role", True):
+                    D.execute("UPDATE contacts SET status='suppressed' WHERE id=?",
+                              (c["id"],))
+                    risky += 1
+            cleaned = {"removed": removed, "suppressed": risky}
+            D.log_activity(aid, current_user()["email"], "Ran automatic list cleaning")
+            flash(f"Cleaned list: removed {removed}, suppressed {risky} risky addresses.",
+                  "success")
+
+        if admin:
+            # Platform view: worst accounts by predicted score.
+            rows = []
+            for a in D.query("SELECT id, name FROM accounts ORDER BY id"):
+                sig = _account_signals(a["id"])
+                pred = DAI.predict_deliverability(sig)
+                rows.append({"acct": a, "score": pred["score"], "band": pred["band"],
+                             "sig": sig})
+            rows.sort(key=lambda r: r["score"])
+            return render_template("deliverability_ai.html", admin=True, rows=rows)
+
+        sig = _account_signals(aid)
+        pred = DAI.predict_deliverability(sig)
+        recs = DAI.recommendations(sig)
+        return render_template("deliverability_ai.html", admin=False, sig=sig,
+                               pred=pred, recs=recs, cleaned=cleaned)
+
+    # ---- Integrations hub (ISP feedback loops & analytics) --------------- #
+    ISP_PROVIDERS = [
+        ("gmail_postmaster", "Gmail Postmaster Tools", "📮",
+         "Domain & IP reputation, spam rate, feedback loop from Google."),
+        ("ms_snds", "Microsoft SNDS", "🪟",
+         "Smart Network Data Services — complaint & trap data from Outlook/Hotmail."),
+        ("yahoo_fbl", "Yahoo Complaint Feedback Loop", "🟣",
+         "Complaint feedback loop for Yahoo/AOL recipients."),
+        ("apple_analytics", "Apple Mail Analytics", "",
+         "Engagement & privacy-protected open signals for Apple Mail."),
+        ("generic_fbl", "Generic FBL (ARF)", "🔁",
+         "Ingest standard ARF feedback-loop reports from any ISP."),
+    ]
+
+    @app.route("/integrations", methods=["GET", "POST"])
+    @login_required
+    def integrations():
+        if request.method == "POST":
+            if not is_admin_user():
+                abort(403)
+            provider = request.form.get("provider")
+            action = request.form.get("action")
+            valid = {p[0] for p in ISP_PROVIDERS}
+            if provider in valid:
+                if action == "connect":
+                    if D.query("SELECT 1 FROM integrations WHERE provider=?", (provider,),
+                               one=True):
+                        D.execute("UPDATE integrations SET connected=1 WHERE provider=?",
+                                  (provider,))
+                    else:
+                        D.execute("INSERT INTO integrations (provider, connected, config,"
+                                  " created_at) VALUES (?,?,?,?)",
+                                  (provider, 1, request.form.get("config", ""), D.now()))
+                    flash("Integration connected.", "success")
+                elif action == "disconnect":
+                    D.execute("UPDATE integrations SET connected=0 WHERE provider=?",
+                              (provider,))
+                    flash("Integration disconnected.", "success")
+            return redirect(url_for("integrations"))
+        state = {r["provider"]: r for r in D.query("SELECT * FROM integrations")}
+        return render_template("integrations.html", providers=ISP_PROVIDERS, state=state,
+                               admin=is_admin_user())
 
     # ---- Email Finder ---------------------------------------------------- #
     @app.route("/finder", methods=["GET", "POST"])

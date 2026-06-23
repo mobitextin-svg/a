@@ -294,6 +294,14 @@ CREATE TABLE IF NOT EXISTS complaints (
     created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_complaints_acct ON complaints(account_id);
+
+CREATE TABLE IF NOT EXISTS integrations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider     TEXT UNIQUE NOT NULL,
+    connected    INTEGER NOT NULL DEFAULT 0,
+    config       TEXT,
+    created_at   TEXT NOT NULL
+);
 """
 
 # Idempotent column additions for accounts that predate these features.

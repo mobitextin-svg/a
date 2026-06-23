@@ -305,7 +305,7 @@ NAV = [
         ],
     },
     {
-        "key": "integrations", "label": "Integrations", "icon": "🧩", "built": False,
+        "key": "integrations", "label": "Integrations", "icon": "🧩", "built": True,
         "items": [
             ("CRM", "Salesforce, HubSpot, Pipedrive"),
             ("Webhooks", "Real-time event delivery"),
@@ -413,6 +413,11 @@ NAV = [
     {"key": "dmarc", "label": "DMARC Analytics", "icon": "📊", "built": True,
      "items": [("SPF / DKIM / DMARC", "Authentication"), ("Alignment", "Pass/fail"),
                ("Suggestions", "How to fix"), ("Domain health", "Per domain")]},
+    {"key": "deliverai", "label": "Deliverability AI", "icon": "🧠", "built": True,
+     "items": [("Predictive score", "Forecast inbox placement"),
+               ("AI recommendations", "Prioritised fixes"),
+               ("Auto list cleaning", "One-click hygiene"),
+               ("Factor breakdown", "What helps & hurts")]},
     # --- Admin-only platform modules ------------------------------------- #
     {"key": "plans", "label": "Plans", "icon": "💳", "built": True,
      "items": [("Tiers", "Free → Enterprise"), ("Credits", "Per-plan allowances"),
@@ -447,8 +452,8 @@ USER_GROUPS = [
     ("", ["dashboard"]),
     ("📧 Workspace", ["sender", "verification", "contacts", "campaigns", "templates",
                      "landing", "reports", "ai", "finder", "automation"]),
-    ("📬 Deliverability", ["deliverability", "bounce", "complaints", "inboxtest",
-                          "dmarc"]),
+    ("📬 Deliverability", ["deliverability", "deliverai", "bounce", "complaints",
+                          "inboxtest", "dmarc"]),
     ("🌐 Sending", ["domains", "smtp"]),
     ("👨‍💻 Developers", ["api", "webhooks"]),
     ("💳 Account", ["billing"]),
@@ -461,10 +466,10 @@ ADMIN_GROUPS = [
     ("🛠️ Sending Infrastructure", ["smtp", "pools", "warmup", "queue", "rotsend",
                                    "rotverify", "burst", "iphealth", "domains",
                                    "monitoring"]),
-    ("📬 Deliverability", ["deliverability", "bounce", "complaints", "inboxtest",
-                          "dmarc"]),
-    ("🏢 Platform", ["whitelabel", "enterprise", "mktmgmt", "apimgmt", "logs",
-                    "backups", "settings"]),
+    ("📬 Deliverability", ["deliverability", "deliverai", "bounce", "complaints",
+                          "inboxtest", "dmarc"]),
+    ("🏢 Platform", ["whitelabel", "enterprise", "integrations", "mktmgmt", "apimgmt",
+                    "logs", "backups", "settings"]),
 ]
 
 # Default menu used where role is unknown (e.g. before login context).
