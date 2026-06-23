@@ -266,6 +266,24 @@ CREATE TABLE IF NOT EXISTS coupons (
     active       INTEGER NOT NULL DEFAULT 1,
     created_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS messages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    campaign_id  INTEGER NOT NULL,
+    email        TEXT NOT NULL,
+    token        TEXT UNIQUE NOT NULL,
+    smtp_id      INTEGER,
+    status       TEXT NOT NULL DEFAULT 'sent',   -- sent / dry-run / failed
+    error        TEXT,
+    opened       INTEGER NOT NULL DEFAULT 0,
+    clicked      INTEGER NOT NULL DEFAULT 0,
+    opened_at    TEXT,
+    clicked_at   TEXT,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_campaign ON messages(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_messages_token    ON messages(token);
 """
 
 # Idempotent column additions for accounts that predate these features.
@@ -287,6 +305,8 @@ _MIGRATIONS = [
     # Smart-rotation engines.
     ("smtp_servers", "purpose", "TEXT NOT NULL DEFAULT 'normal'"),  # normal / burst
     ("smtp_servers", "busy", "INTEGER NOT NULL DEFAULT 0"),         # reserved & in-use
+    ("smtp_servers", "password", "TEXT"),                          # optional, for real send
+    ("smtp_servers", "use_tls", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 

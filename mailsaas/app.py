@@ -36,6 +36,7 @@ from . import ai
 from . import totp
 from . import tasks
 from . import rotation as ROT
+from . import sending as SEND
 from . import deliverability as DELIV
 from .nav import (NAV, NAV_BY_KEY, USER_GROUPS, ADMIN_GROUPS, ADMIN_ONLY,
                   ESSENTIAL, ONBOARDING_STEPS)
@@ -862,6 +863,9 @@ def register_modules(app):
                 D.mark_onboarding(aid, "campaign")
                 D.log_activity(aid, current_user()["email"], "Created a campaign draft")
                 flash("Campaign saved as draft.", "success")
+            elif action == "send":
+                msg = _send_campaign_now(aid, request.form.get("id"))
+                flash(msg[1], msg[0])
             elif action == "clone":
                 src = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
                               (request.form.get("id"), aid), one=True)
@@ -921,12 +925,14 @@ def register_modules(app):
         if request.method == "POST":
             D.execute(
                 "INSERT INTO smtp_servers (account_id, name, host, port, username,"
-                " dedicated_ip, daily_limit, warmup, health, created_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                " password, use_tls, dedicated_ip, daily_limit, warmup, health, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (aid, request.form.get("name", "New Relay").strip(),
                  request.form.get("host", "").strip(),
                  int(request.form.get("port") or 587),
                  request.form.get("username", "").strip(),
+                 request.form.get("password", "").strip() or None,
+                 1 if request.form.get("use_tls") else 0,
                  request.form.get("dedicated_ip", "").strip(),
                  int(request.form.get("daily_limit") or 10000),
                  "Not started", "Healthy", D.now()))
@@ -1865,6 +1871,121 @@ def register_modules(app):
         if not mod:
             abort(404)
         return render_template("module.html", mod=mod)
+
+    # ---- Campaign send pipeline (real SMTP via the rotation engine) ------- #
+    SEND_CAP = 100   # inline safety cap; larger lists belong on the queue
+
+    def _send_campaign_now(aid, campaign_id):
+        camp = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                       (campaign_id, aid), one=True)
+        if not camp:
+            return ("error", "Campaign not found.")
+        if camp["status"] in ("Running", "Completed"):
+            return ("error", "Campaign already sent.")
+        recipients = D.query(
+            "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
+            " ORDER BY id LIMIT ?", (aid, SEND_CAP + 1))
+        if not recipients:
+            return ("error", "No active contacts to send to. Import contacts first.")
+        overflow = len(recipients) > SEND_CAP
+        recipients = recipients[:SEND_CAP]
+
+        # Pick relays via the Sending rotation engine.
+        rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
+        nodes = [ROT.node_from_row(r, ip_score=smtp_health_detail(r)["ip_score"])
+                 for r in rows]
+        plan_limit = PLAN_DAILY.get(current_account()["plan"], 1000)
+        plan = ROT.plan_sending(len(recipients), nodes, plan_limit)
+        assigned_ids = [n["id"] for n, c in plan["assigned"]]
+        if not assigned_ids:
+            return ("error", "No healthy, warmed-up relay available — check IP Health.")
+        rows_by_id = {r["id"]: r for r in rows}
+
+        base = request.host_url.rstrip("/")
+        env_cfg = SEND.env_transport()
+        sent = failed = 0
+        real = bool(env_cfg) or any(SEND.server_transport(rows_by_id[i])
+                                    for i in assigned_ids)
+        for i, contact in enumerate(recipients):
+            sid = assigned_ids[i % len(assigned_ids)]
+            token = SEND.make_token()
+            html = SEND.render_html(camp["body"], dict(contact), base, token)
+            cfg = SEND.server_transport(rows_by_id[sid]) or env_cfg
+            status, err = "dry-run", None
+            if cfg:
+                ok, info = SEND.smtp_send(cfg, contact["email"], camp["subject"], html,
+                                          from_addr=camp["from_email"])
+                status, err = ("sent", None) if ok else ("failed", info)
+            D.execute(
+                "INSERT INTO messages (account_id, campaign_id, email, token, smtp_id,"
+                " status, error, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (aid, camp["id"], contact["email"], token, sid, status, err, D.now()))
+            if status == "failed":
+                failed += 1
+            else:
+                sent += 1
+            # Count per-relay usage toward daily limits.
+            D.execute("UPDATE smtp_servers SET sent_today=sent_today+1 WHERE id=?", (sid,))
+
+        D.execute("UPDATE campaigns SET status='Completed', recipients=?, sent=?,"
+                  " bounces=? WHERE id=?",
+                  (len(recipients), sent, failed, camp["id"]))
+        D.mark_onboarding(aid, "send")
+        D.log_activity(aid, current_user()["email"],
+                       f"Sent campaign '{camp['name']}' to {sent} recipients")
+        mode = "delivered via SMTP" if real else "simulated (dry-run — set MAILSAAS_SMTP_* to send for real)"
+        extra = f" {SEND_CAP}+ contacts — capped to {SEND_CAP} this send." if overflow else ""
+        return ("success", f"Campaign sent to {sent} recipients ({mode}); "
+                           f"{failed} failed.{extra} Opens & clicks will track live.")
+
+    @app.route("/campaigns/<int:cid>/report")
+    @login_required
+    def campaign_report(cid):
+        aid = current_account()["id"]
+        camp = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?", (cid, aid),
+                       one=True)
+        if not camp:
+            abort(404)
+        msgs = D.query("SELECT * FROM messages WHERE campaign_id=? ORDER BY id DESC LIMIT 200",
+                       (cid,))
+        agg = D.query(
+            "SELECT COUNT(*) total, COALESCE(SUM(opened),0) opens,"
+            " COALESCE(SUM(clicked),0) clicks, COALESCE(SUM(status='failed'),0) failed"
+            " FROM messages WHERE campaign_id=?", (cid,), one=True)
+        return render_template("campaign_report.html", camp=camp, msgs=msgs, agg=agg)
+
+    # ---- Open / click tracking (public — hit by recipients' mail clients) - #
+    @app.route("/t/o/<token>.gif")
+    def track_open(token):
+        m = D.query("SELECT * FROM messages WHERE token=?", (token,), one=True)
+        if m and not m["opened"]:
+            D.execute("UPDATE messages SET opened=1, opened_at=? WHERE id=?",
+                      (D.now(), m["id"]))
+            D.execute("UPDATE campaigns SET opens=opens+1 WHERE id=?", (m["campaign_id"],))
+        return Response(SEND.PIXEL_GIF, mimetype="image/gif",
+                        headers={"Cache-Control": "no-store"})
+
+    @app.route("/t/c/<token>")
+    def track_click(token):
+        from urllib.parse import unquote
+        url = unquote(request.args.get("u", ""))
+        m = D.query("SELECT * FROM messages WHERE token=?", (token,), one=True)
+        if m:
+            if not m["clicked"]:
+                D.execute("UPDATE messages SET clicked=1, clicked_at=? WHERE id=?",
+                          (D.now(), m["id"]))
+                D.execute("UPDATE campaigns SET clicks=clicks+1 WHERE id=?",
+                          (m["campaign_id"],))
+            # A click implies an open.
+            if not m["opened"]:
+                D.execute("UPDATE messages SET opened=1, opened_at=? WHERE id=?",
+                          (D.now(), m["id"]))
+                D.execute("UPDATE campaigns SET opens=opens+1 WHERE id=?",
+                          (m["campaign_id"],))
+        # Only redirect to safe http(s) targets.
+        if url.startswith("http://") or url.startswith("https://"):
+            return redirect(url)
+        return redirect(url_for("dashboard"))
 
 
 # --------------------------------------------------------------------------- #

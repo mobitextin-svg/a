@@ -11,9 +11,14 @@
       <input name="host" placeholder="smtp.provider.com" required>
       <input name="port" type="number" placeholder="587" value="587" style="max-width:90px"></div>
     <div class="row" style="margin-top:10px"><input name="username" placeholder="Username">
-      <input name="dedicated_ip" placeholder="Dedicated IP (optional)">
-      <input name="daily_limit" type="number" placeholder="Daily limit" value="10000"></div>
+      <input name="password" type="password" placeholder="Password (enables real sending)">
+      <input name="dedicated_ip" placeholder="Dedicated IP (optional)"></div>
+    <div class="row" style="margin-top:10px">
+      <input name="daily_limit" type="number" placeholder="Daily limit" value="10000">
+      <label style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" name="use_tls" checked style="width:auto"> Use STARTTLS</label>
+    </div>
     <div style="margin-top:12px"><button class="btn">Add server</button></div>
+    <p class="faint small">Leave password blank to keep it in simulation mode. With credentials (or the global <code>MAILSAAS_SMTP_*</code> env), campaigns send for real.</p>
   </form>
 </div>
 

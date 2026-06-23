@@ -38,10 +38,16 @@
         <td class="num">{{ '{:,}'.format(c.opens) }}</td>
         <td class="num">{{ '{:,}'.format(c.clicks) }}</td>
         <td class="num">
+          {% if c.status in ['Draft','Scheduled'] %}
+          <form class="inline-form" method="post" onsubmit="return confirm('Send this campaign to your active contacts now?')">
+            <input type="hidden" name="action" value="send"><input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn sm">📤 Send now</button></form>
+          {% endif %}
+          {% if c.sent > 0 %}<a class="btn ghost sm" href="{{ url_for('campaign_report', cid=c.id) }}">📊 Report</a>{% endif %}
           {% if c.status in ['Draft','Scheduled','Running'] %}
           <form class="inline-form" method="post"><input type="hidden" name="action" value="advance">
             <input type="hidden" name="id" value="{{ c.id }}">
-            <button class="btn sm">{{ {'Draft':'Schedule','Scheduled':'Start','Running':'Complete'}[c.status] }}</button></form>
+            <button class="btn ghost sm">{{ {'Draft':'Schedule','Scheduled':'Start','Running':'Complete'}[c.status] }}</button></form>
           {% endif %}
           {% if c.status == 'Running' %}
           <form class="inline-form" method="post"><input type="hidden" name="action" value="pause">
