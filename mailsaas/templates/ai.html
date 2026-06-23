@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}AI Center{% endblock %}
+{% block content %}
+<h1>🤖 AI Center</h1>
+<p class="muted">Generate copy, score deliverability and predict the best send time — built in.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>✍️ AI Email Writer</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="writer">
+      <label>What's the email about?</label>
+      <input name="topic" placeholder="our new analytics dashboard" required>
+      <div class="row">
+        <div><label>Tone</label><select name="tone">
+          <option>friendly</option><option>professional</option><option>urgent</option><option>casual</option></select></div>
+        <div><label>Audience</label><input name="audience" placeholder="customers"></div>
+        <div><label>Call to action</label><input name="cta" placeholder="Start free trial"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn">Generate email</button></div>
+    </form>
+    {% if out.tool=='writer' %}<div class="code" style="margin-top:14px">{{ out.email }}</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>🏷️ AI Subject Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="subjects">
+      <label>Topic</label><input name="topic" placeholder="summer sale" required>
+      <label>Tone</label><select name="tone"><option>friendly</option><option>urgent</option><option>professional</option></select>
+      <div style="margin-top:12px"><button class="btn">Generate subjects</button></div>
+    </form>
+    {% if out.tool=='subjects' %}
+      <div style="margin-top:12px">
+        {% for s in out.subjects %}<div class="kv"><span>{{ s }}</span><span class="faint small">{{ s|length }} chars</span></div>{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>🛡️ AI Spam Score</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="spam">
+      <label>Subject</label><input name="subject" placeholder="FREE!!! Act now">
+      <label>Body</label><textarea name="body" placeholder="Paste your email body…"></textarea>
+      <div style="margin-top:12px"><button class="btn">Analyze</button></div>
+    </form>
+    {% if out.tool=='spam' %}
+      {% set sp = out.spam %}
+      <div class="card tight" style="margin-top:14px;background:var(--panel2)">
+        <div class="section-head"><b>{{ sp.verdict }}</b>
+          <span class="score-ring" style="color:{{ 'var(--good)' if sp.score>=80 else ('var(--warn)' if sp.score>=55 else 'var(--bad)') }}">{{ sp.score }}</span></div>
+        {% for i in sp.issues %}<div class="kv"><span class="small">⚠ {{ i }}</span></div>{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>💬 AI Reply Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="reply">
+      <label>Incoming message</label>
+      <textarea name="incoming" placeholder="Paste the message you're replying to…"></textarea>
+      <label>Tone</label><select name="tone"><option>professional</option><option>friendly</option></select>
+      <div style="margin-top:12px"><button class="btn">Draft reply</button></div>
+    </form>
+    {% if out.tool=='reply' %}<div class="code" style="margin-top:14px">{{ out.reply }}</div>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>⏰ AI Send Time Prediction</h2>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="tool" value="sendtime">
+    <div><label>Audience type</label><select name="audience">
+      <option value="general">General</option><option value="b2b">B2B</option>
+      <option value="b2c">B2C</option><option value="ecommerce">E-commerce</option>
+      <option value="newsletter">Newsletter</option></select></div>
+    <div style="flex:0"><button class="btn">Predict</button></div>
+  </form>
+  {% if out.tool=='sendtime' %}
+    {% set st = out.sendtime %}
+    <div class="grid g3" style="margin-top:14px">
+      <div class="stat"><div class="k">Best day</div><div class="v">{{ st.best_day }}</div></div>
+      <div class="stat"><div class="k">Best time</div><div class="v">{{ st.best_time }}</div></div>
+      <div class="stat"><div class="k">Expected open rate</div><div class="v">{{ st.expected_open_rate }}<span class="unit">%</span></div></div>
+    </div>
+    <p class="muted small" style="margin-top:10px">Runner-up: {{ st.runner_up }} · {{ st.note }}</p>
+  {% endif %}
+</div>
+
+<p class="faint small">⚙️ These tools run on a built-in generator so they work offline and free. Plug in a real LLM by implementing <code>ai._llm_complete()</code> and setting <code>USE_LLM=True</code>.</p>
+{% endblock %}

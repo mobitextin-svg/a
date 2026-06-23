@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Template Builder{% endblock %}
+{% block content %}
+<h1>🧱 Template Builder</h1>
+<p class="muted">Drag-and-drop, HTML &amp; MJML editors, saved blocks and brand templates.</p>
+
+<div class="tabs" style="margin-top:14px">
+  <span class="tab active">🎨 Drag &amp; Drop</span>
+  <span class="tab">&lt;/&gt; HTML</span>
+  <span class="tab">📐 MJML</span>
+  <span class="tab">🧩 Saved Blocks</span>
+  <span class="tab">⭐ Brand Templates</span>
+</div>
+
+<div class="card">
+  <h2>New template</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="create">
+    <div class="row">
+      <input name="name" placeholder="Template name" required>
+      <select name="kind" style="max-width:160px"><option>Email</option><option>Landing</option><option>Block</option></select>
+      <input name="subject" placeholder="Default subject (optional)">
+    </div>
+    <label>Content (HTML / MJML — use {{ '{{name}}' }} merge tags)</label>
+    <textarea name="content" placeholder="<h1>Hi {{ '{{name}}' }}</h1>&#10;<p>...</p>" style="font-family:ui-monospace,monospace;min-height:120px"></textarea>
+    <div style="margin-top:12px"><button class="btn">Save template</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Your templates</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Type</th><th>Subject</th><th>Created</th><th></th></tr></thead>
+    <tbody>
+    {% for t in templates %}
+      <tr><td><b>{{ t.name }}</b></td><td><span class="badge b-Running">{{ t.kind }}</span></td>
+        <td class="muted small">{{ t.subject or '—' }}</td><td class="faint small">{{ t.created_at }}</td>
+        <td class="num"><form class="inline-form" method="post">
+          <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ t.id }}">
+          <button class="btn danger sm">Delete</button></form></td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No templates yet — create one above.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

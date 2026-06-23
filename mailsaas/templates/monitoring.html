@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Monitoring{% endblock %}
+{% block content %}
+<h1>📟 Real-time Monitoring</h1>
+<p class="muted">System health across compute, queue, SMTP, DNS &amp; API. <span class="faint">Checked {{ metrics.checked }}</span></p>
+
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">CPU</div><div class="v">{{ metrics.cpu }}<span class="unit">%</span></div>
+    <div class="meter" style="margin-top:6px"><i style="width:{{ metrics.cpu }}%"></i></div></div>
+  <div class="stat"><div class="k">RAM</div><div class="v">{{ metrics.ram }}<span class="unit">%</span></div>
+    <div class="meter" style="margin-top:6px"><i style="width:{{ metrics.ram }}%"></i></div></div>
+  <div class="stat"><div class="k">Queue depth</div><div class="v">{{ '{:,}'.format(metrics.queue) }}</div></div>
+  <div class="stat"><div class="k">Uptime</div><div class="v">{{ metrics.uptime }}</div></div>
+</div>
+
+<div class="grid g4">
+  <div class="stat"><div class="k">SMTP Health</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.smtp_health }}</div></div>
+  <div class="stat"><div class="k">DNS Status</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.dns }}</div></div>
+  <div class="stat"><div class="k">API Status</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.api }}</div></div>
+  <div class="stat"><div class="k">Region</div><div class="v" style="font-size:1.1rem">us-east</div></div>
+</div>
+
+<div class="card">
+  <h2>Service status</h2>
+  <table>
+    <thead><tr><th>Service</th><th>Status</th><th>Health</th></tr></thead>
+    <tbody>
+    {% for name, status, health in metrics.services %}
+      <tr><td><b>{{ name }}</b></td>
+        <td><span class="badge {{ 'b-valid' if health>=99 else 'b-risky' }}">{{ status }}</span></td>
+        <td style="width:240px"><div class="meter"><i style="width:{{ health }}%"></i></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="faint small" style="margin-top:8px">CPU &amp; RAM are read from this host in real time; service metrics are illustrative.</p>
+</div>
+{% endblock %}

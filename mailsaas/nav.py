@@ -55,6 +55,63 @@ NAV = [
         ],
     },
     {
+        "key": "ai", "label": "AI Center", "icon": "🤖", "built": True,
+        "items": [
+            ("AI Email Writer", "Draft full emails from a topic"),
+            ("AI Subject Generator", "High-converting subject lines"),
+            ("AI Spam Score", "Score & fix deliverability issues"),
+            ("AI Personalization", "Dynamic per-recipient content"),
+            ("AI Translate", "Localise campaigns"),
+            ("AI Reply Generator", "Draft on-tone replies"),
+            ("AI Campaign Optimizer", "Improve copy & structure"),
+            ("AI Send Time Prediction", "Best time to hit send"),
+        ],
+    },
+    {
+        "key": "deliverability", "label": "Deliverability", "icon": "📬", "built": True,
+        "items": [
+            ("Inbox Placement", "Where your mail lands"),
+            ("Blacklist Monitor", "RBL/DNSBL watch"),
+            ("Domain Reputation", "Your domain standing"),
+            ("IP Reputation", "Your sending IP standing"),
+            ("Spam Test", "Pre-send content analysis"),
+            ("Seed List Test", "Real-mailbox placement"),
+            ("Gmail Score", "Gmail-specific inbox rate"),
+            ("Outlook Score", "Outlook-specific inbox rate"),
+            ("Yahoo Score", "Yahoo-specific inbox rate"),
+        ],
+    },
+    {
+        "key": "templates", "label": "Template Builder", "icon": "🧱", "built": True,
+        "items": [
+            ("Drag & Drop Editor", "Visual email building"),
+            ("HTML Editor", "Full code control"),
+            ("MJML Support", "Responsive by default"),
+            ("Saved Blocks", "Reusable content blocks"),
+            ("Brand Templates", "On-brand starting points"),
+        ],
+    },
+    {
+        "key": "landing", "label": "Landing Pages", "icon": "📄", "built": True,
+        "items": [
+            ("Landing Page Builder", "Build pages fast"),
+            ("Forms", "Capture leads"),
+            ("Thank You Pages", "Post-submit experiences"),
+            ("Lead Capture", "Grow your lists"),
+            ("QR Codes", "Bridge offline to online"),
+        ],
+    },
+    {
+        "key": "finder", "label": "Email Finder", "icon": "🔎", "built": True,
+        "items": [
+            ("Email Finder", "Find a person's address"),
+            ("Domain Search", "Addresses at a domain"),
+            ("Company Search", "Find company contacts"),
+            ("Bulk Finder", "Find at scale"),
+            ("Verification", "Confirm what you find"),
+        ],
+    },
+    {
         "key": "contacts", "label": "Contacts", "icon": "👥", "built": True,
         "items": [
             ("Contact Lists", "Organise your audience"),
@@ -88,6 +145,37 @@ NAV = [
             ("Health Monitor", "Live deliverability signals"),
             ("Warm-up", "Gradually build reputation"),
             ("Sending Limits", "Throttle per server"),
+        ],
+    },
+    {
+        "key": "pools", "label": "SMTP Pools", "icon": "🗄️", "built": True,
+        "items": [
+            ("Pool A / Pool B", "Group relays into pools"),
+            ("Round Robin", "Even distribution"),
+            ("Weight Based", "Send by capacity weight"),
+            ("Failover", "Auto-switch on failure"),
+            ("Health Check", "Continuous monitoring"),
+        ],
+    },
+    {
+        "key": "queue", "label": "Queue Manager", "icon": "📥", "built": True,
+        "items": [
+            ("Pending", "Waiting to send"),
+            ("Processing", "In flight"),
+            ("Delivered", "Successfully sent"),
+            ("Retry", "Transient failures"),
+            ("Failed", "Permanent failures"),
+            ("Dead Queue", "Exhausted retries"),
+        ],
+    },
+    {
+        "key": "warmup", "label": "IP Warm-up", "icon": "🔥", "built": True,
+        "items": [
+            ("Daily Plan", "Scheduled volume ramp"),
+            ("Current Volume", "Today's allowance"),
+            ("Recommended Volume", "What to send next"),
+            ("Reputation", "Tracked over time"),
+            ("Progress", "How far through the ramp"),
         ],
     },
     {
@@ -156,13 +244,37 @@ NAV = [
         ],
     },
     {
-        "key": "automation", "label": "Automation", "icon": "⚙️", "built": False,
+        "key": "automation", "label": "Automation", "icon": "⚙️", "built": True,
         "items": [
-            ("Auto Verify", "Verify on contact creation"),
-            ("Auto Clean Lists", "Scheduled list hygiene"),
-            ("Scheduled Verification", "Recurring bulk checks"),
-            ("Scheduled Campaigns", "Set-and-forget sends"),
-            ("Rules Engine", "If-this-then-that workflows"),
+            ("Welcome Series", "Onboard new subscribers"),
+            ("Drip Campaign", "Nurture over time"),
+            ("Follow Up", "Re-engage non-openers"),
+            ("Birthday / Anniversary", "Date-triggered sends"),
+            ("Trigger Events", "React to behaviour"),
+            ("Workflow Builder", "Visual if-this-then-that"),
+            ("Auto Verify & Clean", "Keep lists healthy"),
+        ],
+    },
+    {
+        "key": "monitoring", "label": "Monitoring", "icon": "📟", "built": True,
+        "items": [
+            ("CPU", "Compute load"),
+            ("RAM", "Memory usage"),
+            ("Queue", "Backlog depth"),
+            ("SMTP Health", "Relay status"),
+            ("DNS Status", "Record health"),
+            ("API Status", "Endpoint availability"),
+            ("Uptime", "Service availability"),
+        ],
+    },
+    {
+        "key": "whitelabel", "label": "White Label", "icon": "🏷️", "built": True,
+        "items": [
+            ("Custom Logo", "Your brand mark"),
+            ("Custom Domain", "app.yourbrand.com"),
+            ("SMTP Branding", "Branded sending"),
+            ("Email Footer", "Custom footers"),
+            ("Client Branding", "Per-client themes"),
         ],
     },
     {

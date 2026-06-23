@@ -185,6 +185,38 @@ CREATE TABLE IF NOT EXISTS invoices (
     status       TEXT NOT NULL DEFAULT 'Paid',
     created_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS templates (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    name         TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'Email',   -- Email / Landing / Block
+    subject      TEXT,
+    content      TEXT,
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS automations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    name         TEXT NOT NULL,
+    trigger      TEXT NOT NULL,
+    steps        INTEGER NOT NULL DEFAULT 1,
+    status       TEXT NOT NULL DEFAULT 'Active',   -- Active / Paused / Draft
+    enrolled     INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS landing_pages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    name         TEXT NOT NULL,
+    slug         TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'Draft',    -- Draft / Published
+    views        INTEGER NOT NULL DEFAULT 0,
+    submissions  INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL
+);
 """
 
 
@@ -283,4 +315,37 @@ def seed_demo(account_id, user_email):
             " created_at) VALUES (?,?,?,?,?,?,?)",
             (account_id, email, res, score, reason, "single", n),
         )
+    # templates
+    for name, kind, subj in [
+        ("Welcome Email", "Email", "Welcome to {{company}} 🎉"),
+        ("Monthly Newsletter", "Email", "Your {{month}} roundup"),
+        ("Flash Sale", "Email", "24 hours only — {{discount}}% off"),
+        ("Hero Block", "Block", None),
+    ]:
+        execute(
+            "INSERT INTO templates (account_id, name, kind, subject, content, created_at)"
+            " VALUES (?,?,?,?,?,?)",
+            (account_id, name, kind, subj,
+             "<h1>Hi {{name}}</h1><p>Your content here…</p>", n))
+    # automations
+    for name, trig, steps, status, enrolled in [
+        ("Welcome Series", "Contact subscribes", 4, "Active", 1280),
+        ("Drip Campaign", "Tag added: lead", 6, "Active", 540),
+        ("Win-back", "No open in 60 days", 3, "Paused", 210),
+        ("Birthday", "Date: birthday", 1, "Active", 95),
+    ]:
+        execute(
+            "INSERT INTO automations (account_id, name, trigger, steps, status, enrolled,"
+            " created_at) VALUES (?,?,?,?,?,?,?)",
+            (account_id, name, trig, steps, status, enrolled, n))
+    # landing pages
+    for name, slug, status, views, subs in [
+        ("Free Trial Signup", "free-trial", "Published", 8420, 612),
+        ("Webinar Registration", "webinar-q3", "Published", 3110, 288),
+        ("Ebook Download", "ebook-deliverability", "Draft", 0, 0),
+    ]:
+        execute(
+            "INSERT INTO landing_pages (account_id, name, slug, status, views, submissions,"
+            " created_at) VALUES (?,?,?,?,?,?,?)",
+            (account_id, name, slug, status, views, subs, n))
     log_activity(account_id, user_email, "Account created and demo data seeded")

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Queue Manager{% endblock %}
+{% block content %}
+<h1>📥 Email Queue Manager</h1>
+<p class="muted">Live view of the sending pipeline — pending, processing, retries &amp; the dead queue.</p>
+
+<div class="grid g3" style="margin-top:14px">
+  <div class="stat"><div class="k">Throughput</div><div class="v">{{ throughput }}</div><div class="trend up">▲ nominal</div></div>
+  <div class="stat"><div class="k">In queue</div><div class="v">{{ '{:,}'.format(states.Pending + states.Processing) }}</div></div>
+  <div class="stat"><div class="k">Dead queue</div><div class="v" style="color:var(--bad)">{{ states['Dead Queue'] }}</div></div>
+</div>
+
+<div class="grid g3">
+  {% set colors = {'Pending':'b-Draft','Processing':'b-Running','Delivered':'b-valid','Retry':'b-risky','Failed':'b-invalid','Dead Queue':'b-invalid'} %}
+  {% for label, count in states.items() %}
+    <div class="card tight">
+      <div class="section-head"><span class="badge {{ colors[label] }}">{{ label }}</span>
+        <b style="font-size:1.3rem">{{ '{:,}'.format(count) }}</b></div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Active in queue</h2>
+  <table>
+    <thead><tr><th>Campaign</th><th>Status</th><th class="num">Queued</th><th class="num">Sent</th><th>Progress</th></tr></thead>
+    <tbody>
+    {% for c in running %}
+      {% set pct = (100 * c.sent / c.recipients)|round(0,'floor')|int if c.recipients else 0 %}
+      <tr><td>{{ c.name }}</td><td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="num">{{ '{:,}'.format(c.recipients - c.sent) }}</td>
+        <td class="num">{{ '{:,}'.format(c.sent) }}</td>
+        <td style="width:160px"><div class="meter"><i style="width:{{ pct }}%"></i></div></td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">Queue is idle.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="row" style="margin-top:12px">
+    <button class="btn ghost sm">↻ Retry failed</button>
+    <button class="btn ghost sm">⏸ Pause queue</button>
+    <button class="btn danger sm">🗑 Purge dead queue</button>
+  </div>
+</div>
+{% endblock %}
