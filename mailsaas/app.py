@@ -252,7 +252,14 @@ def _complete_login(u):
 def is_superadmin():
     acct = current_account()
     u = current_user()
-    return bool(acct and u and acct["is_admin"] and u["role"] == "Owner")
+    return bool(acct and u and acct["is_admin"]
+                and (acct["id"] == 1 or u["role"] in ("Owner", "Super Admin")))
+
+
+def is_admin_user():
+    """Anyone whose workspace carries the admin flag can reach the Admin Panel."""
+    acct = current_account()
+    return bool(acct and acct["is_admin"])
 
 
 def login_required(view):
@@ -272,6 +279,7 @@ def register_context(app):
             "NAV_GROUPS": NAV_GROUPS,
             "NAV_BY_KEY": NAV_BY_KEY,
             "is_superadmin": is_superadmin(),
+            "is_admin_user": is_admin_user(),
             "csrf_token": _csrf_token(),
             "user": current_user(),
             "account": current_account(),
@@ -382,6 +390,11 @@ def register_auth(app):
             email = request.form.get("email", "").strip().lower()
             pw = request.form.get("password", "")
             u = D.query("SELECT * FROM users WHERE email=?", (email,), one=True)
+            if u and u["status"] == "suspended":
+                _record_login(u["account_id"], email, ok=False)
+                flash("This account has been suspended. Contact your administrator.",
+                      "error")
+                return render_template("login.html")
             if u and bcrypt.checkpw(pw.encode(), u["pw_hash"].encode()):
                 # If 2FA is enabled, defer login until the TOTP code is verified.
                 if u["twofa"] and u["totp_secret"]:
@@ -1227,32 +1240,97 @@ def register_modules(app):
         hooks = D.query("SELECT * FROM webhooks WHERE account_id=? ORDER BY id DESC", (aid,))
         return render_template("webhooks.html", hooks=hooks, all_events=WEBHOOK_EVENTS)
 
-    # ---- Admin Panel (cross-tenant, super-admin only) -------------------- #
-    @app.route("/admin")
+    # ---- Admin Panel (cross-tenant user management) ---------------------- #
+    PLAN_CREDITS = {"Free": 1000, "Pro": 50000, "Business": 250000,
+                    "Enterprise": 2000000}
+
+    @app.route("/admin", methods=["GET", "POST"])
     @login_required
     def admin():
-        if not is_superadmin():
+        if not is_admin_user():
             abort(403)
-        accounts = D.query("SELECT * FROM accounts ORDER BY id")
+        me = current_user()
+        if request.method == "POST":
+            action = request.form.get("action")
+            # Flow 2 — Admin creates a user (new isolated workspace).
+            if action == "create_user":
+                name = request.form.get("name", "").strip()
+                email = request.form.get("email", "").strip().lower()
+                pw = request.form.get("password", "")
+                plan = request.form.get("plan", "Free")
+                role = request.form.get("role", "User")
+                status = request.form.get("status", "active")
+                if not (name and email and len(pw) >= 6):
+                    flash("Name, email and a 6+ char password are required.", "error")
+                elif D.query("SELECT 1 FROM users WHERE email=?", (email,), one=True):
+                    flash("A user with that email already exists.", "error")
+                else:
+                    # Admin/Super Admin roles get an admin-flagged workspace.
+                    admin_flag = 1 if role in ("Admin", "Super Admin") else 0
+                    acct_id = D.execute(
+                        "INSERT INTO accounts (name, plan, credits, is_admin, created_at)"
+                        " VALUES (?,?,?,?,?)",
+                        (f"{name}'s Workspace", plan, PLAN_CREDITS.get(plan, 1000),
+                         admin_flag, D.now()))
+                    h = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+                    D.execute(
+                        "INSERT INTO users (account_id, email, name, pw_hash, role, status,"
+                        " verified, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                        (acct_id, email, name, h, role, status, 1, D.now()))
+                    D.seed_demo(acct_id, email)
+                    D.log_activity(me["account_id"], me["email"],
+                                   f"Created user {email} ({role}, {plan})")
+                    # "User Receives Welcome Email" — surfaced here (no outbound mail).
+                    flash(f"User {email} created. Welcome email would be sent with "
+                          f"login details (plan: {plan}, role: {role}).", "success")
+            elif action == "suspend":
+                D.execute("UPDATE users SET status='suspended', session_token=NULL"
+                          " WHERE id=?", (request.form.get("id"),))
+                flash("User suspended.", "success")
+            elif action == "activate":
+                D.execute("UPDATE users SET status='active' WHERE id=?",
+                          (request.form.get("id"),))
+                flash("User reactivated.", "success")
+            elif action == "set_plan":
+                uid = request.form.get("id")
+                plan = request.form.get("plan", "Free")
+                tgt = D.query("SELECT account_id FROM users WHERE id=?", (uid,), one=True)
+                if tgt:
+                    D.execute("UPDATE accounts SET plan=?, credits=? WHERE id=?",
+                              (plan, PLAN_CREDITS.get(plan, 1000), tgt["account_id"]))
+                    flash(f"Plan changed to {plan}.", "success")
+            elif action == "set_role":
+                D.execute("UPDATE users SET role=? WHERE id=?",
+                          (request.form.get("role", "User"), request.form.get("id")))
+                flash("Role updated.", "success")
+            elif action == "make_admin" and is_superadmin():
+                tgt = D.query("SELECT account_id FROM users WHERE id=?",
+                              (request.form.get("id"),), one=True)
+                if tgt:
+                    D.execute("UPDATE accounts SET is_admin=1 WHERE id=?",
+                              (tgt["account_id"],))
+                    D.execute("UPDATE users SET role='Admin' WHERE id=?",
+                              (request.form.get("id"),))
+                    flash("User promoted to Admin.", "success")
+            return redirect(url_for("admin"))
+
         totals = {
             "tenants": D.query("SELECT COUNT(*) c FROM accounts", (), one=True)["c"],
             "users": D.query("SELECT COUNT(*) c FROM users", (), one=True)["c"],
+            "active": D.query("SELECT COUNT(*) c FROM users WHERE status='active'", (),
+                              one=True)["c"],
             "campaigns": D.query("SELECT COUNT(*) c FROM campaigns", (), one=True)["c"],
-            "verifications": D.query("SELECT COUNT(*) c FROM verifications", (),
-                                     one=True)["c"],
             "revenue": D.query("SELECT COALESCE(SUM(amount),0) s FROM invoices", (),
                                one=True)["s"],
         }
-        # per-tenant rollups
-        rows = []
-        for a in accounts:
-            users = D.query("SELECT COUNT(*) c FROM users WHERE account_id=?",
-                            (a["id"],), one=True)["c"]
-            camps = D.query("SELECT COUNT(*) c FROM campaigns WHERE account_id=?",
-                            (a["id"],), one=True)["c"]
-            rows.append({"acct": a, "users": users, "campaigns": camps})
+        users = D.query(
+            "SELECT u.*, a.name acct_name, a.plan plan FROM users u"
+            " JOIN accounts a ON a.id=u.account_id ORDER BY u.id")
         logins = D.query("SELECT * FROM login_history ORDER BY id DESC LIMIT 20")
-        return render_template("admin.html", rows=rows, totals=totals, logins=logins)
+        return render_template("admin.html", users=users, totals=totals, logins=logins,
+                               plans=list(PLAN_CREDITS.keys()),
+                               roles=["Super Admin", "Admin", "Manager", "User"],
+                               can_super=is_superadmin())
 
     # ---- Enterprise modules + generic scaffold --------------------------- #
     @app.route("/enterprise")

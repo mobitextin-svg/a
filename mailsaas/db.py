@@ -255,6 +255,7 @@ _MIGRATIONS = [
     ("users", "reset_expires", "TEXT"),
     ("users", "totp_secret", "TEXT"),
     ("users", "session_token", "TEXT"),
+    ("users", "status", "TEXT NOT NULL DEFAULT 'active'"),  # active / suspended
 ]
 
 
