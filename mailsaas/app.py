@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover
 from . import db as D
 from . import ai
 from . import deliverability as DELIV
-from .nav import NAV, NAV_BY_KEY
+from .nav import NAV, NAV_BY_KEY, NAV_GROUPS
 from .verify import verify_email, verify_bulk
 
 
@@ -138,6 +138,8 @@ def register_context(app):
     def inject():
         return {
             "NAV": NAV,
+            "NAV_GROUPS": NAV_GROUPS,
+            "NAV_BY_KEY": NAV_BY_KEY,
             "user": current_user(),
             "account": current_account(),
             "active": request.path.strip("/").split("/")[0] or "dashboard",

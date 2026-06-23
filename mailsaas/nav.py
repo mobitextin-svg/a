@@ -331,3 +331,24 @@ NAV = [
 
 # Quick lookup by key.
 NAV_BY_KEY = {m["key"]: m for m in NAV}
+
+# --------------------------------------------------------------------------- #
+#  Grouped navigation — how the sidebar is organised into sections.
+#  Each group is (section label, [module keys in order]).  An empty label
+#  renders with no header (used for the standalone Dashboard link).
+# --------------------------------------------------------------------------- #
+
+NAV_GROUPS = [
+    ("", ["dashboard"]),
+    ("📧 Marketing", ["sender", "campaigns", "contacts", "templates", "landing",
+                      "automation"]),
+    ("🛡️ Deliverability", ["verification", "deliverability", "finder", "domains",
+                           "warmup"]),
+    ("⚙️ Infrastructure", ["smtp", "pools", "queue", "monitoring"]),
+    ("🤖 AI", ["ai"]),
+    ("📊 Analytics", ["reports"]),
+    ("👨‍💻 Developers", ["api", "integrations"]),
+    ("🏢 Administration", ["billing", "team", "whitelabel", "enterprise",
+                          "notifications", "support", "settings"]),
+]
+

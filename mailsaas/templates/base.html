@@ -19,15 +19,19 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">📨 Mail<span class="dot">SaaS</span></div>
-    {% for m in NAV %}
-      {% if m.key in endpoints %}
-        {% set href = url_for(endpoints[m.key]) %}
-      {% else %}
-        {% set href = url_for('module_page', key=m.key) %}
-      {% endif %}
-      <a class="nav-link {{ 'active' if active == m.key else '' }}" href="{{ href }}">
-        <span class="ic">{{ m.icon }}</span><span>{{ m.label }}</span>
-      </a>
+    {% for label, keys in NAV_GROUPS %}
+      {% if label %}<div class="group-label">{{ label }}</div>{% endif %}
+      {% for key in keys %}
+        {% set m = NAV_BY_KEY[key] %}
+        {% if key in endpoints %}
+          {% set href = url_for(endpoints[key]) %}
+        {% else %}
+          {% set href = url_for('module_page', key=key) %}
+        {% endif %}
+        <a class="nav-link {{ 'active' if active == key else '' }}" href="{{ href }}">
+          <span class="ic">{{ m.icon }}</span><span>{{ m.label }}</span>
+        </a>
+      {% endfor %}
     {% endfor %}
   </aside>
 
