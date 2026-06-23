@@ -7,6 +7,26 @@
 <h1>Welcome back, {{ user.name.split(' ')[0] }} 👋</h1>
 <p class="muted">Here's what's happening across {{ account.name }}.</p>
 
+{% if onboarding.done < onboarding.total %}
+<div class="card" style="border-color:var(--brand)">
+  <div class="section-head">
+    <h2>🚀 Get started — {{ onboarding.done }}/{{ onboarding.total }} complete</h2>
+    <span class="pill"><b>{{ onboarding.pct }}%</b></span>
+  </div>
+  <div class="meter" style="margin-bottom:14px"><i style="width:{{ onboarding.pct }}%"></i></div>
+  <div class="feature-grid">
+    {% for label, ok, href, icon in onboarding.steps %}
+      <a class="feature" href="{{ href }}" style="text-decoration:none;display:flex;gap:10px;align-items:center;
+         {{ 'opacity:.55' if ok else '' }}">
+        <span style="font-size:1.3rem">{{ '✅' if ok else icon }}</span>
+        <div><h4 style="margin:0">{{ label }}</h4>
+          <p style="margin:0">{{ 'Done' if ok else 'Pending →' }}</p></div>
+      </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="grid g4" style="margin-top:18px">
   <div class="stat"><div class="k">Contacts</div><div class="v">{{ '{:,}'.format(stats.contacts) }}</div><div class="trend up">▲ healthy list</div></div>
   <div class="stat"><div class="k">Campaigns</div><div class="v">{{ stats.campaigns }}</div><div class="trend up">▲ {{ deliver.sent|int }} emails sent</div></div>

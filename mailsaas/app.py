@@ -185,6 +185,25 @@ def _csrf_token():
     return session["_csrf"]
 
 
+# In-memory sliding-window rate limiter. Fine for a single process; in the
+# multi-process production topology back this with Redis (see PRODUCTION.md).
+_RL_BUCKETS = {}
+
+
+def rate_limit(key, limit, window=60):
+    """Return True if the action is allowed, False if the limit is exceeded."""
+    import time
+    now = time.time()
+    bucket = [t for t in _RL_BUCKETS.get(key, ()) if now - t < window]
+    bucket.append(now)
+    _RL_BUCKETS[key] = bucket
+    # Opportunistic cleanup so the dict doesn't grow unbounded.
+    if len(_RL_BUCKETS) > 5000:
+        for k in [k for k, v in _RL_BUCKETS.items() if not v or now - v[-1] > window]:
+            _RL_BUCKETS.pop(k, None)
+    return len(bucket) <= limit
+
+
 def register_security(app):
     @app.before_request
     def _enforce():
@@ -387,6 +406,11 @@ def register_auth(app):
         if current_user():
             return redirect(url_for("dashboard"))
         if request.method == "POST":
+            # Throttle brute-force attempts per IP.
+            if not app.config.get("TESTING") and not rate_limit(
+                    f"login:{request.remote_addr}", limit=10, window=60):
+                flash("Too many attempts. Please wait a minute and try again.", "error")
+                return render_template("login.html"), 429
             email = request.form.get("email", "").strip().lower()
             pw = request.form.get("password", "")
             u = D.query("SELECT * FROM users WHERE email=?", (email,), one=True)
@@ -512,9 +536,28 @@ def register_modules(app):
                                "campaign at the AI-predicted best time.")
         # 7-day sparkline (stable synthetic trend off real totals)
         spark = [max(2, int((sent or 1000) / 30 * (0.6 + 0.1 * i))) for i in range(7)]
+        # Onboarding checklist — each step reflects real account state.
+        u = current_user()
+        has_key = D.query("SELECT 1 FROM api_keys WHERE account_id=? LIMIT 1", (aid,),
+                          one=True) is not None
+        team_n = D.query("SELECT COUNT(*) c FROM users WHERE account_id=?", (aid,),
+                         one=True)["c"]
+        steps = [
+            ("Verify your email", bool(u["verified"]), url_for("settings"), "📧"),
+            ("Turn on two-factor auth", bool(u["twofa"]), url_for("settings"), "🔒"),
+            ("Create an API key", has_key, url_for("api_keys"), "🔌"),
+            ("Verify your first emails", stats["verifications"] > 4,
+             url_for("verification"), "✅"),
+            ("Invite a teammate", team_n > 1, url_for("team"), "🧑‍🤝‍🧑"),
+            ("Upgrade your plan", acct["plan"] != "Free", url_for("billing"), "🚀"),
+        ]
+        done = sum(1 for _, ok, _, _ in steps if ok)
+        onboarding = {"steps": steps, "done": done, "total": len(steps),
+                      "pct": round(100 * done / len(steps))}
         return render_template("dashboard.html", stats=stats, deliver=deliver,
                                activity=activity, campaigns=campaigns, tiles=tiles,
-                               suggestions=suggestions, spark=spark)
+                               suggestions=suggestions, spark=spark,
+                               onboarding=onboarding)
 
     # ---- Email Verification --------------------------------------------- #
     @app.route("/verification", methods=["GET", "POST"])
@@ -640,17 +683,34 @@ def register_modules(app):
                           "success")
             return redirect(url_for("contacts"))
         status_filter = request.args.get("status")
+        q = request.args.get("q", "").strip()
+        per_page = 25
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+        except ValueError:
+            page = 1
+        where = "account_id=?"
+        args = [aid]
         if status_filter:
-            rows = D.query("SELECT * FROM contacts WHERE account_id=? AND status=?"
-                           " ORDER BY id DESC", (aid, status_filter))
-        else:
-            rows = D.query("SELECT * FROM contacts WHERE account_id=? ORDER BY id DESC", (aid,))
+            where += " AND status=?"
+            args.append(status_filter)
+        if q:
+            where += " AND (email LIKE ? OR name LIKE ?)"
+            args += [f"%{q}%", f"%{q}%"]
+        total = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {where}", args,
+                        one=True)["c"]
+        pages = max(1, (total + per_page - 1) // per_page)
+        page = min(page, pages)
+        rows = D.query(
+            f"SELECT * FROM contacts WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            args + [per_page, (page - 1) * per_page])
         counts = D.query(
             "SELECT status, COUNT(*) c FROM contacts WHERE account_id=? GROUP BY status", (aid,))
         counts = {r["status"]: r["c"] for r in counts}
         lists = D.query("SELECT * FROM contact_lists WHERE account_id=?", (aid,))
         return render_template("contacts.html", contacts=rows, counts=counts,
-                               lists=lists, status_filter=status_filter)
+                               lists=lists, status_filter=status_filter, q=q,
+                               page=page, pages=pages, total=total)
 
     @app.route("/contacts/export")
     @login_required
@@ -1381,8 +1441,12 @@ def register_api(app):
 
     @app.route("/api/v1/verify")
     def api_verify():
-        if _auth_account() is None:
+        acct = _auth_account()
+        if acct is None:
             return jsonify({"error": "invalid or missing api key"}), 401
+        # Per-account API rate limit (60 req/min).
+        if not rate_limit(f"apiverify:{acct}", limit=60, window=60):
+            return jsonify({"error": "rate limit exceeded", "retry_after": 60}), 429
         email = request.args.get("email", "")
         if not email:
             return jsonify({"error": "email parameter required"}), 400

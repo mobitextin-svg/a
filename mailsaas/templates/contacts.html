@@ -37,9 +37,16 @@
 </div>
 
 <div class="card">
-  <div class="section-head"><h2>{{ (status_filter or 'All')|capitalize }} contacts</h2>
-    <form class="inline-form" method="post"><input type="hidden" name="action" value="dedupe">
-      <button class="btn ghost sm">🧹 Remove duplicates</button></form>
+  <div class="section-head"><h2>{{ (status_filter or 'All')|capitalize }} contacts
+      <span class="faint small">({{ '{:,}'.format(total) }})</span></h2>
+    <div class="row" style="flex:0;gap:8px">
+      <form method="get" class="inline-form">
+        {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+        <input name="q" value="{{ q }}" placeholder="Search email or name…" style="width:220px">
+      </form>
+      <form class="inline-form" method="post"><input type="hidden" name="action" value="dedupe">
+        <button class="btn ghost sm">🧹 Remove duplicates</button></form>
+    </div>
   </div>
   <table>
     <thead><tr><th>Email</th><th>Name</th><th>Tags</th><th>Status</th><th></th></tr></thead>
@@ -64,9 +71,19 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="empty">No contacts in this view.</td></tr>
+      <tr><td colspan="5" class="empty">{{ 'No contacts match your search.' if q else 'No contacts in this view.' }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  {% if pages > 1 %}
+  <div class="section-head" style="margin-top:12px">
+    <span class="faint small">Page {{ page }} of {{ pages }} · {{ '{:,}'.format(total) }} contacts</span>
+    <div class="row" style="flex:0;gap:6px">
+      {% set base = url_for('contacts') + '?' + ('status=' + status_filter + '&' if status_filter else '') + ('q=' + q + '&' if q else '') %}
+      {% if page > 1 %}<a class="btn ghost sm" href="{{ base }}page={{ page-1 }}">← Prev</a>{% endif %}
+      {% if page < pages %}<a class="btn ghost sm" href="{{ base }}page={{ page+1 }}">Next →</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

@@ -239,6 +239,15 @@ CREATE TABLE IF NOT EXISTS login_history (
     ok           INTEGER NOT NULL DEFAULT 1,
     created_at   TEXT NOT NULL
 );
+
+-- Indexes for fast tenant-scoped queries on large datasets.
+CREATE INDEX IF NOT EXISTS idx_contacts_acct       ON contacts(account_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_acct_email ON contacts(account_id, email);
+CREATE INDEX IF NOT EXISTS idx_contacts_acct_status ON contacts(account_id, status);
+CREATE INDEX IF NOT EXISTS idx_verif_acct          ON verifications(account_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_acct      ON campaigns(account_id);
+CREATE INDEX IF NOT EXISTS idx_users_acct          ON users(account_id);
+CREATE INDEX IF NOT EXISTS idx_login_acct          ON login_history(account_id);
 """
 
 # Idempotent column additions for accounts that predate these features.

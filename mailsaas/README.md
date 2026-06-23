@@ -13,6 +13,13 @@ modules.
 > (`Dockerfile`, `docker-compose.yml`, `deploy/nginx.conf`, `wsgi.py`,
 > `tasks.py`). Run it with `docker compose up --build`.
 
+📖 Full usage guide: **[DOCUMENTATION.md](DOCUMENTATION.md)**
+
+### Performance & UX
+- Server-side **pagination + indexed search** for large contact lists (25/page)
+- DB indexes on every tenant-scoped table · guided **onboarding checklist** on the dashboard
+- **Rate limiting**: login 10/min per IP · API 60/min per key (HTTP 429)
+
 ### Security & Authentication
 - **Email verification** on signup · **password reset** (tokenised, 1h expiry)
 - **Real TOTP 2FA** (RFC 6238, stdlib-only — works with Google Authenticator/Authy/1Password)
