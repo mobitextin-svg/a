@@ -34,6 +34,7 @@ except ImportError:  # pragma: no cover
 from . import db as D
 from . import ai
 from . import totp
+from . import tasks
 from . import deliverability as DELIV
 from .nav import NAV, NAV_BY_KEY, NAV_GROUPS
 from .verify import verify_email, verify_bulk
@@ -107,16 +108,83 @@ def _system_metrics():
     }
 
 
+def _deliver_email(to, subject, body):
+    """Send a transactional email when SMTP is configured; otherwise log it to
+    the server console (dev). Crucially, callers never echo the contents to a
+    user's browser, so reset/verification links can't be harvested by anyone
+    who merely types in someone else's email address."""
+    host = os.environ.get("MAILSAAS_SMTP_HOST")
+    if host:
+        try:
+            import smtplib
+            from email.message import EmailMessage
+            msg = EmailMessage()
+            msg["From"] = os.environ.get("MAILSAAS_SMTP_FROM", "no-reply@mailsaas.io")
+            msg["To"] = to
+            msg["Subject"] = subject
+            msg.set_content(body)
+            with smtplib.SMTP(host, int(os.environ.get("MAILSAAS_SMTP_PORT", "587"))) as s:
+                user = os.environ.get("MAILSAAS_SMTP_USER")
+                if user:
+                    s.starttls()
+                    s.login(user, os.environ.get("MAILSAAS_SMTP_PASS", ""))
+                s.send_message(msg)
+            return True
+        except Exception as e:  # noqa: BLE001
+            print(f"[mailer] send failed: {type(e).__name__}: {e}", flush=True)
+            return False
+    # Dev fallback: log to stdout (visible to the operator, not to end users).
+    print(f"\n[DEV EMAIL] to={to}\n  subject: {subject}\n  {body}\n", flush=True)
+    return False
+
+
+def _is_public_host(host):
+    """True only if every resolved address for `host` is a routable public IP.
+    Blocks SSRF to loopback / private / link-local / cloud-metadata ranges."""
+    import socket
+    import ipaddress
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return False
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return False
+    return True
+
+
 def _fire_webhook(url):
-    """Attempt a real test POST to a webhook URL; degrade gracefully offline."""
+    """Attempt a real test POST to a webhook URL; degrade gracefully offline.
+    Hardened against SSRF: https/http only, public hosts only, no redirects."""
     import json as _j
     import urllib.request
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return "failed: invalid url"
+    if not _is_public_host(parsed.hostname):
+        return "blocked: non-public host (SSRF protection)"
+
     payload = _j.dumps({"event": "test", "service": "mailsaas",
                         "timestamp": D.now()}).encode()
+
+    # Opener with NO redirect following (a 30x could bounce to an internal host).
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+
+    opener = urllib.request.build_opener(_NoRedirect)
     try:
         req = urllib.request.Request(url, data=payload,
                                      headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=4) as resp:
+        with opener.open(req, timeout=4) as resp:
             return f"{resp.status} {resp.reason}"
     except Exception as e:  # noqa: BLE001 - report any failure to the UI
         return f"failed: {type(e).__name__}"
@@ -364,6 +432,11 @@ def register_auth(app):
     @app.route("/forgot", methods=["GET", "POST"])
     def forgot():
         if request.method == "POST":
+            # Rate-limit reset requests per IP to slow abuse.
+            if not app.config.get("TESTING") and not rate_limit(
+                    f"forgot:{request.remote_addr}", limit=5, window=300):
+                flash("Too many requests. Please try again later.", "error")
+                return render_template("forgot.html"), 429
             email = request.form.get("email", "").strip().lower()
             u = D.query("SELECT * FROM users WHERE email=?", (email,), one=True)
             if u:
@@ -372,11 +445,14 @@ def register_auth(app):
                     "%Y-%m-%d %H:%M:%S")
                 D.execute("UPDATE users SET reset_token=?, reset_expires=? WHERE id=?",
                           (token, expires, u["id"]))
-                link = url_for("reset", token=token, _external=False)
-                # Dev: show the link. Production: email it.
-                flash("Password reset link (valid 1h): " + link, "success")
-            else:
-                flash("If that email exists, a reset link has been sent.", "success")
+                link = url_for("reset", token=token, _external=True)
+                # The link is EMAILED (or logged server-side in dev) — never shown
+                # to the requester's browser, since they may not own this address.
+                _deliver_email(email, "Reset your MailSaaS password",
+                               f"Use this link within 1 hour to reset your password:\n\n{link}")
+            # Always identical response → no account enumeration.
+            flash("If an account exists for that email, a reset link has been sent.",
+                  "success")
             return redirect(url_for("login"))
         return render_template("forgot.html")
 
@@ -580,8 +656,27 @@ def register_modules(app):
                 D.log_activity(acct["id"], current_user()["email"],
                                f"Verified {result['email']} → {result['result']}")
             elif mode == "bulk":
+                import re as _re
                 blob = request.form.get("emails", "")
-                bulk_results = verify_bulk(blob)
+                tokens = [t for t in _re.split(r"[\s,;]+", blob.strip()) if t]
+                # Protect the web worker: verify a bounded batch inline; anything
+                # larger is dispatched to the background queue (Celery in prod,
+                # inline in dev) instead of blocking the request for minutes.
+                INLINE_CAP = 100
+                if len(tokens) > INLINE_CAP:
+                    if tasks.HAVE_CELERY:
+                        tasks.enqueue(tasks.verify_bulk_async, acct["id"], tokens)
+                        D.log_activity(acct["id"], current_user()["email"],
+                                       f"Queued bulk verification of {len(tokens)} addresses")
+                        flash(f"{len(tokens):,} addresses queued for background "
+                              f"verification. Showing the first {INLINE_CAP} inline.",
+                              "success")
+                    else:
+                        flash(f"Large lists ({len(tokens):,}) need a background worker. "
+                              f"Verifying the first {INLINE_CAP} now — use the API or "
+                              f"enable Celery for the rest.", "error")
+                    tokens = tokens[:INLINE_CAP]
+                bulk_results = verify_bulk("\n".join(tokens))
                 for r in bulk_results:
                     D.execute(
                         "INSERT INTO verifications (account_id, email, result, score, reason,"
@@ -1310,6 +1405,29 @@ def register_modules(app):
         if not is_admin_user():
             abort(403)
         me = current_user()
+
+        # --- Authorization helpers -------------------------------------- #
+        # Super admins may manage anyone and assign any role; regular admins
+        # may only manage non-admin users and assign non-elevated roles, and
+        # may never act on themselves (prevents self-escalation / self-lockout).
+        def assignable_roles():
+            return (["Super Admin", "Admin", "Manager", "User"] if is_superadmin()
+                    else ["Manager", "User"])
+
+        def get_target(uid):
+            return D.query(
+                "SELECT u.*, a.is_admin AS acct_admin FROM users u"
+                " JOIN accounts a ON a.id = u.account_id WHERE u.id = ?",
+                (uid,), one=True)
+
+        def can_manage(tgt):
+            if not tgt:
+                return False
+            if is_superadmin():
+                return True
+            # A regular admin cannot manage admin/super workspaces or itself.
+            return not tgt["acct_admin"] and tgt["id"] != me["id"]
+
         if request.method == "POST":
             action = request.form.get("action")
             # Flow 2 — Admin creates a user (new isolated workspace).
@@ -1320,7 +1438,9 @@ def register_modules(app):
                 plan = request.form.get("plan", "Free")
                 role = request.form.get("role", "User")
                 status = request.form.get("status", "active")
-                if not (name and email and len(pw) >= 6):
+                if role not in assignable_roles():
+                    flash("You're not allowed to assign that role.", "error")
+                elif not (name and email and len(pw) >= 6):
                     flash("Name, email and a 6+ char password are required.", "error")
                 elif D.query("SELECT 1 FROM users WHERE email=?", (email,), one=True):
                     flash("A user with that email already exists.", "error")
@@ -1344,25 +1464,41 @@ def register_modules(app):
                     flash(f"User {email} created. Welcome email would be sent with "
                           f"login details (plan: {plan}, role: {role}).", "success")
             elif action == "suspend":
-                D.execute("UPDATE users SET status='suspended', session_token=NULL"
-                          " WHERE id=?", (request.form.get("id"),))
-                flash("User suspended.", "success")
+                tgt = get_target(request.form.get("id"))
+                if not can_manage(tgt):
+                    flash("You're not allowed to manage that user.", "error")
+                else:
+                    D.execute("UPDATE users SET status='suspended', session_token=NULL"
+                              " WHERE id=?", (tgt["id"],))
+                    flash("User suspended.", "success")
             elif action == "activate":
-                D.execute("UPDATE users SET status='active' WHERE id=?",
-                          (request.form.get("id"),))
-                flash("User reactivated.", "success")
+                tgt = get_target(request.form.get("id"))
+                if not can_manage(tgt):
+                    flash("You're not allowed to manage that user.", "error")
+                else:
+                    D.execute("UPDATE users SET status='active' WHERE id=?", (tgt["id"],))
+                    flash("User reactivated.", "success")
             elif action == "set_plan":
-                uid = request.form.get("id")
+                tgt = get_target(request.form.get("id"))
                 plan = request.form.get("plan", "Free")
-                tgt = D.query("SELECT account_id FROM users WHERE id=?", (uid,), one=True)
-                if tgt:
+                if not can_manage(tgt):
+                    flash("You're not allowed to manage that user.", "error")
+                elif plan not in PLAN_CREDITS:
+                    flash("Unknown plan.", "error")
+                else:
                     D.execute("UPDATE accounts SET plan=?, credits=? WHERE id=?",
-                              (plan, PLAN_CREDITS.get(plan, 1000), tgt["account_id"]))
+                              (plan, PLAN_CREDITS[plan], tgt["account_id"]))
                     flash(f"Plan changed to {plan}.", "success")
             elif action == "set_role":
-                D.execute("UPDATE users SET role=? WHERE id=?",
-                          (request.form.get("role", "User"), request.form.get("id")))
-                flash("Role updated.", "success")
+                tgt = get_target(request.form.get("id"))
+                role = request.form.get("role", "User")
+                if not can_manage(tgt):
+                    flash("You're not allowed to manage that user.", "error")
+                elif role not in assignable_roles():
+                    flash("You're not allowed to assign that role.", "error")
+                else:
+                    D.execute("UPDATE users SET role=? WHERE id=?", (role, tgt["id"]))
+                    flash("Role updated.", "success")
             elif action == "make_admin" and is_superadmin():
                 tgt = D.query("SELECT account_id FROM users WHERE id=?",
                               (request.form.get("id"),), one=True)
