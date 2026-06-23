@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Webhooks{% endblock %}
+{% block content %}
+<h1>🪝 Webhooks</h1>
+<p class="muted">Get real-time event notifications pushed to your endpoints — at-least-once delivery.</p>
+
+<div class="card" style="margin-top:14px">
+  <h2>Add endpoint</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="create">
+    <label>Endpoint URL</label>
+    <input name="url" placeholder="https://yourapp.com/webhooks/mailsaas" required>
+    <label>Events to subscribe</label>
+    <div class="row" style="flex-wrap:wrap">
+      {% for ev in all_events %}
+      <label style="display:flex;align-items:center;gap:6px;flex:0 0 auto">
+        <input type="checkbox" name="events" value="{{ ev }}" style="width:auto" {{ 'checked' if ev in ['Delivered','Bounce'] }}> {{ ev }}</label>
+      {% endfor %}
+    </div>
+    <div style="margin-top:12px"><button class="btn">Add webhook</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Your endpoints</h2>
+  <table>
+    <thead><tr><th>URL</th><th>Events</th><th>Status</th><th class="num">Deliveries</th><th>Last</th><th></th></tr></thead>
+    <tbody>
+    {% for w in hooks %}
+      <tr>
+        <td class="small"><b>{{ w.url }}</b><div class="faint small">secret {{ w.secret[:12] }}…</div></td>
+        <td>{% for e in w.events.split(',') %}<span class="tag">{{ e }}</span>{% endfor %}</td>
+        <td><span class="badge {{ 'b-valid' if w.active else 'b-invalid' }}">{{ 'active' if w.active else 'paused' }}</span></td>
+        <td class="num">{{ '{:,}'.format(w.deliveries) }}</td>
+        <td class="faint small">{{ w.last_status or '—' }}</td>
+        <td class="num">
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="test">
+            <input type="hidden" name="id" value="{{ w.id }}"><button class="btn ghost sm">Test</button></form>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="toggle">
+            <input type="hidden" name="id" value="{{ w.id }}"><button class="btn ghost sm">{{ 'Pause' if w.active else 'Resume' }}</button></form>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="{{ w.id }}"><button class="btn danger sm">Delete</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No webhook endpoints yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Example payload</h2>
+  <div class="code">POST {your endpoint}
+X-MailSaaS-Signature: sha256=…
+Content-Type: application/json
+
+{
+  "event": "Delivered",
+  "email": "user@example.com",
+  "campaign_id": 42,
+  "timestamp": "2026-06-23T10:00:00Z"
+}</div>
+</div>
+{% endblock %}

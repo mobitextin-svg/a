@@ -217,7 +217,47 @@ CREATE TABLE IF NOT EXISTS landing_pages (
     submissions  INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS webhooks (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    url          TEXT NOT NULL,
+    events       TEXT NOT NULL,                    -- comma list of event names
+    secret       TEXT,
+    active       INTEGER NOT NULL DEFAULT 1,
+    last_status  TEXT,
+    deliveries   INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS login_history (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    user_email   TEXT NOT NULL,
+    ip           TEXT,
+    agent        TEXT,
+    ok           INTEGER NOT NULL DEFAULT 1,
+    created_at   TEXT NOT NULL
+);
 """
+
+# Idempotent column additions for accounts that predate these features.
+_MIGRATIONS = [
+    ("accounts", "gst_number", "TEXT"),
+    ("accounts", "auto_renew", "INTEGER NOT NULL DEFAULT 1"),
+    ("accounts", "payment_provider", "TEXT NOT NULL DEFAULT 'Stripe'"),
+    ("accounts", "coupon", "TEXT"),
+    ("accounts", "is_admin", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def _migrate():
+    db = get_db()
+    for table, col, decl in _MIGRATIONS:
+        cols = [r["name"] for r in db.execute(f"PRAGMA table_info({table})")]
+        if col not in cols:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    db.commit()
 
 
 def log_activity(account_id, actor, action):
@@ -231,6 +271,7 @@ def init_db():
     db = get_db()
     db.executescript(SCHEMA)
     db.commit()
+    _migrate()
 
 
 def seed_demo(account_id, user_email):
@@ -348,4 +389,14 @@ def seed_demo(account_id, user_email):
             "INSERT INTO landing_pages (account_id, name, slug, status, views, submissions,"
             " created_at) VALUES (?,?,?,?,?,?,?)",
             (account_id, name, slug, status, views, subs, n))
+    # webhook endpoint
+    execute(
+        "INSERT INTO webhooks (account_id, url, events, secret, active, last_status,"
+        " deliveries, created_at) VALUES (?,?,?,?,?,?,?,?)",
+        (account_id, "https://example.com/webhooks/mailsaas",
+         "Delivered,Opened,Clicked,Bounce", "whsec_" + str(account_id) + "demo",
+         1, "200 OK", 18420, n))
+    # the very first account on the platform is the super-admin
+    if account_id == 1:
+        execute("UPDATE accounts SET is_admin=1 WHERE id=1")
     log_activity(account_id, user_email, "Account created and demo data seeded")

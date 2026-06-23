@@ -4,9 +4,10 @@
 <h1>📥 Email Queue Manager</h1>
 <p class="muted">Live view of the sending pipeline — pending, processing, retries &amp; the dead queue.</p>
 
-<div class="grid g3" style="margin-top:14px">
-  <div class="stat"><div class="k">Throughput</div><div class="v">{{ throughput }}</div><div class="trend up">▲ nominal</div></div>
-  <div class="stat"><div class="k">In queue</div><div class="v">{{ '{:,}'.format(states.Pending + states.Processing) }}</div></div>
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Speed</div><div class="v">{{ live.speed }}<span class="unit">/sec</span></div><div class="trend up">▲ {{ throughput }}</div></div>
+  <div class="stat"><div class="k">Remaining</div><div class="v">{{ '{:,}'.format(live.remaining) }}</div></div>
+  <div class="stat"><div class="k">ETA</div><div class="v">{{ live.eta }}</div></div>
   <div class="stat"><div class="k">Dead queue</div><div class="v" style="color:var(--bad)">{{ states['Dead Queue'] }}</div></div>
 </div>
 

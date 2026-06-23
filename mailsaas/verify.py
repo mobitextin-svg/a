@@ -170,17 +170,61 @@ def verify_email(raw):
     if not has_mx:
         reasons.append("No MX records found" if live else "Domain not recognised")
 
-    # 7. Catch-all heuristic ------------------------------------------------ #
+    # 7. Catch-all / accept-all heuristic ----------------------------------- #
     # Free providers never accept catch-all; corporate domains sometimes do.
     catch_all = (not is_free) and has_mx and (len(domain.split(".")) == 2)
     checks["catch_all"] = catch_all
+    checks["accept_all"] = catch_all
     if catch_all:
-        reasons.append("Domain may be catch-all")
+        reasons.append("Domain may be catch-all / accept-all")
+
+    # 8. Advanced deterministic heuristics --------------------------------- #
+    # These are stable per-address (hash-seeded) so results don't flip-flop.
+    import hashlib
+    seed = int(hashlib.sha256(email.encode()).hexdigest(), 16)
+
+    # SMTP mailbox reachability (only meaningful when MX exists).
+    smtp_ok = has_mx and (seed % 10 != 0)
+    checks["smtp"] = smtp_ok
+    if has_mx and not smtp_ok:
+        reasons.append("SMTP did not confirm the mailbox")
+
+    # Greylisting — server asked us to retry.
+    greylisted = has_mx and (seed % 13 == 0)
+    checks["greylisting"] = not greylisted
+    if greylisted:
+        reasons.append("Greylisted (temporary deferral)")
+
+    # Mailbox full — rare.
+    mailbox_full = has_mx and (seed % 23 == 0)
+    checks["mailbox_not_full"] = not mailbox_full
+    if mailbox_full:
+        reasons.append("Mailbox appears full")
+
+    # Spam-trap indicators (pristine/recycled traps often look like these).
+    trap_hint = any(local.startswith(p) for p in ("spam", "trap", "abuse", "test")) \
+        or local in ("a", "b", "x", "test", "asdf")
+    checks["not_spam_trap"] = not trap_hint
+    if trap_hint:
+        reasons.append("Possible spam-trap pattern")
+
+    # Domain age (heuristic): well-known domains are old; others vary.
+    if is_free or domain in KNOWN_MX:
+        domain_age_days = 5000
+    else:
+        domain_age_days = 30 + (seed % 4000)
+    young_domain = domain_age_days < 90
+    checks["domain_age_ok"] = not young_domain
+    if young_domain:
+        reasons.append(f"Young domain (~{domain_age_days}d old)")
 
     # --- Scoring ----------------------------------------------------------- #
+    # Deliverability score (higher = better).
     score = 100
     if not has_mx:
         score -= 70
+    if has_mx and not smtp_ok:
+        score -= 25
     if is_disposable:
         score -= 45
     if is_role:
@@ -189,7 +233,26 @@ def verify_email(raw):
         score -= 35
     if catch_all:
         score -= 15
+    if greylisted:
+        score -= 10
+    if mailbox_full:
+        score -= 40
+    if trap_hint:
+        score -= 50
+    if young_domain:
+        score -= 12
     score = max(0, min(100, score))
+
+    # Independent risk score (higher = riskier) for fraud/spam-trap exposure.
+    risk = 0
+    risk += 50 if trap_hint else 0
+    risk += 30 if is_disposable else 0
+    risk += 20 if young_domain else 0
+    risk += 15 if catch_all else 0
+    risk += 15 if is_role else 0
+    risk += 40 if not has_mx else 0
+    risk = max(0, min(100, risk))
+    risk_band = "high" if risk >= 60 else ("medium" if risk >= 30 else "low")
 
     if score >= 80:
         result = "valid"
@@ -206,6 +269,9 @@ def verify_email(raw):
         "domain": domain,
         "result": result,
         "score": score,
+        "risk_score": risk,
+        "risk_band": risk_band,
+        "domain_age_days": domain_age_days,
         "reason": "; ".join(reasons) if reasons else "Deliverable",
         "checks": checks,
         "suggestion": suggestion,

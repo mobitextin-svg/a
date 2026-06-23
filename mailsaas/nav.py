@@ -213,6 +213,26 @@ NAV = [
         ],
     },
     {
+        "key": "webhooks", "label": "Webhooks", "icon": "🪝", "built": True,
+        "items": [
+            ("Delivered", "Message accepted by recipient server"),
+            ("Opened", "Recipient opened the email"),
+            ("Clicked", "Recipient clicked a link"),
+            ("Bounce", "Hard or soft bounce"),
+            ("Spam", "Marked as spam / complaint"),
+            ("Unsubscribe", "Recipient opted out"),
+        ],
+    },
+    {
+        "key": "admin", "label": "Admin Panel", "icon": "🛡️", "built": True,
+        "items": [
+            ("Tenants", "All companies on the platform"),
+            ("Users", "Every user across tenants"),
+            ("Revenue", "Platform-wide billing"),
+            ("Login History", "Security audit across tenants"),
+        ],
+    },
+    {
         "key": "billing", "label": "Billing", "icon": "💳", "built": True,
         "items": [
             ("Plans", "Compare and upgrade"),
@@ -347,8 +367,8 @@ NAV_GROUPS = [
     ("⚙️ Infrastructure", ["smtp", "pools", "queue", "monitoring"]),
     ("🤖 AI", ["ai"]),
     ("📊 Analytics", ["reports"]),
-    ("👨‍💻 Developers", ["api", "integrations"]),
-    ("🏢 Administration", ["billing", "team", "whitelabel", "enterprise",
+    ("👨‍💻 Developers", ["api", "webhooks", "integrations"]),
+    ("🏢 Administration", ["admin", "billing", "team", "whitelabel", "enterprise",
                           "notifications", "support", "settings"]),
 ]
 

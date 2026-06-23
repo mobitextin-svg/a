@@ -199,6 +199,86 @@ def spam_score(subject, body):
 # --------------------------------------------------------------------------- #
 
 
+def generate_ctas(context="sign up"):
+    context = (context or "get started").strip().rstrip(".")
+    base = [
+        f"Get started — {context} now",
+        f"Yes, I want to {context}",
+        f"Claim your spot",
+        f"Start your free trial",
+        f"Show me how →",
+        f"Unlock {context} today",
+        f"Count me in",
+        f"See it in action",
+    ]
+    random.shuffle(base)
+    return base[:6]
+
+
+def ab_subjects(topic):
+    """Return two distinct subject-line variants for A/B testing."""
+    pool = generate_subjects(topic, n=6)
+    a = pool[0]
+    b = next((s for s in pool[1:] if s != a), pool[-1])
+    return {"A": a, "B": b,
+            "tip": "Send variant A to ~10% and B to ~10%; the winner goes to the rest."}
+
+
+_REWRITE = {
+    "shorter": lambda t: " ".join(t.split()[:max(8, len(t.split()) // 2)]) +
+    ("…" if len(t.split()) > 8 else ""),
+    "formal": lambda t: t.replace("Hi", "Dear").replace("Hey", "Dear")
+    .replace("!", ".").replace("👋", "").replace("🚀", ""),
+    "friendly": lambda t: ("Hey there! " + t).replace("Dear", "Hi"),
+    "urgent": lambda t: "⏰ " + t.rstrip(".") + " — but hurry, this won't last!",
+    "persuasive": lambda t: t.rstrip(".") + ". Thousands already made the switch — "
+    "don't get left behind.",
+}
+
+
+def rewrite(text, goal="shorter"):
+    fn = _REWRITE.get(goal, _REWRITE["shorter"])
+    return fn((text or "").strip())
+
+
+# Minimal localisation glossary for greeting / sign-off (honest "demo" translate;
+# wire _llm_complete for full-body translation).
+_GLOSSARY = {
+    "spanish": {"Hi": "Hola", "Hello": "Hola", "Thanks": "Gracias",
+                "The Team": "El Equipo", "Learn more": "Más información"},
+    "french": {"Hi": "Bonjour", "Hello": "Bonjour", "Thanks": "Merci",
+               "The Team": "L'équipe", "Learn more": "En savoir plus"},
+    "german": {"Hi": "Hallo", "Hello": "Hallo", "Thanks": "Danke",
+               "The Team": "Das Team", "Learn more": "Mehr erfahren"},
+    "hindi": {"Hi": "नमस्ते", "Hello": "नमस्ते", "Thanks": "धन्यवाद",
+              "The Team": "टीम", "Learn more": "और जानें"},
+}
+
+
+def translate(text, language="spanish"):
+    text = text or ""
+    glossary = _GLOSSARY.get(language.lower())
+    if not glossary:
+        return {"text": text, "note": "Unsupported language in the built-in glossary."}
+    out = text
+    for en, tr in glossary.items():
+        out = out.replace(en, tr)
+    return {"text": out,
+            "note": f"Greetings/sign-offs localised to {language.title()}. "
+                    "Enable the LLM for full-quality body translation."}
+
+
+def personalize(template, name="Alex", company="Acme", city="Austin"):
+    """Resolve merge tags + suggest dynamic blocks."""
+    template = template or "Hi {{name}}, we noticed {{company}} is based in {{city}}."
+    resolved = (template.replace("{{name}}", name).replace("{{company}}", company)
+                .replace("{{city}}", city))
+    tags = [t for t in ("{{name}}", "{{company}}", "{{city}}", "{{first_name}}")
+            if t in template]
+    return {"resolved": resolved, "tags_used": tags or ["{{name}}"],
+            "preview_for": f"{name} @ {company}"}
+
+
 def predict_send_time(audience="general", timezone="recipient"):
     table = {
         "general": ("Tuesday", "10:00", 24.1),

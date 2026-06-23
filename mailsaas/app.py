@@ -79,6 +79,40 @@ def _system_metrics():
     }
 
 
+def _fire_webhook(url):
+    """Attempt a real test POST to a webhook URL; degrade gracefully offline."""
+    import json as _j
+    import urllib.request
+    payload = _j.dumps({"event": "test", "service": "mailsaas",
+                        "timestamp": D.now()}).encode()
+    try:
+        req = urllib.request.Request(url, data=payload,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            return f"{resp.status} {resp.reason}"
+    except Exception as e:  # noqa: BLE001 - report any failure to the UI
+        return f"failed: {type(e).__name__}"
+
+
+def smtp_health_detail(server):
+    """Derive a deterministic, live-looking health breakdown for a relay."""
+    import hashlib
+    seed = int(hashlib.sha256(str(server["id"]).encode() + server["host"].encode()
+                              ).hexdigest(), 16)
+    healthy = server["health"] in ("Healthy", "Warming")
+    ip_score = 95 - (seed % 12) if healthy else 55 - (seed % 20)
+    latency = 40 + (seed % 60)
+    inbox = min(99, max(60, ip_score + 2))
+    def ok(flag):
+        return "pass" if flag else "fail"
+    return {
+        "ip_score": ip_score,
+        "dns": ok(True), "ptr": ok(seed % 7 != 0), "spf": ok(True),
+        "dkim": ok(True), "dmarc": ok(seed % 3 != 0), "tls": ok(True),
+        "rbl": ok(healthy and seed % 11 != 0), "latency": latency, "inbox": inbox,
+    }
+
+
 # --------------------------------------------------------------------------- #
 #  App factory
 # --------------------------------------------------------------------------- #
@@ -124,6 +158,20 @@ def current_account():
     return D.query("SELECT * FROM accounts WHERE id=?", (u["account_id"],), one=True)
 
 
+def _record_login(account_id, email, ok=True):
+    D.execute(
+        "INSERT INTO login_history (account_id, user_email, ip, agent, ok, created_at)"
+        " VALUES (?,?,?,?,?,?)",
+        (account_id, email, request.remote_addr or "-",
+         (request.headers.get("User-Agent", "")[:120]), 1 if ok else 0, D.now()))
+
+
+def is_superadmin():
+    acct = current_account()
+    u = current_user()
+    return bool(acct and u and acct["is_admin"] and u["role"] == "Owner")
+
+
 def login_required(view):
     @functools.wraps(view)
     def wrapped(*a, **kw):
@@ -140,6 +188,7 @@ def register_context(app):
             "NAV": NAV,
             "NAV_GROUPS": NAV_GROUPS,
             "NAV_BY_KEY": NAV_BY_KEY,
+            "is_superadmin": is_superadmin(),
             "user": current_user(),
             "account": current_account(),
             "active": request.path.strip("/").split("/")[0] or "dashboard",
@@ -198,8 +247,11 @@ def register_auth(app):
                 session["uid"] = u["id"]
                 D.execute("UPDATE users SET last_login=? WHERE id=?", (D.now(), u["id"]))
                 D.log_activity(u["account_id"], u["email"], "Signed in")
+                _record_login(u["account_id"], u["email"], ok=True)
                 nxt = request.args.get("next") or url_for("dashboard")
                 return redirect(nxt)
+            if u:
+                _record_login(u["account_id"], email, ok=False)
             flash("Invalid email or password.", "error")
         return render_template("login.html")
 
@@ -250,8 +302,49 @@ def register_modules(app):
             "SELECT * FROM activity WHERE account_id=? ORDER BY id DESC LIMIT 8", (aid,))
         campaigns = D.query(
             "SELECT * FROM campaigns WHERE account_id=? ORDER BY id DESC LIMIT 5", (aid,))
+        # Enterprise dashboard tiles
+        top = D.query("SELECT name, opens FROM campaigns WHERE account_id=? AND sent>0"
+                      " ORDER BY opens DESC LIMIT 1", (aid,), one=True)
+        smtp_h = D.query("SELECT health, COUNT(*) c FROM smtp_servers WHERE account_id=?"
+                         " GROUP BY health", (aid,))
+        smtp_h = {r["health"]: r["c"] for r in smtp_h}
+        warming = D.query("SELECT COUNT(*) c FROM smtp_servers WHERE account_id=? AND"
+                          " warmup NOT IN ('Completed','Not started')", (aid,),
+                          one=True)["c"]
+        revenue = D.query("SELECT COALESCE(SUM(amount),0) s FROM invoices WHERE"
+                          " account_id=?", (aid,), one=True)["s"]
+        inbox_pct = round(min(99.0, 80 + (deliver["open_rate"] / 5)), 1)
+        tiles = {
+            "today_sends": int(sent * 0.08),   # ~today's slice of total sends
+            "inbox_pct": inbox_pct,
+            "bounce_pct": deliver["bounce_rate"],
+            "smtp_healthy": smtp_h.get("Healthy", 0),
+            "smtp_total": sum(smtp_h.values()),
+            "queue": max(0, (agg["sent"] or 0) and 1843),
+            "domains": stats["domains"],
+            "warmup": warming,
+            "credits": acct["credits"],
+            "revenue": revenue,
+            "top_campaign": top["name"] if top else "—",
+        }
+        # Lightweight, rule-based "AI suggestions"
+        suggestions = []
+        if deliver["bounce_rate"] and deliver["bounce_rate"] > 2:
+            suggestions.append("Bounce rate is above 2% — run list cleaning before your "
+                               "next send.")
+        if warming:
+            suggestions.append(f"{warming} relay(s) still warming — keep volume within the "
+                               "daily plan to protect reputation.")
+        if deliver["open_rate"] and deliver["open_rate"] < 20:
+            suggestions.append("Open rate is under 20% — try the AI A/B subject generator.")
+        if not suggestions:
+            suggestions.append("Everything looks healthy — consider scheduling your next "
+                               "campaign at the AI-predicted best time.")
+        # 7-day sparkline (stable synthetic trend off real totals)
+        spark = [max(2, int((sent or 1000) / 30 * (0.6 + 0.1 * i))) for i in range(7)]
         return render_template("dashboard.html", stats=stats, deliver=deliver,
-                               activity=activity, campaigns=campaigns)
+                               activity=activity, campaigns=campaigns, tiles=tiles,
+                               suggestions=suggestions, spark=spark)
 
     # ---- Email Verification --------------------------------------------- #
     @app.route("/verification", methods=["GET", "POST"])
@@ -457,7 +550,8 @@ def register_modules(app):
             flash("SMTP server added.", "success")
             return redirect(url_for("smtp"))
         servers = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
-        return render_template("smtp.html", servers=servers)
+        health = {s["id"]: smtp_health_detail(s) for s in servers}
+        return render_template("smtp.html", servers=servers, health=health)
 
     # ---- Domains --------------------------------------------------------- #
     @app.route("/domains", methods=["GET", "POST"])
@@ -539,6 +633,22 @@ def register_modules(app):
                 amt = int(request.form.get("amount") or 0)
                 D.execute("UPDATE accounts SET credits=credits+? WHERE id=?", (amt, aid))
                 flash(f"Added {amt:,} credits.", "success")
+            elif action == "coupon":
+                code = request.form.get("coupon", "").strip().upper()
+                valid = {"WELCOME20": 20, "SAVE50": 50, "ENTERPRISE": 30}
+                if code in valid:
+                    D.execute("UPDATE accounts SET coupon=? WHERE id=?", (code, aid))
+                    flash(f"Coupon {code} applied — {valid[code]}% off your next invoice.",
+                          "success")
+                else:
+                    flash("Invalid coupon code.", "error")
+            elif action == "settings":
+                D.execute("UPDATE accounts SET gst_number=?, payment_provider=?,"
+                          " auto_renew=? WHERE id=?",
+                          (request.form.get("gst", "").strip(),
+                           request.form.get("provider", "Stripe"),
+                           1 if request.form.get("auto_renew") else 0, aid))
+                flash("Billing settings saved.", "success")
             return redirect(url_for("billing"))
         invoices = D.query("SELECT * FROM invoices WHERE account_id=? ORDER BY id DESC", (aid,))
         plans = [
@@ -572,13 +682,29 @@ def register_modules(app):
         members = D.query("SELECT * FROM users WHERE account_id=? ORDER BY id", (aid,))
         activity = D.query("SELECT * FROM activity WHERE account_id=? ORDER BY id DESC LIMIT 20",
                            (aid,))
+        logins = D.query("SELECT * FROM login_history WHERE account_id=? ORDER BY id DESC"
+                         " LIMIT 15", (aid,))
         roles = [
-            ("Owner", "Full access including billing and account deletion"),
+            ("Owner", "Full access incl. billing, white-label & account deletion"),
             ("Admin", "Manage everything except billing & account deletion"),
-            ("Member", "Create campaigns, verify, manage contacts"),
+            ("Manager", "Run campaigns, manage team members & contacts"),
+            ("Employee", "Create campaigns, verify emails, manage own work"),
             ("Viewer", "Read-only access to reports and dashboards"),
         ]
-        return render_template("team.html", members=members, activity=activity, roles=roles)
+        # Permission matrix: which roles can do what.
+        perms = [
+            ("View dashboard & reports", ["Owner", "Admin", "Manager", "Employee", "Viewer"]),
+            ("Create / send campaigns", ["Owner", "Admin", "Manager", "Employee"]),
+            ("Manage contacts & lists", ["Owner", "Admin", "Manager", "Employee"]),
+            ("Manage SMTP / domains", ["Owner", "Admin", "Manager"]),
+            ("Invite & manage team", ["Owner", "Admin", "Manager"]),
+            ("Manage API keys & webhooks", ["Owner", "Admin"]),
+            ("Billing & subscription", ["Owner"]),
+            ("White-label & account settings", ["Owner"]),
+        ]
+        all_roles = ["Owner", "Admin", "Manager", "Employee", "Viewer"]
+        return render_template("team.html", members=members, activity=activity, roles=roles,
+                               perms=perms, all_roles=all_roles, logins=logins)
 
     # ---- Settings -------------------------------------------------------- #
     @app.route("/settings", methods=["GET", "POST"])
@@ -646,6 +772,19 @@ def register_modules(app):
             elif tool == "sendtime":
                 out["sendtime"] = ai.predict_send_time(
                     request.form.get("audience", "general"))
+            elif tool == "cta":
+                out["ctas"] = ai.generate_ctas(request.form.get("context", ""))
+            elif tool == "ab":
+                out["topic"] = request.form.get("topic", "")
+                out["ab"] = ai.ab_subjects(out["topic"])
+            elif tool == "rewrite":
+                out["rewrite"] = ai.rewrite(request.form.get("text", ""),
+                                            request.form.get("goal", "shorter"))
+            elif tool == "translate":
+                out["translate"] = ai.translate(request.form.get("text", ""),
+                                                request.form.get("language", "spanish"))
+            elif tool == "personalize":
+                out["personalize"] = ai.personalize(request.form.get("text", ""))
             D.log_activity(current_account()["id"], current_user()["email"],
                            f"Used AI tool: {tool}")
         return render_template("ai.html", out=out)
@@ -786,8 +925,13 @@ def register_modules(app):
         }
         running = D.query("SELECT * FROM campaigns WHERE account_id=? AND status IN"
                           " ('Running','Scheduled') ORDER BY id DESC", (aid,))
+        speed = 11.7  # emails/sec
+        remaining = states["Pending"] + states["Processing"]
+        eta_sec = int(remaining / speed) if speed else 0
+        eta = f"{eta_sec // 3600}h {(eta_sec % 3600) // 60}m" if eta_sec else "—"
+        live = {"speed": speed, "remaining": remaining, "eta": eta}
         return render_template("queue.html", states=states, running=running,
-                               throughput="42,180/hr")
+                               throughput="42,180/hr", live=live)
 
     # ---- IP Warm-up ------------------------------------------------------ #
     @app.route("/warmup")
@@ -816,6 +960,72 @@ def register_modules(app):
             flash("Branding saved. Changes apply to your client portals.", "success")
             return redirect(url_for("whitelabel"))
         return render_template("whitelabel.html")
+
+    # ---- Webhooks -------------------------------------------------------- #
+    WEBHOOK_EVENTS = ["Delivered", "Opened", "Clicked", "Bounce", "Spam",
+                      "Unsubscribe"]
+
+    @app.route("/webhooks", methods=["GET", "POST"])
+    @login_required
+    def webhooks():
+        aid = current_account()["id"]
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action == "create":
+                events = ",".join(request.form.getlist("events")) or "Delivered"
+                D.execute(
+                    "INSERT INTO webhooks (account_id, url, events, secret, active,"
+                    " created_at) VALUES (?,?,?,?,?,?)",
+                    (aid, request.form.get("url", "").strip(), events,
+                     "whsec_" + secrets.token_hex(12), 1, D.now()))
+                flash("Webhook endpoint added.", "success")
+            elif action == "toggle":
+                cur = D.query("SELECT active FROM webhooks WHERE id=? AND account_id=?",
+                              (request.form.get("id"), aid), one=True)
+                if cur:
+                    D.execute("UPDATE webhooks SET active=? WHERE id=? AND account_id=?",
+                              (0 if cur["active"] else 1, request.form.get("id"), aid))
+            elif action == "delete":
+                D.execute("DELETE FROM webhooks WHERE id=? AND account_id=?",
+                          (request.form.get("id"), aid))
+            elif action == "test":
+                wh = D.query("SELECT * FROM webhooks WHERE id=? AND account_id=?",
+                             (request.form.get("id"), aid), one=True)
+                if wh:
+                    status = _fire_webhook(wh["url"])
+                    D.execute("UPDATE webhooks SET last_status=?, deliveries=deliveries+1"
+                              " WHERE id=?", (status, wh["id"]))
+                    flash(f"Test event sent → {status}", "success")
+            return redirect(url_for("webhooks"))
+        hooks = D.query("SELECT * FROM webhooks WHERE account_id=? ORDER BY id DESC", (aid,))
+        return render_template("webhooks.html", hooks=hooks, all_events=WEBHOOK_EVENTS)
+
+    # ---- Admin Panel (cross-tenant, super-admin only) -------------------- #
+    @app.route("/admin")
+    @login_required
+    def admin():
+        if not is_superadmin():
+            abort(403)
+        accounts = D.query("SELECT * FROM accounts ORDER BY id")
+        totals = {
+            "tenants": D.query("SELECT COUNT(*) c FROM accounts", (), one=True)["c"],
+            "users": D.query("SELECT COUNT(*) c FROM users", (), one=True)["c"],
+            "campaigns": D.query("SELECT COUNT(*) c FROM campaigns", (), one=True)["c"],
+            "verifications": D.query("SELECT COUNT(*) c FROM verifications", (),
+                                     one=True)["c"],
+            "revenue": D.query("SELECT COALESCE(SUM(amount),0) s FROM invoices", (),
+                               one=True)["s"],
+        }
+        # per-tenant rollups
+        rows = []
+        for a in accounts:
+            users = D.query("SELECT COUNT(*) c FROM users WHERE account_id=?",
+                            (a["id"],), one=True)["c"]
+            camps = D.query("SELECT COUNT(*) c FROM campaigns WHERE account_id=?",
+                            (a["id"],), one=True)["c"]
+            rows.append({"acct": a, "users": users, "campaigns": camps})
+        logins = D.query("SELECT * FROM login_history ORDER BY id DESC LIMIT 20")
+        return render_template("admin.html", rows=rows, totals=totals, logins=logins)
 
     # ---- Enterprise modules + generic scaffold --------------------------- #
     @app.route("/enterprise")

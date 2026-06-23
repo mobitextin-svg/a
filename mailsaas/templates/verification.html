@@ -30,8 +30,13 @@
           </div>
           <div class="score-ring" style="color:{{ 'var(--good)' if result.score>=80 else ('var(--warn)' if result.score>=45 else 'var(--bad)') }}">{{ result.score }}</div>
         </div>
-        <p class="muted small" style="margin:.2em 0 .8em">{{ result.reason }}
+        <p class="muted small" style="margin:.2em 0 .6em">{{ result.reason }}
           {% if result.suggestion %}· suggested: <b>{{ result.local }}@{{ result.suggestion }}</b>{% endif %}</p>
+        <div class="row" style="margin-bottom:8px">
+          <span class="pill">Deliverability <b>{{ result.score }}/100</b></span>
+          <span class="pill">Risk <b style="color:{{ 'var(--bad)' if result.risk_band=='high' else ('var(--warn)' if result.risk_band=='medium' else 'var(--good)') }}">{{ result.risk_score }} ({{ result.risk_band }})</b></span>
+          <span class="pill">Domain age <b>~{{ result.domain_age_days }}d</b></span>
+        </div>
         {% for k, v in result.checks.items() %}
           <span class="tag">{{ '✔' if v else '✗' }} {{ k.replace('_',' ') }}</span>
         {% endfor %}

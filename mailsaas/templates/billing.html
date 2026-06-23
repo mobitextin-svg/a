@@ -32,10 +32,44 @@
     </form>
   </div>
   <div class="card">
+    <h2>Apply coupon</h2>
+    <form method="post" class="row" style="align-items:flex-end">
+      <input type="hidden" name="action" value="coupon">
+      <div style="flex:2"><label>Coupon code</label><input name="coupon" placeholder="WELCOME20"></div>
+      <div style="flex:0"><button class="btn">Apply</button></div>
+    </form>
+    {% if account.coupon %}<p class="small" style="margin-top:8px">Active coupon: <span class="badge b-valid">{{ account.coupon }}</span></p>{% endif %}
+    <p class="faint small">Try <code>WELCOME20</code>, <code>SAVE50</code> or <code>ENTERPRISE</code>.</p>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Payment &amp; tax</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="settings">
+      <label>Payment provider</label>
+      <select name="provider">
+        {% for p in ['Stripe','Razorpay','PayPal'] %}
+        <option {{ 'selected' if account.payment_provider==p }}>{{ p }}</option>{% endfor %}
+      </select>
+      <label>GST / Tax number (for GST invoice)</label>
+      <input name="gst" value="{{ account.gst_number or '' }}" placeholder="22AAAAA0000A1Z5">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px">
+        <input type="checkbox" name="auto_renew" {{ 'checked' if account.auto_renew }} style="width:auto">
+        Auto-renew subscription</label>
+      <div style="margin-top:12px"><button class="btn">Save settings</button></div>
+    </form>
+  </div>
+  <div class="card">
     <h2>Payment methods</h2>
     <div class="kv"><span>💳 Visa •••• 4242</span><span class="badge b-valid">default</span></div>
     <div class="kv"><span>🏦 ACH — Acme Inc.</span><span class="faint">backup</span></div>
     <button class="btn ghost sm" style="margin-top:10px">+ Add payment method</button>
+    <hr style="border-color:var(--line);margin:14px 0">
+    <div class="kv"><span>Provider</span><b>{{ account.payment_provider }}</b></div>
+    <div class="kv"><span>Auto-renew</span><span class="{{ 'dot-ok' if account.auto_renew else 'dot-warn' }}">{{ 'On' if account.auto_renew else 'Off' }}</span></div>
+    <div class="kv"><span>GST invoice</span><span>{{ '✔ enabled' if account.gst_number else '— not set' }}</span></div>
   </div>
 </div>
 

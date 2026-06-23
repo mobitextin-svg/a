@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel{% endblock %}
+{% block content %}
+<h1>🛡️ Admin Panel</h1>
+<p class="muted">Platform-wide view across all tenants. <span class="badge b-risky">super-admin only</span></p>
+
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Tenants</div><div class="v">{{ totals.tenants }}</div></div>
+  <div class="stat"><div class="k">Users</div><div class="v">{{ totals.users }}</div></div>
+  <div class="stat"><div class="k">Campaigns</div><div class="v">{{ '{:,}'.format(totals.campaigns) }}</div></div>
+  <div class="stat"><div class="k">Platform revenue</div><div class="v">${{ '{:,.0f}'.format(totals.revenue) }}</div></div>
+</div>
+
+<div class="card">
+  <h2>Tenants</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Company</th><th>Plan</th><th class="num">Users</th><th class="num">Campaigns</th><th class="num">Credits</th><th>Region</th><th>Created</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.acct.id }}</td>
+        <td><b>{{ r.acct.name }}</b>{% if r.acct.is_admin %} <span class="badge b-risky">admin</span>{% endif %}</td>
+        <td><span class="badge b-Running">{{ r.acct.plan }}</span></td>
+        <td class="num">{{ r.users }}</td>
+        <td class="num">{{ r.campaigns }}</td>
+        <td class="num">{{ '{:,}'.format(r.acct.credits) }}</td>
+        <td class="small">{{ r.acct.region }}</td>
+        <td class="faint small">{{ r.acct.created_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="faint small" style="margin-top:8px">Each tenant's operational data is isolated by <code>account_id</code>; this panel shows rollup counts only.</p>
+</div>
+
+<div class="card">
+  <h2>Recent logins (all tenants)</h2>
+  <table>
+    <thead><tr><th>User</th><th>Tenant</th><th>IP</th><th>Result</th><th>When</th></tr></thead>
+    <tbody>
+    {% for l in logins %}
+      <tr><td class="small">{{ l.user_email }}</td><td>#{{ l.account_id }}</td>
+        <td class="faint small">{{ l.ip }}</td>
+        <td><span class="badge {{ 'b-valid' if l.ok else 'b-invalid' }}">{{ 'success' if l.ok else 'failed' }}</span></td>
+        <td class="faint small">{{ l.created_at }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No logins recorded.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

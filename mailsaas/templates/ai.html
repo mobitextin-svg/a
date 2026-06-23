@@ -91,5 +91,65 @@
   {% endif %}
 </div>
 
+<div class="grid g2">
+  <div class="card">
+    <h2>🔀 A/B Subject Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="ab">
+      <label>Topic</label><input name="topic" placeholder="product launch" required>
+      <div style="margin-top:12px"><button class="btn">Generate A/B</button></div>
+    </form>
+    {% if out.tool=='ab' %}
+      <div class="kv"><span><b>A</b> · {{ out.ab.A }}</span></div>
+      <div class="kv"><span><b>B</b> · {{ out.ab.B }}</span></div>
+      <p class="faint small" style="margin-top:6px">{{ out.ab.tip }}</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>🎯 CTA Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="cta">
+      <label>What should readers do?</label><input name="context" placeholder="book a demo">
+      <div style="margin-top:12px"><button class="btn">Generate CTAs</button></div>
+    </form>
+    {% if out.tool=='cta' %}{% for c in out.ctas %}<span class="tag" style="display:inline-block;margin:3px">{{ c }}</span>{% endfor %}{% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>✏️ Rewrite</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="rewrite">
+      <label>Text</label><textarea name="text" placeholder="Paste copy to rewrite…"></textarea>
+      <label>Goal</label><select name="goal"><option>shorter</option><option>formal</option>
+        <option>friendly</option><option>urgent</option><option>persuasive</option></select>
+      <div style="margin-top:12px"><button class="btn">Rewrite</button></div>
+    </form>
+    {% if out.tool=='rewrite' %}<div class="code" style="margin-top:12px">{{ out.rewrite }}</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>🌍 Translate &amp; 🧩 Personalize</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="translate">
+      <label>Text</label><input name="text" placeholder="Hi {{ '{{name}}' }}, Thanks — The Team">
+      <label>Language</label><select name="language"><option>Spanish</option><option>French</option>
+        <option>German</option><option>Hindi</option></select>
+      <div style="margin-top:10px"><button class="btn sm">Translate</button></div>
+    </form>
+    {% if out.tool=='translate' %}<div class="code" style="margin-top:10px">{{ out.translate.text }}</div>
+      <p class="faint small">{{ out.translate.note }}</p>{% endif %}
+    <form method="post" style="margin-top:10px">
+      <input type="hidden" name="tool" value="personalize">
+      <input type="hidden" name="text" value="Hi {{ '{{name}}' }}, we noticed {{ '{{company}}' }} is in {{ '{{city}}' }}.">
+      <button class="btn ghost sm">Preview personalization</button>
+    </form>
+    {% if out.tool=='personalize' %}<div class="code" style="margin-top:8px">{{ out.personalize.resolved }}</div>
+      <p class="faint small">Tags: {{ out.personalize.tags_used|join(', ') }} · preview for {{ out.personalize.preview_for }}</p>{% endif %}
+  </div>
+</div>
+
 <p class="faint small">⚙️ These tools run on a built-in generator so they work offline and free. Plug in a real LLM by implementing <code>ai._llm_complete()</code> and setting <code>USE_LLM=True</code>.</p>
 {% endblock %}

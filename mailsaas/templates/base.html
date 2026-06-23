@@ -13,15 +13,15 @@
   'ai':'ai_center','deliverability':'deliverability','templates':'templates',
   'landing':'landing','finder':'finder','contacts':'contacts','campaigns':'campaigns',
   'smtp':'smtp','pools':'pools','queue':'queue','warmup':'warmup','domains':'domains',
-  'reports':'reports','api':'api_keys','automation':'automation','billing':'billing',
-  'team':'team','monitoring':'monitoring','whitelabel':'whitelabel',
-  'settings':'settings','enterprise':'enterprise'} %}
+  'reports':'reports','api':'api_keys','webhooks':'webhooks','automation':'automation',
+  'billing':'billing','team':'team','monitoring':'monitoring','whitelabel':'whitelabel',
+  'admin':'admin','settings':'settings','enterprise':'enterprise'} %}
 <div class="app">
   <aside class="sidebar">
     <div class="brand">📨 Mail<span class="dot">SaaS</span></div>
     {% for label, keys in NAV_GROUPS %}
       {% if label %}<div class="group-label">{{ label }}</div>{% endif %}
-      {% for key in keys %}
+      {% for key in keys if not (key == 'admin' and not is_superadmin) %}
         {% set m = NAV_BY_KEY[key] %}
         {% if key in endpoints %}
           {% set href = url_for(endpoints[key]) %}
