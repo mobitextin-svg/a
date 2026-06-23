@@ -399,6 +399,20 @@ NAV = [
             ("Audit Logs", "Security event trail"),
         ],
     },
+    # --- Deliverability suite (both admin & user, role-scoped) ----------- #
+    {"key": "bounce", "label": "Bounce Center", "icon": "↩️", "built": True,
+     "items": [("Hard / soft bounces", "Failed deliveries"),
+               ("Retry status", "Transient failures"), ("Remove invalid", "List hygiene"),
+               ("Bounce rate", "Per campaign / account")]},
+    {"key": "complaints", "label": "Complaint Center", "icon": "🚨", "built": True,
+     "items": [("Spam complaints", "FBL signals"), ("Complaint rate", "% of sends"),
+               ("By campaign", "Which send"), ("Auto-suspend", "Abuse protection")]},
+    {"key": "inboxtest", "label": "Inbox Testing", "icon": "📥", "built": True,
+     "items": [("Gmail / Outlook / Yahoo", "Per-provider placement"),
+               ("Seed lists", "Real-mailbox test"), ("Inbox vs spam", "Where you land")]},
+    {"key": "dmarc", "label": "DMARC Analytics", "icon": "📊", "built": True,
+     "items": [("SPF / DKIM / DMARC", "Authentication"), ("Alignment", "Pass/fail"),
+               ("Suggestions", "How to fix"), ("Domain health", "Per domain")]},
     # --- Admin-only platform modules ------------------------------------- #
     {"key": "plans", "label": "Plans", "icon": "💳", "built": True,
      "items": [("Tiers", "Free → Enterprise"), ("Credits", "Per-plan allowances"),
@@ -432,8 +446,10 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 USER_GROUPS = [
     ("", ["dashboard"]),
     ("📧 Workspace", ["sender", "verification", "contacts", "campaigns", "templates",
-                     "landing", "reports", "ai", "finder", "deliverability",
-                     "automation"]),
+                     "landing", "reports", "ai", "finder", "automation"]),
+    ("📬 Deliverability", ["deliverability", "bounce", "complaints", "inboxtest",
+                          "dmarc"]),
+    ("🌐 Sending", ["domains", "smtp"]),
     ("👨‍💻 Developers", ["api", "webhooks"]),
     ("💳 Account", ["billing"]),
     ("👥 Team", ["team", "integrations", "notifications", "support", "settings"]),
@@ -445,6 +461,8 @@ ADMIN_GROUPS = [
     ("🛠️ Sending Infrastructure", ["smtp", "pools", "warmup", "queue", "rotsend",
                                    "rotverify", "burst", "iphealth", "domains",
                                    "monitoring"]),
+    ("📬 Deliverability", ["deliverability", "bounce", "complaints", "inboxtest",
+                          "dmarc"]),
     ("🏢 Platform", ["whitelabel", "enterprise", "mktmgmt", "apimgmt", "logs",
                     "backups", "settings"]),
 ]
@@ -452,11 +470,12 @@ ADMIN_GROUPS = [
 # Default menu used where role is unknown (e.g. before login context).
 NAV_GROUPS = USER_GROUPS
 
-# Modules only admins may open. Regular users are blocked at the route level too.
+# Modules only admins may open (shared infrastructure & platform control).
+# SMTP and Domains are intentionally NOT here — users manage their own.
 ADMIN_ONLY = {
     "admin", "plans", "coupons", "mktmgmt", "apimgmt", "logs", "backups",
-    "smtp", "pools", "warmup", "queue", "rotsend", "rotverify", "burst",
-    "iphealth", "domains", "monitoring", "whitelabel", "enterprise",
+    "pools", "warmup", "queue", "rotsend", "rotverify", "burst",
+    "iphealth", "monitoring", "whitelabel", "enterprise",
 }
 
 # "Essential" modules shown in Simple mode (progressive disclosure for new

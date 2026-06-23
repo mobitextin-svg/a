@@ -46,7 +46,11 @@ def render_html(body, contact, base_url, token):
     html = wrap_links(html, base_url, token)
     pixel = ('<img src="%s/t/o/%s.gif" width="1" height="1" alt="" '
              'style="display:none">' % (base_url, token))
-    return html + pixel
+    # CAN-SPAM/GDPR-friendly unsubscribe footer (also improves spam score).
+    footer = ('<hr><p style="font-size:11px;color:#888">'
+              'You received this because you subscribed. '
+              '<a href="%s/t/u/%s">Unsubscribe</a></p>' % (base_url, token))
+    return html + footer + pixel
 
 
 def env_transport():

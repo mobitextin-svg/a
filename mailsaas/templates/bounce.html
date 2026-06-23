@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Bounce Center{% endblock %}
+{% block content %}
+<h1>↩️ Bounce {{ 'Center' if admin else 'Management' }}</h1>
+{% if admin %}
+<p class="muted">Platform-wide bounce rates. Block abusive accounts and spot bad infrastructure.</p>
+<div class="card" style="margin-top:14px">
+  <h2>Bounce rate by account</h2>
+  <table>
+    <thead><tr><th>Account</th><th class="num">Sent</th><th class="num">Bounces</th><th class="num">Rate</th><th></th></tr></thead>
+    <tbody>
+    {% for a in accounts %}
+      <tr><td><b>{{ a.name }}</b> <span class="faint small">#{{ a.id }}</span></td>
+        <td class="num">{{ '{:,}'.format(a.sent) }}</td><td class="num">{{ '{:,}'.format(a.bounces) }}</td>
+        <td class="num"><span class="badge {{ 'b-invalid' if a.rate>5 else ('b-risky' if a.rate>2 else 'b-valid') }}">{{ a.rate }}%</span></td>
+        <td class="num">{% if a.rate>5 %}<form class="inline-form" method="post" onsubmit="return confirm('Suspend this account for high bounces?')">
+          <input type="hidden" name="action" value="block"><input type="hidden" name="acct" value="{{ a.id }}">
+          <button class="btn danger sm">Block</button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card"><h2>Problematic SMTP servers</h2>
+  {% for s in bad_smtp %}<div class="kv"><span>{{ s.name }} ({{ s.host }})</span><span class="badge b-invalid">{{ s.health }}</span></div>
+  {% else %}<div class="faint small">All SMTP servers healthy.</div>{% endfor %}
+</div>
+{% else %}
+<p class="muted">Bounces from your own campaigns. Keep your list clean to protect your reputation.</p>
+<div class="grid g3" style="margin-top:14px">
+  <div class="stat"><div class="k">Hard bounces (failed sends)</div><div class="v" style="color:var(--bad)">{{ hard }}</div></div>
+  <div class="stat"><div class="k">Bounced contacts</div><div class="v">{{ bounced|length }}</div></div>
+  <div class="stat"><div class="k">Action</div><div class="v" style="font-size:1rem">
+    <form method="post"><input type="hidden" name="action" value="clean"><button class="btn sm">🧹 Remove invalid</button></form></div></div>
+</div>
+<div class="card"><h2>Bounce rate by campaign</h2>
+  <table><thead><tr><th>Campaign</th><th class="num">Sent</th><th class="num">Bounces</th><th class="num">Rate</th></tr></thead>
+  <tbody>{% for c in camps %}<tr><td>{{ c.name }}</td><td class="num">{{ '{:,}'.format(c.sent) }}</td>
+    <td class="num">{{ c.bounces }}</td><td class="num">{{ (100*c.bounces/c.sent)|round(2) if c.sent else 0 }}%</td></tr>
+  {% else %}<tr><td colspan="4" class="empty">No sent campaigns yet.</td></tr>{% endfor %}</tbody></table>
+</div>
+<div class="card"><h2>Bounced contacts</h2>
+  {% for b in bounced %}<div class="kv"><span>{{ b.email }}</span><span class="badge b-bounced">bounced</span></div>
+  {% else %}<div class="faint small">No bounced contacts 🎉</div>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

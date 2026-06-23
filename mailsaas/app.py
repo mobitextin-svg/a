@@ -288,8 +288,9 @@ def register_security(app):
                 session.clear()
         # Admin-only sections: block regular users at the route level so the
         # infrastructure pages can't be reached by typing the URL.
-        ADMIN_PREFIXES = ("/smtp", "/pools", "/warmup", "/queue", "/rotation",
-                          "/burst", "/ip-health", "/domains", "/monitoring",
+        # SMTP and Domains are intentionally NOT gated — users manage their own.
+        ADMIN_PREFIXES = ("/pools", "/warmup", "/queue", "/rotation",
+                          "/burst", "/ip-health", "/monitoring",
                           "/whitelabel", "/enterprise", "/admin")
         p = request.path
         if session.get("uid") and any(p == x or p.startswith(x + "/") or p == x[1:]
@@ -1258,6 +1259,109 @@ def register_modules(app):
             blacklist=DELIV.blacklist_status(domain_name), reputation=rep,
             domain=domain_name)
 
+    # ---- Bounce Center (role-aware) -------------------------------------- #
+    @app.route("/bounce", methods=["GET", "POST"])
+    @login_required
+    def bounce():
+        admin = is_admin_user()
+        aid = current_account()["id"]
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action == "clean":  # user: remove invalid (bounced) contacts
+                D.execute("DELETE FROM contacts WHERE account_id=? AND status='bounced'",
+                          (aid,))
+                flash("Removed bounced contacts from your list.", "success")
+            elif action == "block" and admin:  # admin: suspend an abusive account
+                D.execute("UPDATE users SET status='suspended', session_token=NULL"
+                          " WHERE account_id=?", (request.form.get("acct"),))
+                flash("Account suspended for excessive bounces.", "success")
+            return redirect(url_for("bounce"))
+        if admin:
+            rows = D.query(
+                "SELECT a.id, a.name, COALESCE(SUM(c.sent),0) sent,"
+                " COALESCE(SUM(c.bounces),0) bounces FROM accounts a"
+                " LEFT JOIN campaigns c ON c.account_id=a.id GROUP BY a.id ORDER BY bounces DESC")
+            accounts = [dict(r, rate=round(100 * r["bounces"] / r["sent"], 2)
+                             if r["sent"] else 0) for r in rows]
+            bad_smtp = D.query("SELECT * FROM smtp_servers WHERE health NOT IN"
+                               " ('Healthy','Warming')")
+            return render_template("bounce.html", admin=True, accounts=accounts,
+                                   bad_smtp=bad_smtp)
+        # user view — own campaigns + bounced contacts
+        camps = D.query("SELECT name, sent, bounces FROM campaigns WHERE account_id=?"
+                        " AND sent>0 ORDER BY bounces DESC", (aid,))
+        bounced = D.query("SELECT * FROM contacts WHERE account_id=? AND status='bounced'",
+                          (aid,))
+        hard = D.query("SELECT COUNT(*) c FROM messages WHERE account_id=? AND"
+                       " status='failed'", (aid,), one=True)["c"]
+        return render_template("bounce.html", admin=False, camps=camps,
+                               bounced=bounced, hard=hard)
+
+    # ---- Complaint Center (role-aware) ----------------------------------- #
+    @app.route("/complaints", methods=["GET", "POST"])
+    @login_required
+    def complaints_center():
+        admin = is_admin_user()
+        aid = current_account()["id"]
+        if request.method == "POST" and admin and request.form.get("action") == "suspend":
+            D.execute("UPDATE users SET status='suspended', session_token=NULL"
+                      " WHERE account_id=?", (request.form.get("acct"),))
+            flash("High-complaint account suspended.", "success")
+            return redirect(url_for("complaints_center"))
+        if admin:
+            rows = D.query(
+                "SELECT a.id, a.name, COUNT(c.id) complaints FROM accounts a"
+                " LEFT JOIN complaints c ON c.account_id=a.id AND c.kind='complaint'"
+                " GROUP BY a.id ORDER BY complaints DESC")
+            recent = D.query("SELECT * FROM complaints ORDER BY id DESC LIMIT 30")
+            return render_template("complaints.html", admin=True, accounts=rows,
+                                   recent=recent)
+        sent = D.query("SELECT COALESCE(SUM(sent),0) s FROM campaigns WHERE account_id=?",
+                       (aid,), one=True)["s"]
+        rows = D.query("SELECT * FROM complaints WHERE account_id=? ORDER BY id DESC", (aid,))
+        ncomp = sum(1 for r in rows if r["kind"] == "complaint")
+        rate = round(100 * ncomp / sent, 3) if sent else 0
+        return render_template("complaints.html", admin=False, rows=rows, rate=rate,
+                               ncomp=ncomp, nunsub=len(rows) - ncomp)
+
+    # ---- Inbox Placement Testing (role-aware) ---------------------------- #
+    @app.route("/inbox-testing", methods=["GET", "POST"])
+    @login_required
+    def inbox_testing():
+        admin = is_admin_user()
+        aid = current_account()["id"]
+        test = None
+        if request.method == "POST" and not admin:
+            dom = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY reputation"
+                          " DESC LIMIT 1", (aid,), one=True)
+            rep = dom["reputation"] if dom else 85
+            scores = DELIV.provider_scores(rep)
+            test = {p: ("Inbox" if s >= 80 else ("Promotions" if s >= 60 else "Spam"))
+                    for p, s in scores.items()}
+        if admin:
+            providers = ["Gmail", "Outlook", "Yahoo", "Apple Mail", "Corporate"]
+            seeds = ["seed1@gmail.com", "seed2@outlook.com", "seed3@yahoo.com",
+                     "seed4@icloud.com"]
+            platform = DELIV.provider_scores(88)
+            return render_template("inbox_testing.html", admin=True, providers=providers,
+                                   seeds=seeds, platform=platform)
+        return render_template("inbox_testing.html", admin=False, test=test)
+
+    # ---- DMARC Analytics (role-aware) ------------------------------------ #
+    @app.route("/dmarc")
+    @login_required
+    def dmarc():
+        admin = is_admin_user()
+        aid = current_account()["id"]
+        if admin:
+            domains = D.query(
+                "SELECT d.*, a.name acct FROM domains d JOIN accounts a"
+                " ON a.id=d.account_id ORDER BY d.dmarc, d.reputation")
+            fails = sum(1 for d in domains if not (d["spf"] and d["dkim"] and d["dmarc"]))
+            return render_template("dmarc.html", admin=True, domains=domains, fails=fails)
+        domains = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY id", (aid,))
+        return render_template("dmarc.html", admin=False, domains=domains)
+
     # ---- Email Finder ---------------------------------------------------- #
     @app.route("/finder", methods=["GET", "POST"])
     @login_required
@@ -1986,6 +2090,26 @@ def register_modules(app):
         if url.startswith("http://") or url.startswith("https://"):
             return redirect(url)
         return redirect(url_for("dashboard"))
+
+    @app.route("/t/u/<token>")
+    def track_unsubscribe(token):
+        m = D.query("SELECT * FROM messages WHERE token=?", (token,), one=True)
+        if m:
+            already = D.query("SELECT 1 FROM complaints WHERE account_id=? AND email=?"
+                              " AND kind='unsubscribe'", (m["account_id"], m["email"]),
+                              one=True)
+            if not already:
+                D.execute("INSERT INTO complaints (account_id, campaign_id, email, kind,"
+                          " created_at) VALUES (?,?,?,?,?)",
+                          (m["account_id"], m["campaign_id"], m["email"], "unsubscribe",
+                           D.now()))
+            # Honour the opt-out: suppress the contact.
+            D.execute("UPDATE contacts SET status='unsubscribed' WHERE account_id=? AND"
+                      " email=?", (m["account_id"], m["email"]))
+        return Response(
+            "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+            "<h2>You've been unsubscribed</h2><p>You won't receive further emails.</p>"
+            "</body></html>", mimetype="text/html")
 
 
 # --------------------------------------------------------------------------- #

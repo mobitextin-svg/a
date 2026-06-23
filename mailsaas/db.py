@@ -284,6 +284,16 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_campaign ON messages(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_messages_token    ON messages(token);
+
+CREATE TABLE IF NOT EXISTS complaints (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    campaign_id  INTEGER,
+    email        TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'complaint',  -- complaint / unsubscribe
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_complaints_acct ON complaints(account_id);
 """
 
 # Idempotent column additions for accounts that predate these features.
@@ -471,6 +481,11 @@ def seed_demo(account_id, user_email):
         (account_id, "https://example.com/webhooks/mailsaas",
          "Delivered,Opened,Clicked,Bounce", "whsec_" + str(account_id) + "demo",
          1, "200 OK", 18420, n))
+    # a couple of sample complaints for the Complaint Center
+    for email, kind in [("unsub@gmail.com", "unsubscribe"),
+                        ("angry@yahoo.com", "complaint")]:
+        execute("INSERT INTO complaints (account_id, campaign_id, email, kind, created_at)"
+                " VALUES (?,?,?,?,?)", (account_id, None, email, kind, n))
     # the very first account on the platform is the super-admin
     if account_id == 1:
         execute("UPDATE accounts SET is_admin=1 WHERE id=1")
