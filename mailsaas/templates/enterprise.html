@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Enterprise Modules{% endblock %}
+{% block content %}
+<h1>🏢 Enterprise Modules</h1>
+<p class="muted">Infrastructure that scales — pools, rotation, deliverability AI, multi-region &amp; white-label.</p>
+
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Queue depth</div><div class="v">{{ '{:,}'.format(metrics.queue_depth) }}</div><div class="trend up">▲ {{ metrics.throughput }} throughput</div></div>
+  <div class="stat"><div class="k">SMTP pools</div><div class="v">{{ metrics.pools }}</div><div class="trend">{{ metrics.ips }} dedicated IPs</div></div>
+  <div class="stat"><div class="k">Inbox placement</div><div class="v">{{ metrics.inbox_rate }}<span class="unit">%</span></div><div class="trend up">▲ seed-list tested</div></div>
+  <div class="stat"><div class="k">Tenants</div><div class="v">{{ metrics.tenants }}</div><div class="trend">isolated &amp; encrypted</div></div>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Health</h2>
+    <span class="pill">Regions <b>{{ metrics.regions|join(', ') }}</b></span></div>
+  <div class="grid g3">
+    <div class="kv"><span>Blacklist / RBL monitor</span><span class="dot-ok">{{ '✔ all clean' if metrics.blacklist_clean else '⚠ listed' }}</span></div>
+    <div class="kv"><span>Feedback loop ingestion</span><span class="dot-ok">✔ active</span></div>
+    <div class="kv"><span>Bounce processor</span><span class="dot-ok">✔ classifying</span></div>
+    <div class="kv"><span>Event webhooks</span><span class="dot-ok">✔ at-least-once</span></div>
+    <div class="kv"><span>AI deliverability</span><span class="dot-ok">✔ optimizing send-time</span></div>
+    <div class="kv"><span>White-label</span><span class="dot-ok">✔ available</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>All enterprise modules</h2>
+  <div class="feature-grid">
+    {% for label, desc in modules %}
+      <div class="feature"><h4>{{ label }}</h4><p>{{ desc }}</p></div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

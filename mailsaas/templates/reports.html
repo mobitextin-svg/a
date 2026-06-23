@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<h1>Reports &amp; Analytics</h1>
+<p class="muted">Delivery, opens, clicks, bounces, complaints, geo &amp; device breakdowns.</p>
+
+{% set sent = agg.sent or 0 %}
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Delivered</div><div class="v">{{ '{:,}'.format((agg.sent - agg.bounces)|int) }}</div></div>
+  <div class="stat"><div class="k">Open rate</div><div class="v">{{ (100*agg.opens/sent)|round(1) if sent else 0 }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Click rate</div><div class="v">{{ (100*agg.clicks/sent)|round(1) if sent else 0 }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Bounce rate</div><div class="v">{{ (100*agg.bounces/sent)|round(1) if sent else 0 }}<span class="unit">%</span></div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Geo reports</h2>
+    {% for country, pct in [('United States',42),('India',18),('United Kingdom',11),('Germany',8),('Other',21)] %}
+      <div class="kv"><span>{{ country }}</span><span>{{ pct }}%</span></div>
+      <div class="meter" style="margin-bottom:8px"><i style="width:{{ pct }}%"></i></div>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <h2>Device reports</h2>
+    {% for dev, pct in [('Mobile',58),('Desktop',34),('Tablet',5),('Other',3)] %}
+      <div class="kv"><span>{{ dev }}</span><span>{{ pct }}%</span></div>
+      <div class="meter" style="margin-bottom:8px"><i style="width:{{ pct }}%"></i></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Per-campaign performance</h2>
+  <table>
+    <thead><tr><th>Campaign</th><th class="num">Sent</th><th class="num">Open %</th><th class="num">Click %</th><th class="num">Bounce %</th></tr></thead>
+    <tbody>
+    {% for c in per_campaign %}
+      <tr><td>{{ c.name }}</td><td class="num">{{ '{:,}'.format(c.sent) }}</td>
+        <td class="num">{{ (100*c.opens/c.sent)|round(1) }}</td>
+        <td class="num">{{ (100*c.clicks/c.sent)|round(1) }}</td>
+        <td class="num">{{ (100*c.bounces/c.sent)|round(1) }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No sent campaigns to report on yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

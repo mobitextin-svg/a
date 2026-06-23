@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Welcome back, {{ user.name.split(' ')[0] }} 👋</h1>
+<p class="muted">Here's what's happening across {{ account.name }}.</p>
+
+<div class="grid g4" style="margin-top:18px">
+  <div class="stat"><div class="k">Contacts</div><div class="v">{{ '{:,}'.format(stats.contacts) }}</div><div class="trend up">▲ healthy list</div></div>
+  <div class="stat"><div class="k">Campaigns</div><div class="v">{{ stats.campaigns }}</div><div class="trend up">▲ {{ deliver.sent|int }} emails sent</div></div>
+  <div class="stat"><div class="k">Verifications</div><div class="v">{{ '{:,}'.format(stats.verifications) }}</div><div class="trend">{{ '{:,}'.format(account.credits) }} credits left</div></div>
+  <div class="stat"><div class="k">Domains</div><div class="v">{{ stats.domains }}</div><div class="trend up">▲ authenticated</div></div>
+</div>
+
+<div class="grid g3" style="margin-top:4px">
+  <div class="stat"><div class="k">Open rate</div><div class="v">{{ deliver.open_rate }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Click rate</div><div class="v">{{ deliver.click_rate }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Bounce rate</div><div class="v">{{ deliver.bounce_rate }}<span class="unit">%</span></div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="section-head"><h2>Quick actions</h2></div>
+    <div class="row">
+      <a class="btn ghost" href="{{ url_for('verification') }}">✅ Verify email</a>
+      <a class="btn ghost" href="{{ url_for('sender') }}">📤 New campaign</a>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <a class="btn ghost" href="{{ url_for('contacts') }}">👥 Import contacts</a>
+      <a class="btn ghost" href="{{ url_for('domains') }}">🌐 Add domain</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-head"><h2>Recent activity</h2></div>
+    {% for a in activity %}
+      <div class="kv"><span>{{ a.action }}</span><span class="faint small">{{ a.created_at }}</span></div>
+    {% else %}
+      <div class="empty">No activity yet.</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Latest campaigns</h2><a class="small" href="{{ url_for('campaigns') }}">View all →</a></div>
+  <table>
+    <thead><tr><th>Campaign</th><th>Status</th><th class="num">Sent</th><th class="num">Opens</th><th class="num">Clicks</th></tr></thead>
+    <tbody>
+    {% for c in campaigns %}
+      <tr><td>{{ c.name }}</td><td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+      <td class="num">{{ '{:,}'.format(c.sent) }}</td><td class="num">{{ '{:,}'.format(c.opens) }}</td>
+      <td class="num">{{ '{:,}'.format(c.clicks) }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No campaigns yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

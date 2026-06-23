@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Billing{% endblock %}
+{% block content %}
+<h1>Billing &amp; Plans</h1>
+<p class="muted">You're on the <b>{{ account.plan }}</b> plan with <b>{{ '{:,}'.format(account.credits) }}</b> credits remaining.</p>
+
+<div class="grid g4" style="margin-top:14px">
+  {% for name, price, desc in plans %}
+  <div class="card" style="{{ 'border-color:var(--brand)' if name==account.plan else '' }}">
+    <h3>{{ name }} {% if name==account.plan %}<span class="badge b-valid">current</span>{% endif %}</h3>
+    <div class="v" style="font-size:1.6rem;font-weight:720">
+      {% if name=='Enterprise' %}Custom{% else %}${{ price }}<span class="unit muted" style="font-size:.85rem">/mo</span>{% endif %}
+    </div>
+    <p class="muted small" style="min-height:54px">{{ desc }}</p>
+    <form method="post"><input type="hidden" name="action" value="plan"><input type="hidden" name="plan" value="{{ name }}">
+      <button class="btn {{ 'ghost' if name==account.plan }}" {{ 'disabled' if name==account.plan }} style="width:100%">
+        {{ 'Current plan' if name==account.plan else ('Contact sales' if name=='Enterprise' else 'Choose '+name) }}</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Top up credits</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="credits">
+      <label>Add credits</label>
+      <select name="amount"><option value="10000">10,000 — $20</option>
+        <option value="50000">50,000 — $80</option><option value="250000">250,000 — $300</option></select>
+      <div style="margin-top:12px"><button class="btn">Purchase credits</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Payment methods</h2>
+    <div class="kv"><span>💳 Visa •••• 4242</span><span class="badge b-valid">default</span></div>
+    <div class="kv"><span>🏦 ACH — Acme Inc.</span><span class="faint">backup</span></div>
+    <button class="btn ghost sm" style="margin-top:10px">+ Add payment method</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Invoices &amp; transactions</h2>
+  <table>
+    <thead><tr><th>Invoice</th><th class="num">Amount</th><th>Status</th><th>Date</th></tr></thead>
+    <tbody>
+    {% for inv in invoices %}
+      <tr><td>{{ inv.number }}</td><td class="num">${{ '%.2f'|format(inv.amount) }}</td>
+        <td><span class="badge b-{{ inv.status }}">{{ inv.status }}</span></td>
+        <td class="faint small">{{ inv.created_at }}</td></tr>
+    {% else %}
+      <tr><td colspan="4" class="empty">No invoices yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

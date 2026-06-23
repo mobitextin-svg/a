@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="muted">Profile, security, 2FA, branding, time zone &amp; audit logs.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>Profile</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="profile">
+      <label>Full name</label><input name="name" value="{{ user.name }}">
+      <label>Company / workspace</label><input name="company" value="{{ account.name }}">
+      <label>Time zone</label>
+      <select name="timezone">{% for tz in timezones %}
+        <option {{ 'selected' if tz==user.timezone }}>{{ tz }}</option>{% endfor %}</select>
+      <div style="margin-top:12px"><button class="btn">Save profile</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Security</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="password">
+      <label>Current password</label><input type="password" name="current">
+      <label>New password</label><input type="password" name="new" placeholder="6+ characters">
+      <div style="margin-top:12px"><button class="btn">Change password</button></div>
+    </form>
+    <hr style="border-color:var(--line);margin:18px 0">
+    <div class="section-head">
+      <div><b>Two-factor authentication</b><div class="faint small">{{ 'Enabled' if user.twofa else 'Disabled' }}</div></div>
+      <form class="inline-form" method="post"><input type="hidden" name="action" value="twofa">
+        <button class="btn {{ 'danger' if user.twofa else '' }} sm">{{ 'Disable 2FA' if user.twofa else 'Enable 2FA' }}</button></form>
+    </div>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Branding</h2>
+    <label>Brand colour</label><input type="text" value="#5b8cff" placeholder="#5b8cff">
+    <label>Logo URL</label><input placeholder="https://…/logo.png">
+    <div class="faint small" style="margin-top:8px">White-label is available on Business &amp; Enterprise plans.</div>
+  </div>
+  <div class="card">
+    <h2>Audit logs</h2>
+    <div style="max-height:240px;overflow:auto">
+    {% for a in audit %}
+      <div class="kv"><span class="small">{{ a.action }}</span><span class="faint small">{{ a.created_at }}</span></div>
+    {% else %}
+      <div class="empty">No audit events.</div>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

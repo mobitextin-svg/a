@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ mod.label }}{% endblock %}
+{% block content %}
+<h1>{{ mod.icon }} {{ mod.label }}</h1>
+<p class="muted">Everything you need for {{ mod.label|lower }}, organised into the features below.</p>
+
+<div class="feature-grid" style="margin-top:16px">
+  {% for label, desc in mod['items'] %}
+    <div class="feature">
+      <h4>{{ label }}</h4>
+      <p>{{ desc }}</p>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="margin-top:18px">
+  <div class="section-head">
+    <div><h3 style="margin:0">Ready to configure</h3>
+      <p class="muted small" style="margin:.2em 0 0">This module is provisioned for your workspace. Connect a source to activate live data.</p></div>
+    <a class="btn ghost" href="{{ url_for('dashboard') }}">Back to dashboard</a>
+  </div>
+</div>
+{% endblock %}

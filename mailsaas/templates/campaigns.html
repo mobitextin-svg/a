@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Campaigns{% endblock %}
+{% block content %}
+<h1>Campaigns</h1>
+<p class="muted">Draft, schedule, run and analyse your email campaigns.</p>
+
+<div class="tabs" style="margin-top:14px">
+  <a class="tab {{ 'active' if not status_filter }}" href="{{ url_for('campaigns') }}">All</a>
+  {% for s in ['Draft','Scheduled','Running','Completed','Failed'] %}
+  <a class="tab {{ 'active' if status_filter==s }}" href="{{ url_for('campaigns', status=s) }}">{{ s }} ({{ counts.get(s,0) }})</a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>New campaign</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="create">
+    <div class="row"><input name="name" placeholder="Campaign name" required>
+      <input name="subject" placeholder="Subject line"></div>
+    <label>Body</label>
+    <textarea name="body" placeholder="Write your email… use {{ '{{name}}' }} for personalization"></textarea>
+    <div style="margin-top:12px"><button class="btn">Save draft</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>{{ status_filter or 'All' }} campaigns</h2></div>
+  <table>
+    <thead><tr><th>Name</th><th>Status</th><th class="num">Recipients</th><th class="num">Sent</th>
+      <th class="num">Opens</th><th class="num">Clicks</th><th></th></tr></thead>
+    <tbody>
+    {% for c in campaigns %}
+      <tr>
+        <td><b>{{ c.name }}</b><div class="faint small">{{ c.subject or 'No subject' }}</div></td>
+        <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="num">{{ '{:,}'.format(c.recipients) }}</td>
+        <td class="num">{{ '{:,}'.format(c.sent) }}</td>
+        <td class="num">{{ '{:,}'.format(c.opens) }}</td>
+        <td class="num">{{ '{:,}'.format(c.clicks) }}</td>
+        <td class="num">
+          {% if c.status in ['Draft','Scheduled','Running'] %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="advance">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn sm">{{ {'Draft':'Schedule','Scheduled':'Start','Running':'Complete'}[c.status] }}</button></form>
+          {% endif %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="clone">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn ghost sm">Clone</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">No campaigns in this view.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

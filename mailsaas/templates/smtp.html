@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}SMTP Servers{% endblock %}
+{% block content %}
+<h1>SMTP Servers</h1>
+<p class="muted">Relays, dedicated IPs, rotation, health monitoring, warm-up &amp; sending limits.</p>
+
+<div class="card" style="margin-top:14px">
+  <h2>Add SMTP server</h2>
+  <form method="post">
+    <div class="row"><input name="name" placeholder="Friendly name" required>
+      <input name="host" placeholder="smtp.provider.com" required>
+      <input name="port" type="number" placeholder="587" value="587" style="max-width:90px"></div>
+    <div class="row" style="margin-top:10px"><input name="username" placeholder="Username">
+      <input name="dedicated_ip" placeholder="Dedicated IP (optional)">
+      <input name="daily_limit" type="number" placeholder="Daily limit" value="10000"></div>
+    <div style="margin-top:12px"><button class="btn">Add server</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Your relays</h2><span class="pill">Rotation <b>enabled</b></span></div>
+  <table>
+    <thead><tr><th>Server</th><th>Dedicated IP</th><th>Health</th><th>Warm-up</th><th>Usage today</th></tr></thead>
+    <tbody>
+    {% for s in servers %}
+      {% set pct = (100 * s.sent_today / s.daily_limit)|round(0,'floor')|int if s.daily_limit else 0 %}
+      <tr>
+        <td><b>{{ s.name }}</b><div class="faint small">{{ s.host }}:{{ s.port }}</div></td>
+        <td>{{ s.dedicated_ip or '—' }}</td>
+        <td><span class="badge b-{{ s.health }}">{{ s.health }}</span></td>
+        <td class="small">{{ s.warmup }}</td>
+        <td style="width:200px">
+          <div class="small faint">{{ '{:,}'.format(s.sent_today) }} / {{ '{:,}'.format(s.daily_limit) }}</div>
+          <div class="meter"><i style="width:{{ pct }}%"></i></div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No SMTP servers yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

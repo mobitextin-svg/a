@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MailSaaS{% endblock %} · MailSaaS</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📨</text></svg>">
+</head>
+<body>
+{% set endpoints = {
+  'dashboard':'dashboard','verification':'verification','sender':'sender',
+  'contacts':'contacts','campaigns':'campaigns','smtp':'smtp','domains':'domains',
+  'reports':'reports','api':'api_keys','billing':'billing','team':'team',
+  'settings':'settings','enterprise':'enterprise'} %}
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">📨 Mail<span class="dot">SaaS</span></div>
+    {% for m in NAV %}
+      {% if m.key in endpoints %}
+        {% set href = url_for(endpoints[m.key]) %}
+      {% else %}
+        {% set href = url_for('module_page', key=m.key) %}
+      {% endif %}
+      <a class="nav-link {{ 'active' if active == m.key else '' }}" href="{{ href }}">
+        <span class="ic">{{ m.icon }}</span><span>{{ m.label }}</span>
+      </a>
+    {% endfor %}
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb">{{ self.title() }}</div>
+      <div class="right">
+        <span class="pill">Plan <b>{{ account.plan if account else '—' }}</b></span>
+        <span class="pill">Credits <b>{{ '{:,}'.format(account.credits) if account else 0 }}</b></span>
+        <span class="avatar">{{ (user.name[:1]|upper) if user else '?' }}</span>
+        <a class="small muted" href="{{ url_for('logout') }}">Sign out</a>
+      </div>
+    </div>
+    <div class="content">
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+</body>
+</html>
