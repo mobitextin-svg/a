@@ -12,12 +12,21 @@ modules.
 
 ## Quick start
 
+**One-click (easiest):**
+- **Windows** — double-click **`start.bat`**
+- **macOS / Linux** — run **`./start.sh`** (or `bash start.sh`)
+
+These auto-install dependencies, launch the server, and open your browser.
+
+**Manual:**
 ```bash
 cd mailsaas
 pip install -r requirements.txt
 python run.py
 # → http://127.0.0.1:5005
 ```
+
+Use a different port with the `PORT` env var, e.g. `PORT=5060 python run.py`.
 
 Create an account on the signup screen — your workspace is auto-seeded with
 realistic demo data (contacts, campaigns, SMTP relays, domains, invoices) so
