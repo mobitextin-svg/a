@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Backups{% endblock %}
+{% block content %}
+<h1>💾 Backups</h1>
+<p class="muted">Snapshot the database and download backups.</p>
+<div class="card" style="margin-top:14px">
+  <form method="post"><input type="hidden" name="action" value="create">
+    <button class="btn">📸 Create backup now</button></form>
+</div>
+<div class="card">
+  <h3>Available backups</h3>
+  <table>
+    <thead><tr><th>File</th><th class="num">Size (KB)</th><th></th></tr></thead>
+    <tbody>
+    {% for f in files %}
+      <tr><td>{{ f.name }}</td><td class="num">{{ f.size }}</td>
+        <td class="num"><a class="btn ghost sm" href="{{ url_for('backup_download', name=f.name) }}">⬇ Download</a></td></tr>
+    {% else %}<tr><td colspan="3" class="empty">No backups yet — create one above.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <p class="faint small" style="margin-top:8px">Backups use SQLite's online snapshot (consistent even while running). For production, automate this to off-site storage — see PRODUCTION.md.</p>
+</div>
+{% endblock %}

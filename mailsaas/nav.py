@@ -276,7 +276,7 @@ NAV = [
         ],
     },
     {
-        "key": "admin", "label": "Admin Panel", "icon": "🛡️", "built": True,
+        "key": "admin", "label": "Users", "icon": "👥", "built": True,
         "items": [
             ("Tenants", "All companies on the platform"),
             ("Users", "Every user across tenants"),
@@ -399,6 +399,22 @@ NAV = [
             ("Audit Logs", "Security event trail"),
         ],
     },
+    # --- Admin-only platform modules ------------------------------------- #
+    {"key": "plans", "label": "Plans", "icon": "💳", "built": True,
+     "items": [("Tiers", "Free → Enterprise"), ("Credits", "Per-plan allowances"),
+               ("Distribution", "Plan mix across tenants")]},
+    {"key": "coupons", "label": "Coupons", "icon": "🎫", "built": True,
+     "items": [("Create codes", "Percent discounts"), ("Usage", "Redemptions"),
+               ("Expiry", "Time-limited offers")]},
+    {"key": "mktmgmt", "label": "Marketplace Management", "icon": "🛍️", "built": True,
+     "items": [("Catalog", "Templates on offer"), ("Installs", "Adoption metrics")]},
+    {"key": "apimgmt", "label": "API Management", "icon": "🔌", "built": True,
+     "items": [("Keys", "All tenant keys"), ("Usage", "Calls & last used")]},
+    {"key": "logs", "label": "Logs", "icon": "📜", "built": True,
+     "items": [("Activity", "Audit trail"), ("Logins", "Security events")]},
+    {"key": "backups", "label": "Backups", "icon": "💾", "built": True,
+     "items": [("Create", "Snapshot the database"), ("Download", "Export a backup"),
+               ("Restore", "Recover from a snapshot")]},
 ]
 
 # Quick lookup by key.
@@ -410,16 +426,38 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 #  renders with no header (used for the standalone Dashboard link).
 # --------------------------------------------------------------------------- #
 
-NAV_GROUPS = [
+# Two completely separate menus, chosen by role at render time.
+# Regular users never see (or can reach) the admin/infrastructure modules.
+
+USER_GROUPS = [
     ("", ["dashboard"]),
-    ("👤 User Panel", ["verification", "contacts", "sender", "campaigns", "templates",
-                      "marketplace", "landing", "reports", "ai", "finder",
-                      "deliverability", "automation", "api", "webhooks", "billing"]),
-    ("🛠️ Admin Panel", ["smtp", "pools", "warmup", "queue", "rotsend", "rotverify",
-                        "burst", "iphealth", "domains", "monitoring",
-                        "admin", "whitelabel", "enterprise"]),
-    ("👥 Workspace", ["team", "integrations", "notifications", "support", "settings"]),
+    ("📧 Workspace", ["sender", "verification", "contacts", "campaigns", "templates",
+                     "landing", "reports", "ai", "finder", "deliverability",
+                     "automation"]),
+    ("👨‍💻 Developers", ["api", "webhooks"]),
+    ("💳 Account", ["billing"]),
+    ("👥 Team", ["team", "integrations", "notifications", "support", "settings"]),
 ]
+
+ADMIN_GROUPS = [
+    ("", ["dashboard"]),
+    ("👥 Users & Plans", ["admin", "plans", "coupons"]),
+    ("🛠️ Sending Infrastructure", ["smtp", "pools", "warmup", "queue", "rotsend",
+                                   "rotverify", "burst", "iphealth", "domains",
+                                   "monitoring"]),
+    ("🏢 Platform", ["whitelabel", "enterprise", "mktmgmt", "apimgmt", "logs",
+                    "backups", "settings"]),
+]
+
+# Default menu used where role is unknown (e.g. before login context).
+NAV_GROUPS = USER_GROUPS
+
+# Modules only admins may open. Regular users are blocked at the route level too.
+ADMIN_ONLY = {
+    "admin", "plans", "coupons", "mktmgmt", "apimgmt", "logs", "backups",
+    "smtp", "pools", "warmup", "queue", "rotsend", "rotverify", "burst",
+    "iphealth", "domains", "monitoring", "whitelabel", "enterprise",
+}
 
 # "Essential" modules shown in Simple mode (progressive disclosure for new
 # users). Everything else is hidden until they switch to Advanced — this keeps

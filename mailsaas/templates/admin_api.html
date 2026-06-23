@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}API Management{% endblock %}
+{% block content %}
+<h1>🔌 API Management</h1>
+<p class="muted">Every API key across all tenants.</p>
+<div class="card" style="margin-top:14px">
+  <table>
+    <thead><tr><th>Label</th><th>Tenant</th><th>Token</th><th>Last used</th></tr></thead>
+    <tbody>
+    {% for k in keys %}
+      <tr><td><b>{{ k.label }}</b></td><td class="small">#{{ k.account_id }} · {{ k.acct }}</td>
+        <td class="small"><code>{{ k.token[:14] }}…</code></td><td class="faint small">{{ k.last_used or 'never' }}</td></tr>
+    {% else %}<tr><td colspan="4" class="empty">No API keys.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

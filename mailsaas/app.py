@@ -37,7 +37,8 @@ from . import totp
 from . import tasks
 from . import rotation as ROT
 from . import deliverability as DELIV
-from .nav import (NAV, NAV_BY_KEY, NAV_GROUPS, ESSENTIAL, ONBOARDING_STEPS)
+from .nav import (NAV, NAV_BY_KEY, USER_GROUPS, ADMIN_GROUPS, ADMIN_ONLY,
+                  ESSENTIAL, ONBOARDING_STEPS)
 from .verify import verify_email, verify_bulk
 
 
@@ -284,6 +285,16 @@ def register_security(app):
             row = D.query("SELECT session_token FROM users WHERE id=?", (uid,), one=True)
             if row and row["session_token"] and session.get("stoken") != row["session_token"]:
                 session.clear()
+        # Admin-only sections: block regular users at the route level so the
+        # infrastructure pages can't be reached by typing the URL.
+        ADMIN_PREFIXES = ("/smtp", "/pools", "/warmup", "/queue", "/rotation",
+                          "/burst", "/ip-health", "/domains", "/monitoring",
+                          "/whitelabel", "/enterprise", "/admin")
+        p = request.path
+        if session.get("uid") and any(p == x or p.startswith(x + "/") or p == x[1:]
+                                      for x in ADMIN_PREFIXES):
+            if not is_admin_user():
+                abort(403)
         # Validate CSRF on state-changing requests (skip token-auth JSON API).
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             if request.path.startswith("/api/"):
@@ -379,7 +390,7 @@ def register_context(app):
     def inject():
         return {
             "NAV": NAV,
-            "NAV_GROUPS": NAV_GROUPS,
+            "NAV_GROUPS": ADMIN_GROUPS if is_admin_user() else USER_GROUPS,
             "NAV_BY_KEY": NAV_BY_KEY,
             "ESSENTIAL": ESSENTIAL,
             "simple_default": _onboarding_incomplete(),
@@ -1721,6 +1732,111 @@ def register_modules(app):
                                plans=list(PLAN_CREDITS.keys()),
                                roles=["Super Admin", "Admin", "Manager", "User"],
                                can_super=is_superadmin())
+
+    # ---- Admin: Plans ---------------------------------------------------- #
+    @app.route("/admin/plans")
+    @login_required
+    def plans():
+        rows = D.query("SELECT plan, COUNT(*) c FROM accounts GROUP BY plan")
+        dist = {r["plan"]: r["c"] for r in rows}
+        catalogue = [
+            ("Free", 0, 1000), ("Pro", 99, 50000),
+            ("Business", 299, 250000), ("Enterprise", 0, 2000000),
+        ]
+        return render_template("admin_plans.html", catalogue=catalogue, dist=dist)
+
+    # ---- Admin: Coupons -------------------------------------------------- #
+    @app.route("/admin/coupons", methods=["GET", "POST"])
+    @login_required
+    def coupons():
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action == "create":
+                code = request.form.get("code", "").strip().upper()
+                pct = int(request.form.get("percent") or 10)
+                if code and not D.query("SELECT 1 FROM coupons WHERE code=?", (code,),
+                                        one=True):
+                    D.execute("INSERT INTO coupons (code, percent, active, created_at)"
+                              " VALUES (?,?,?,?)", (code, pct, 1, D.now()))
+                    flash(f"Coupon {code} created.", "success")
+                else:
+                    flash("Code missing or already exists.", "error")
+            elif action == "toggle":
+                cur = D.query("SELECT active FROM coupons WHERE id=?",
+                              (request.form.get("id"),), one=True)
+                if cur:
+                    D.execute("UPDATE coupons SET active=? WHERE id=?",
+                              (0 if cur["active"] else 1, request.form.get("id")))
+            return redirect(url_for("coupons"))
+        rows = D.query("SELECT * FROM coupons ORDER BY id DESC")
+        return render_template("admin_coupons.html", coupons=rows)
+
+    # ---- Admin: Marketplace Management ----------------------------------- #
+    @app.route("/admin/marketplace")
+    @login_required
+    def marketplace_mgmt():
+        installs = D.query("SELECT name, COUNT(*) c FROM templates GROUP BY name"
+                           " ORDER BY c DESC")
+        return render_template("admin_marketplace.html", catalog=MARKETPLACE,
+                               installs={r["name"]: r["c"] for r in installs})
+
+    # ---- Admin: API Management ------------------------------------------- #
+    @app.route("/admin/api")
+    @login_required
+    def api_mgmt():
+        keys = D.query(
+            "SELECT k.*, a.name acct FROM api_keys k JOIN accounts a"
+            " ON a.id=k.account_id ORDER BY k.id DESC")
+        return render_template("admin_api.html", keys=keys)
+
+    # ---- Admin: Logs ----------------------------------------------------- #
+    @app.route("/admin/logs")
+    @login_required
+    def logs():
+        activity = D.query("SELECT * FROM activity ORDER BY id DESC LIMIT 80")
+        logins = D.query("SELECT * FROM login_history ORDER BY id DESC LIMIT 80")
+        return render_template("admin_logs.html", activity=activity, logins=logins)
+
+    # ---- Admin: Backups -------------------------------------------------- #
+    @app.route("/admin/backups", methods=["GET", "POST"])
+    @login_required
+    def backups():
+        import glob as _glob
+        import shutil as _shutil
+        bdir = os.path.join(os.path.dirname(__file__), "backups")
+        os.makedirs(bdir, exist_ok=True)
+        if request.method == "POST" and request.form.get("action") == "create":
+            ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            dest = os.path.join(bdir, f"mailsaas-{ts}.sqlite3")
+            try:
+                # Use sqlite's online backup for a consistent snapshot.
+                src = D.get_db()
+                bk = __import__("sqlite3").connect(dest)
+                src.backup(bk)
+                bk.close()
+                flash(f"Backup created: {os.path.basename(dest)}", "success")
+            except Exception as e:  # noqa: BLE001
+                flash(f"Backup failed: {type(e).__name__}", "error")
+            return redirect(url_for("backups"))
+        files = []
+        for fp in sorted(_glob.glob(os.path.join(bdir, "*.sqlite3")), reverse=True):
+            files.append({"name": os.path.basename(fp),
+                          "size": round(os.path.getsize(fp) / 1024, 1)})
+        return render_template("admin_backups.html", files=files)
+
+    @app.route("/admin/backups/<name>")
+    @login_required
+    def backup_download(name):
+        if not is_admin_user():
+            abort(403)
+        # Prevent path traversal — only serve plain filenames from the backup dir.
+        safe = os.path.basename(name)
+        bdir = os.path.join(os.path.dirname(__file__), "backups")
+        path = os.path.join(bdir, safe)
+        if not safe.endswith(".sqlite3") or not os.path.isfile(path):
+            abort(404)
+        from flask import send_file
+        return send_file(path, as_attachment=True, download_name=safe)
 
     # ---- Enterprise modules + generic scaffold --------------------------- #
     @app.route("/enterprise")

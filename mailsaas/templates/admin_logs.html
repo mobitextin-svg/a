@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+{% block content %}
+<h1>📜 Logs</h1>
+<p class="muted">Platform-wide activity and security events.</p>
+<div class="grid g2" style="margin-top:14px">
+  <div class="card"><h3>Activity</h3>
+    {% for a in activity %}<div class="kv"><span class="small">#{{ a.account_id }} · {{ a.action }}</span><span class="faint small">{{ a.created_at }}</span></div>
+    {% else %}<div class="empty">No activity.</div>{% endfor %}
+  </div>
+  <div class="card"><h3>Logins</h3>
+    {% for l in logins %}<div class="kv"><span class="small">{{ l.user_email }} · {{ l.ip }}</span>
+      <span class="badge {{ 'b-valid' if l.ok else 'b-invalid' }}">{{ 'ok' if l.ok else 'fail' }}</span></div>
+    {% else %}<div class="empty">No logins.</div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

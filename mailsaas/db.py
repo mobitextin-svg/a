@@ -257,6 +257,15 @@ CREATE TABLE IF NOT EXISTS burst_jobs (
     ips_used     TEXT,
     created_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS coupons (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    code         TEXT UNIQUE NOT NULL,
+    percent      INTEGER NOT NULL DEFAULT 10,
+    redemptions  INTEGER NOT NULL DEFAULT 0,
+    active       INTEGER NOT NULL DEFAULT 1,
+    created_at   TEXT NOT NULL
+);
 """
 
 # Idempotent column additions for accounts that predate these features.
@@ -313,6 +322,11 @@ def init_db():
     db.executescript(SCHEMA)
     db.commit()
     _migrate()
+    # Seed default coupons once.
+    if not query("SELECT 1 FROM coupons LIMIT 1", (), one=True):
+        for code, pct in [("WELCOME20", 20), ("SAVE50", 50), ("ENTERPRISE", 30)]:
+            execute("INSERT INTO coupons (code, percent, active, created_at)"
+                    " VALUES (?,?,?,?)", (code, pct, 1, now()))
 
 
 def seed_demo(account_id, user_email):
