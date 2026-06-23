@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set new password · MailSaaS</title>
+<meta name="csrf-token" content="{{ csrf_token }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head><body>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<div class="auth-wrap"><div class="auth-card">
+  <div class="logo">📨 Mail<span class="dot">SaaS</span></div>
+  <p class="sub">Choose a new password</p>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <form method="post" action="{{ url_for('reset', token=token) }}">
+    <label>New password</label>
+    <input type="password" name="password" placeholder="6+ characters" required autofocus>
+    <div style="margin-top:18px"><button class="btn" style="width:100%">Update password</button></div>
+  </form>
+</div></div>
+</body></html>

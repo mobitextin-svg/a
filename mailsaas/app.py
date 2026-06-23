@@ -33,6 +33,7 @@ except ImportError:  # pragma: no cover
 
 from . import db as D
 from . import ai
+from . import totp
 from . import deliverability as DELIV
 from .nav import NAV, NAV_BY_KEY, NAV_GROUPS
 from .verify import verify_email, verify_bulk
@@ -189,6 +190,12 @@ def register_security(app):
     def _enforce():
         # Keep the session alive on a sliding window.
         session.permanent = True
+        # Session management: invalidate sessions cut by "sign out everywhere".
+        uid = session.get("uid")
+        if uid and not app.config.get("TESTING"):
+            row = D.query("SELECT session_token FROM users WHERE id=?", (uid,), one=True)
+            if row and row["session_token"] and session.get("stoken") != row["session_token"]:
+                session.clear()
         # Validate CSRF on state-changing requests (skip token-auth JSON API).
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             if request.path.startswith("/api/"):
@@ -226,6 +233,20 @@ def _record_login(account_id, email, ok=True):
         " VALUES (?,?,?,?,?,?)",
         (account_id, email, request.remote_addr or "-",
          (request.headers.get("User-Agent", "")[:120]), 1 if ok else 0, D.now()))
+
+
+def _complete_login(u):
+    """Establish an authenticated session and bind a session token (so
+    'sign out everywhere' can invalidate other devices)."""
+    stoken = secrets.token_hex(16)
+    D.execute("UPDATE users SET last_login=?, session_token=? WHERE id=?",
+              (D.now(), stoken, u["id"]))
+    session.clear()
+    session["uid"] = u["id"]
+    session["stoken"] = stoken
+    session.permanent = True
+    D.log_activity(u["account_id"], u["email"], "Signed in")
+    _record_login(u["account_id"], u["email"], ok=True)
 
 
 def is_superadmin():
@@ -285,17 +306,73 @@ def register_auth(app):
                 (company, "Free", 1000, D.now()),
             )
             pw_hash = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+            vtoken = secrets.token_urlsafe(24)
             uid = D.execute(
                 "INSERT INTO users (account_id, email, name, pw_hash, role, created_at,"
-                " last_login) VALUES (?,?,?,?,?,?,?)",
-                (acct_id, email, name, pw_hash, "Owner", D.now(), D.now()),
+                " last_login, verified, verify_token) VALUES (?,?,?,?,?,?,?,?,?)",
+                (acct_id, email, name, pw_hash, "Owner", D.now(), D.now(), 0, vtoken),
             )
             D.seed_demo(acct_id, email)
-            session.clear()
-            session["uid"] = uid
-            flash("Welcome to MailSaaS! Your workspace is ready.", "success")
+            u = D.query("SELECT * FROM users WHERE id=?", (uid,), one=True)
+            _complete_login(u)
+            # No outbound mail in this build — surface the verification link so the
+            # flow is testable end to end. In production this is emailed.
+            link = url_for("verify_email", token=vtoken, _external=False)
+            flash("Welcome to MailSaaS! Confirm your email to remove the banner: "
+                  + link, "success")
             return redirect(url_for("dashboard"))
         return render_template("signup.html")
+
+    @app.route("/verify-email/<token>")
+    def verify_email(token):
+        u = D.query("SELECT * FROM users WHERE verify_token=?", (token,), one=True)
+        if not u:
+            flash("That verification link is invalid or already used.", "error")
+            return redirect(url_for("dashboard") if current_user() else url_for("login"))
+        D.execute("UPDATE users SET verified=1, verify_token=NULL WHERE id=?", (u["id"],))
+        D.log_activity(u["account_id"], u["email"], "Verified email address")
+        flash("Email verified ✔", "success")
+        return redirect(url_for("dashboard") if current_user() else url_for("login"))
+
+    @app.route("/forgot", methods=["GET", "POST"])
+    def forgot():
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().lower()
+            u = D.query("SELECT * FROM users WHERE email=?", (email,), one=True)
+            if u:
+                token = secrets.token_urlsafe(24)
+                expires = (datetime.utcnow() + timedelta(hours=1)).strftime(
+                    "%Y-%m-%d %H:%M:%S")
+                D.execute("UPDATE users SET reset_token=?, reset_expires=? WHERE id=?",
+                          (token, expires, u["id"]))
+                link = url_for("reset", token=token, _external=False)
+                # Dev: show the link. Production: email it.
+                flash("Password reset link (valid 1h): " + link, "success")
+            else:
+                flash("If that email exists, a reset link has been sent.", "success")
+            return redirect(url_for("login"))
+        return render_template("forgot.html")
+
+    @app.route("/reset/<token>", methods=["GET", "POST"])
+    def reset(token):
+        u = D.query("SELECT * FROM users WHERE reset_token=?", (token,), one=True)
+        valid = u and u["reset_expires"] and u["reset_expires"] >= D.now()
+        if not valid:
+            flash("This reset link is invalid or has expired.", "error")
+            return redirect(url_for("forgot"))
+        if request.method == "POST":
+            new = request.form.get("password", "")
+            if len(new) < 6:
+                flash("Password must be at least 6 characters.", "error")
+                return render_template("reset.html", token=token)
+            h = bcrypt.hashpw(new.encode(), bcrypt.gensalt()).decode()
+            # Reset also invalidates other sessions.
+            D.execute("UPDATE users SET pw_hash=?, reset_token=NULL, reset_expires=NULL,"
+                      " session_token=NULL WHERE id=?", (h, u["id"]))
+            D.log_activity(u["account_id"], u["email"], "Reset password")
+            flash("Password updated — please sign in.", "success")
+            return redirect(url_for("login"))
+        return render_template("reset.html", token=token)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -306,17 +383,34 @@ def register_auth(app):
             pw = request.form.get("password", "")
             u = D.query("SELECT * FROM users WHERE email=?", (email,), one=True)
             if u and bcrypt.checkpw(pw.encode(), u["pw_hash"].encode()):
-                session.clear()
-                session["uid"] = u["id"]
-                D.execute("UPDATE users SET last_login=? WHERE id=?", (D.now(), u["id"]))
-                D.log_activity(u["account_id"], u["email"], "Signed in")
-                _record_login(u["account_id"], u["email"], ok=True)
-                nxt = request.args.get("next") or url_for("dashboard")
-                return redirect(nxt)
+                # If 2FA is enabled, defer login until the TOTP code is verified.
+                if u["twofa"] and u["totp_secret"]:
+                    session.clear()
+                    session["pending_uid"] = u["id"]
+                    session["next"] = request.args.get("next") or url_for("dashboard")
+                    return redirect(url_for("twofa_challenge"))
+                _complete_login(u)
+                return redirect(request.args.get("next") or url_for("dashboard"))
             if u:
                 _record_login(u["account_id"], email, ok=False)
             flash("Invalid email or password.", "error")
         return render_template("login.html")
+
+    @app.route("/2fa", methods=["GET", "POST"])
+    def twofa_challenge():
+        pending = session.get("pending_uid")
+        if not pending:
+            return redirect(url_for("login"))
+        u = D.query("SELECT * FROM users WHERE id=?", (pending,), one=True)
+        if request.method == "POST":
+            code = request.form.get("code", "")
+            if u and totp.verify(u["totp_secret"], code):
+                nxt = session.get("next") or url_for("dashboard")
+                _complete_login(u)
+                return redirect(nxt)
+            _record_login(u["account_id"], u["email"], ok=False)
+            flash("Invalid authentication code.", "error")
+        return render_template("twofa.html")
 
     @app.route("/logout")
     def logout():
@@ -504,6 +598,33 @@ def register_modules(app):
             elif action == "delete":
                 D.execute("DELETE FROM contacts WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
+            elif action == "dedupe":
+                total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?",
+                                (aid,), one=True)["c"]
+                uniq = D.query("SELECT COUNT(DISTINCT email) c FROM contacts WHERE"
+                               " account_id=?", (aid,), one=True)["c"]
+                # Keep the lowest id per email, delete the rest.
+                D.execute(
+                    "DELETE FROM contacts WHERE account_id=? AND id NOT IN ("
+                    "  SELECT MIN(id) FROM contacts WHERE account_id=? GROUP BY email)",
+                    (aid, aid))
+                D.log_activity(aid, current_user()["email"], "Removed duplicate contacts")
+                flash(f"Removed {total - uniq} duplicate contact(s).", "success")
+            elif action == "gdpr":
+                # GDPR erasure: hard-delete and add a tombstone to the suppression list
+                # so the address can never be re-imported.
+                cid = request.form.get("id")
+                row = D.query("SELECT email FROM contacts WHERE id=? AND account_id=?",
+                              (cid, aid), one=True)
+                if row:
+                    D.execute("DELETE FROM contacts WHERE id=? AND account_id=?", (cid, aid))
+                    D.execute("INSERT INTO contacts (account_id, email, name, status,"
+                              " created_at) VALUES (?,?,?,?,?)",
+                              (aid, row["email"], "[erased]", "suppressed", D.now()))
+                    D.log_activity(aid, current_user()["email"],
+                                   "GDPR erasure for a contact")
+                    flash("Contact erased (GDPR) and added to the suppression list.",
+                          "success")
             return redirect(url_for("contacts"))
         status_filter = request.args.get("status")
         if status_filter:
@@ -569,6 +690,12 @@ def register_modules(app):
                 if cur and cur["status"] in flow:
                     D.execute("UPDATE campaigns SET status=? WHERE id=? AND account_id=?",
                               (flow[cur["status"]], cid, aid))
+            elif action == "pause":
+                D.execute("UPDATE campaigns SET status='Paused' WHERE id=? AND account_id=?"
+                          " AND status='Running'", (request.form.get("id"), aid))
+            elif action == "resume":
+                D.execute("UPDATE campaigns SET status='Running' WHERE id=? AND account_id=?"
+                          " AND status='Paused'", (request.form.get("id"), aid))
             return redirect(url_for("campaigns"))
         status_filter = request.args.get("status")
         if status_filter:
@@ -802,17 +929,44 @@ def register_modules(app):
                     D.execute("UPDATE users SET pw_hash=? WHERE id=?", (h, u["id"]))
                     D.log_activity(acct["id"], u["email"], "Changed password")
                     flash("Password changed.", "success")
-            elif action == "twofa":
-                D.execute("UPDATE users SET twofa=? WHERE id=?",
-                          (0 if u["twofa"] else 1, u["id"]))
-                flash("Two-factor authentication " + ("disabled." if u["twofa"]
-                      else "enabled."), "success")
+            elif action == "twofa_setup":
+                D.execute("UPDATE users SET totp_secret=?, twofa=0 WHERE id=?",
+                          (totp.new_secret(), u["id"]))
+                flash("Scan the QR code and enter a 6-digit code to finish enabling 2FA.",
+                      "success")
+            elif action == "twofa_enable":
+                u2 = D.query("SELECT * FROM users WHERE id=?", (u["id"],), one=True)
+                if totp.verify(u2["totp_secret"], request.form.get("code", "")):
+                    D.execute("UPDATE users SET twofa=1 WHERE id=?", (u["id"],))
+                    D.log_activity(acct["id"], u["email"], "Enabled 2FA")
+                    flash("Two-factor authentication enabled 🔒", "success")
+                else:
+                    flash("That code didn't match — try again.", "error")
+            elif action == "twofa_disable":
+                D.execute("UPDATE users SET twofa=0, totp_secret=NULL WHERE id=?", (u["id"],))
+                D.log_activity(acct["id"], u["email"], "Disabled 2FA")
+                flash("Two-factor authentication disabled.", "success")
+            elif action == "signout_all":
+                stoken = secrets.token_hex(16)
+                D.execute("UPDATE users SET session_token=? WHERE id=?", (stoken, u["id"]))
+                session["stoken"] = stoken  # keep THIS device signed in
+                D.log_activity(acct["id"], u["email"], "Signed out all other sessions")
+                flash("Signed out of all other sessions.", "success")
             return redirect(url_for("settings"))
         audit = D.query("SELECT * FROM activity WHERE account_id=? ORDER BY id DESC LIMIT 30",
                         (acct["id"],))
+        logins = D.query("SELECT * FROM login_history WHERE account_id=? ORDER BY id DESC"
+                         " LIMIT 10", (acct["id"],))
         timezones = ["UTC", "America/New_York", "America/Los_Angeles", "Europe/London",
                      "Europe/Berlin", "Asia/Kolkata", "Asia/Singapore", "Australia/Sydney"]
-        return render_template("settings.html", audit=audit, timezones=timezones)
+        # 2FA setup state: secret stored but not yet enabled.
+        u = current_user()
+        setup_uri = None
+        if u["totp_secret"] and not u["twofa"]:
+            setup_uri = totp.provisioning_uri(u["totp_secret"], u["email"])
+        return render_template("settings.html", audit=audit, timezones=timezones,
+                               logins=logins, setup_uri=setup_uri,
+                               totp_secret=u["totp_secret"])
 
     # ---- AI Center ------------------------------------------------------- #
     @app.route("/ai", methods=["GET", "POST"])
@@ -854,6 +1008,10 @@ def register_modules(app):
                                                 request.form.get("language", "spanish"))
             elif tool == "personalize":
                 out["personalize"] = ai.personalize(request.form.get("text", ""))
+            elif tool == "tone":
+                out["tone"] = ai.analyze_tone(request.form.get("text", ""))
+            elif tool == "intent":
+                out["intent"] = ai.detect_reply_intent(request.form.get("text", ""))
             D.log_activity(current_account()["id"], current_user()["email"],
                            f"Used AI tool: {tool}")
         return render_template("ai.html", out=out)

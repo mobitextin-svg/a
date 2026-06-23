@@ -1,27 +1,23 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · MailSaaS</title>
+<title>Reset password · MailSaaS</title>
 <meta name="csrf-token" content="{{ csrf_token }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head><body>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <div class="auth-wrap"><div class="auth-card">
   <div class="logo">📨 Mail<span class="dot">SaaS</span></div>
-  <p class="sub">Sign in to your workspace</p>
+  <p class="sub">Forgot your password? Enter your email to get a reset link.</p>
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
   {% endwith %}
   <form method="post">
     <label>Work email</label>
     <input type="email" name="email" placeholder="you@company.com" required autofocus>
-    <label>Password</label>
-    <input type="password" name="password" placeholder="••••••••" required>
-    <div class="small" style="text-align:right;margin-top:6px"><a href="{{ url_for('forgot') }}">Forgot password?</a></div>
-    <div style="margin-top:14px"><button class="btn" style="width:100%">Sign in</button></div>
+    <div style="margin-top:18px"><button class="btn" style="width:100%">Send reset link</button></div>
   </form>
   <p class="small muted" style="margin-top:18px;text-align:center">
-    New here? <a href="{{ url_for('signup') }}">Create a free account</a>
-  </p>
+    <a href="{{ url_for('login') }}">← Back to sign in</a></p>
 </div></div>
 </body></html>

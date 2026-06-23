@@ -37,7 +37,10 @@
 </div>
 
 <div class="card">
-  <div class="section-head"><h2>{{ (status_filter or 'All')|capitalize }} contacts</h2></div>
+  <div class="section-head"><h2>{{ (status_filter or 'All')|capitalize }} contacts</h2>
+    <form class="inline-form" method="post"><input type="hidden" name="action" value="dedupe">
+      <button class="btn ghost sm">🧹 Remove duplicates</button></form>
+  </div>
   <table>
     <thead><tr><th>Email</th><th>Name</th><th>Tags</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -55,6 +58,9 @@
           <form class="inline-form" method="post"><input type="hidden" name="action" value="delete">
             <input type="hidden" name="id" value="{{ c.id }}">
             <button class="btn danger sm">Delete</button></form>
+          <form class="inline-form" method="post" onsubmit="return confirm('GDPR erase {{ c.email }}? This cannot be undone.')">
+            <input type="hidden" name="action" value="gdpr"><input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn danger sm" title="GDPR erasure">⌦ GDPR</button></form>
         </td>
       </tr>
     {% else %}

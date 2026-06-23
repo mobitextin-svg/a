@@ -279,6 +279,52 @@ def personalize(template, name="Alex", company="Acme", city="Austin"):
             "preview_for": f"{name} @ {company}"}
 
 
+def analyze_tone(text):
+    """Classify the dominant tone of a piece of copy (heuristic)."""
+    low = (text or "").lower()
+    signals = {
+        "Urgent": ["now", "hurry", "today", "last chance", "ends", "!", "immediately"],
+        "Friendly": ["hi", "hey", "thanks", "😊", "👋", "hope", "great"],
+        "Formal": ["dear", "regards", "sincerely", "kindly", "please find"],
+        "Persuasive": ["you", "free", "save", "exclusive", "guarantee", "proven"],
+        "Salesy": ["buy", "discount", "offer", "deal", "% off", "limited"],
+    }
+    scores = {t: sum(low.count(w) for w in ws) for t, ws in signals.items()}
+    dominant = max(scores, key=scores.get) if any(scores.values()) else "Neutral"
+    exclaim = (text or "").count("!")
+    readability = "Easy" if len((text or "").split()) < 120 else "Dense"
+    return {"tone": dominant, "scores": scores, "exclaims": exclaim,
+            "readability": readability,
+            "tip": "Lots of exclamation marks can hurt deliverability." if exclaim > 2
+            else "Tone looks balanced for most audiences."}
+
+
+def detect_reply_intent(text):
+    """Detect the intent of an inbound reply so it can be auto-routed."""
+    low = (text or "").lower()
+    rules = [
+        ("Unsubscribe", ["unsubscribe", "remove me", "stop emailing", "opt out", "opt-out"]),
+        ("Out of office", ["out of office", "on leave", "vacation", "away until", "ooo"]),
+        ("Interested", ["interested", "tell me more", "sounds good", "let's talk",
+                        "book a", "demo", "pricing"]),
+        ("Not interested", ["not interested", "no thanks", "remove", "not a fit"]),
+        ("Complaint", ["spam", "stop", "angry", "report", "illegal"]),
+        ("Question", ["?", "how do", "can you", "what is", "when"]),
+    ]
+    for label, kws in rules:
+        if any(k in low for k in kws):
+            return {"intent": label,
+                    "action": {
+                        "Unsubscribe": "Auto-suppress this contact",
+                        "Out of office": "Snooze follow-up 7 days",
+                        "Interested": "Route to sales + create task",
+                        "Not interested": "Mark closed-lost",
+                        "Complaint": "Suppress + flag for review",
+                        "Question": "Route to support",
+                    }[label]}
+    return {"intent": "Neutral", "action": "Log and continue sequence"}
+
+
 def predict_send_time(audience="general", timezone="recipient"):
     table = {
         "general": ("Tuesday", "10:00", 24.1),

@@ -151,5 +151,34 @@
   </div>
 </div>
 
+<div class="grid g2">
+  <div class="card">
+    <h2>🎭 AI Tone Analyzer</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="tone">
+      <label>Text</label><textarea name="text" placeholder="Paste copy to analyze its tone…"></textarea>
+      <div style="margin-top:12px"><button class="btn">Analyze tone</button></div>
+    </form>
+    {% if out.tool=='tone' %}
+      <div class="kv"><span>Dominant tone</span><span class="badge b-Running">{{ out.tone.tone }}</span></div>
+      <div class="kv"><span>Readability</span><span>{{ out.tone.readability }}</span></div>
+      <div class="kv"><span>Exclamations</span><span>{{ out.tone.exclaims }}</span></div>
+      <p class="faint small" style="margin-top:6px">{{ out.tone.tip }}</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>📥 AI Reply Detection</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="intent">
+      <label>Inbound reply</label><textarea name="text" placeholder="Paste a reply to classify its intent…"></textarea>
+      <div style="margin-top:12px"><button class="btn">Detect intent</button></div>
+    </form>
+    {% if out.tool=='intent' %}
+      <div class="kv"><span>Intent</span><span class="badge b-valid">{{ out.intent.intent }}</span></div>
+      <div class="kv"><span>Suggested action</span><span>{{ out.intent.action }}</span></div>
+    {% endif %}
+  </div>
+</div>
+
 <p class="faint small">⚙️ These tools run on a built-in generator so they work offline and free. Plug in a real LLM by implementing <code>ai._llm_complete()</code> and setting <code>USE_LLM=True</code>.</p>
 {% endblock %}

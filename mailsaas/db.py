@@ -248,6 +248,13 @@ _MIGRATIONS = [
     ("accounts", "payment_provider", "TEXT NOT NULL DEFAULT 'Stripe'"),
     ("accounts", "coupon", "TEXT"),
     ("accounts", "is_admin", "INTEGER NOT NULL DEFAULT 0"),
+    # Authentication hardening.
+    ("users", "verified", "INTEGER NOT NULL DEFAULT 1"),
+    ("users", "verify_token", "TEXT"),
+    ("users", "reset_token", "TEXT"),
+    ("users", "reset_expires", "TEXT"),
+    ("users", "totp_secret", "TEXT"),
+    ("users", "session_token", "TEXT"),
 ]
 
 

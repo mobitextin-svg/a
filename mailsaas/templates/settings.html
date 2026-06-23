@@ -27,11 +27,58 @@
     </form>
     <hr style="border-color:var(--line);margin:18px 0">
     <div class="section-head">
-      <div><b>Two-factor authentication</b><div class="faint small">{{ 'Enabled' if user.twofa else 'Disabled' }}</div></div>
-      <form class="inline-form" method="post"><input type="hidden" name="action" value="twofa">
-        <button class="btn {{ 'danger' if user.twofa else '' }} sm">{{ 'Disable 2FA' if user.twofa else 'Enable 2FA' }}</button></form>
+      <div><b>Two-factor authentication</b>
+        <div class="faint small">{{ 'Enabled 🔒' if user.twofa else ('Setup in progress' if setup_uri else 'Disabled') }}</div></div>
+      {% if user.twofa %}
+        <form class="inline-form" method="post"><input type="hidden" name="action" value="twofa_disable">
+          <button class="btn danger sm">Disable 2FA</button></form>
+      {% elif not setup_uri %}
+        <form class="inline-form" method="post"><input type="hidden" name="action" value="twofa_setup">
+          <button class="btn sm">Enable 2FA</button></form>
+      {% endif %}
+    </div>
+    {% if setup_uri %}
+      <div class="card tight" style="background:var(--panel2);margin-top:12px">
+        <p class="small">1. Add this key to Google Authenticator / Authy / 1Password:</p>
+        <div class="code" style="text-align:center;font-size:1.05rem;letter-spacing:.15em">{{ totp_secret }}</div>
+        <p class="small" style="margin-top:8px">2. Or scan this QR:</p>
+        <div style="text-align:center">
+          <img alt="2FA QR" width="150" height="150"
+               src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ setup_uri|urlencode }}">
+          <div class="faint small">(offline? use the key above)</div>
+        </div>
+        <form method="post" style="margin-top:10px">
+          <input type="hidden" name="action" value="twofa_enable">
+          <label>3. Enter the 6-digit code to finish</label>
+          <div class="row"><input name="code" placeholder="123456" maxlength="6" style="flex:2">
+            <button class="btn" style="flex:1">Verify &amp; enable</button></div>
+        </form>
+      </div>
+    {% endif %}
+    <hr style="border-color:var(--line);margin:18px 0">
+    <div class="section-head">
+      <div><b>Active sessions</b><div class="faint small">Sliding 30-min timeout · HttpOnly cookies</div></div>
+      <form class="inline-form" method="post"><input type="hidden" name="action" value="signout_all">
+        <button class="btn ghost sm">Sign out everywhere</button></form>
     </div>
   </div>
+</div>
+
+<div class="card">
+  <h2>Recent login history</h2>
+  <table>
+    <thead><tr><th>User</th><th>IP</th><th>Device</th><th>Result</th><th>When</th></tr></thead>
+    <tbody>
+    {% for l in logins %}
+      <tr><td class="small">{{ l.user_email }}</td><td class="faint small">{{ l.ip }}</td>
+        <td class="faint small">{{ (l.agent or '—')[:40] }}</td>
+        <td><span class="badge {{ 'b-valid' if l.ok else 'b-invalid' }}">{{ 'success' if l.ok else 'failed' }}</span></td>
+        <td class="faint small">{{ l.created_at }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No logins recorded.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </div>
 
 <div class="grid g2">

@@ -13,9 +13,11 @@ modules.
 > (`Dockerfile`, `docker-compose.yml`, `deploy/nginx.conf`, `wsgi.py`,
 > `tasks.py`). Run it with `docker compose up --build`.
 
-### Security
-- CSRF protection on every form · sliding 30-min session timeout · HttpOnly/SameSite cookies
-- API-key rotation & revocation · bcrypt hashing · login history · audit logs · 2FA toggle
+### Security & Authentication
+- **Email verification** on signup · **password reset** (tokenised, 1h expiry)
+- **Real TOTP 2FA** (RFC 6238, stdlib-only — works with Google Authenticator/Authy/1Password)
+- **Session management**: sliding 30-min timeout, HttpOnly/SameSite cookies, "sign out everywhere"
+- CSRF protection on every form · API-key rotation & revocation · bcrypt hashing · login history · audit logs
 
 ### UI
 - Dark / light theme toggle · toast notifications · animated counters
