@@ -248,6 +248,15 @@ CREATE INDEX IF NOT EXISTS idx_verif_acct          ON verifications(account_id);
 CREATE INDEX IF NOT EXISTS idx_campaigns_acct      ON campaigns(account_id);
 CREATE INDEX IF NOT EXISTS idx_users_acct          ON users(account_id);
 CREATE INDEX IF NOT EXISTS idx_login_acct          ON login_history(account_id);
+
+CREATE TABLE IF NOT EXISTS burst_jobs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    size         INTEGER NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'running',   -- running / completed
+    ips_used     TEXT,
+    created_at   TEXT NOT NULL
+);
 """
 
 # Idempotent column additions for accounts that predate these features.
@@ -266,6 +275,9 @@ _MIGRATIONS = [
     ("users", "totp_secret", "TEXT"),
     ("users", "session_token", "TEXT"),
     ("users", "status", "TEXT NOT NULL DEFAULT 'active'"),  # active / suspended
+    # Smart-rotation engines.
+    ("smtp_servers", "purpose", "TEXT NOT NULL DEFAULT 'normal'"),  # normal / burst
+    ("smtp_servers", "busy", "INTEGER NOT NULL DEFAULT 0"),         # reserved & in-use
 ]
 
 

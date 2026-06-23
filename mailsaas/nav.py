@@ -168,6 +168,48 @@ NAV = [
         ],
     },
     {
+        "key": "rotsend", "label": "Email Sending Rotation", "icon": "🔄", "built": True,
+        "items": [
+            ("Round Robin", "Even distribution across relays"),
+            ("Load Balancing", "Fill by remaining capacity"),
+            ("Auto-skip Failed SMTP", "Route around bad relays"),
+            ("Warm-up & Bounce Check", "Protect reputation"),
+            ("Retry Failed", "Reserved retry head-room"),
+            ("Queue Priority", "Plan & daily-limit aware"),
+        ],
+    },
+    {
+        "key": "rotverify", "label": "Email Verification Rotation", "icon": "🔁", "built": True,
+        "items": [
+            ("Round Robin", "Rotate verify relays"),
+            ("MX + SMTP Verify", "Mailbox reachability"),
+            ("Catch-all / Disposable", "Risk detection"),
+            ("Greylisting Retry", "Handle deferrals"),
+            ("SMTP Response Cache", "Skip repeat lookups"),
+            ("No Warm-up", "Verification never sends"),
+        ],
+    },
+    {
+        "key": "burst", "label": "Dedicated Burst Pool", "icon": "💥", "built": True,
+        "items": [
+            ("Reserved IP Pool", "Isolated from normal sending"),
+            ("Reserve & Release", "Per-job IP locking"),
+            ("Smart Burst Rotation", "Even split, batch limits"),
+            ("Premium Only", "Business / Enterprise"),
+            ("Auto-release", "Freed on completion"),
+        ],
+    },
+    {
+        "key": "iphealth", "label": "IP Health Dashboard", "icon": "❤️‍🩹", "built": True,
+        "items": [
+            ("IP Reputation", "Per-IP score"),
+            ("RBL / Blacklist", "Listing status"),
+            ("Latency", "Connection speed"),
+            ("Capacity", "Remaining daily allowance"),
+            ("Purpose", "Normal vs reserved"),
+        ],
+    },
+    {
         "key": "queue", "label": "Queue Manager", "icon": "📥", "built": True,
         "items": [
             ("Pending", "Waiting to send"),
@@ -373,7 +415,8 @@ NAV_GROUPS = [
     ("👤 User Panel", ["verification", "contacts", "sender", "campaigns", "templates",
                       "marketplace", "landing", "reports", "ai", "finder",
                       "deliverability", "automation", "api", "webhooks", "billing"]),
-    ("🛠️ Admin Panel", ["smtp", "pools", "queue", "warmup", "domains", "monitoring",
+    ("🛠️ Admin Panel", ["smtp", "pools", "warmup", "queue", "rotsend", "rotverify",
+                        "burst", "iphealth", "domains", "monitoring",
                         "admin", "whitelabel", "enterprise"]),
     ("👥 Workspace", ["team", "integrations", "notifications", "support", "settings"]),
 ]

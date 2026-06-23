@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Email Verification Rotation{% endblock %}
+{% block content %}
+<h1>🔁 Email Verification — Advanced Smart Rotation</h1>
+<p class="muted">Independent engine that only verifies — never sends. <b>Never checks warm-up or bounce.</b></p>
+
+<div class="card" style="margin-top:14px">
+  <h3>Pipeline</h3>
+  <div class="row" style="flex-wrap:wrap;gap:6px">
+    {% for s in ['Upload list','Verify queue','SMTP rotation','Health check','Round robin','MX lookup','SMTP verify','Catch-all','Disposable','Greylisting retry','Response cache','Result','Reports'] %}
+      <span class="tag">{{ s }}</span>{% if not loop.last %}<span class="faint">→</span>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h3>Simulate a verification run</h3>
+  <form method="post" class="row" style="align-items:flex-end">
+    <div style="flex:2"><label>List size (addresses)</label><input name="size" type="number" value="8000" required></div>
+    <div style="flex:0"><button class="btn">Plan rotation</button></div>
+  </form>
+</div>
+
+{% if result %}
+<div class="card">
+  <div class="section-head"><h3>Allocation</h3>
+    <span class="pill">Assigned <b>{{ '{:,}'.format(result.assigned_total) }}</b> · Served from cache <b>{{ '{:,}'.format(result.cache_hits) }}</b></span></div>
+  {% for w in result.warnings %}<div class="flash error">⚠ {{ w }}</div>{% endfor %}
+  <div style="margin-bottom:10px">{% for c in result.checks %}<span class="tag">✓ {{ c }}</span>{% endfor %}</div>
+  <table>
+    <thead><tr><th>Relay</th><th>IP</th><th class="num">Assigned</th></tr></thead>
+    <tbody>
+    {% for n, c in result.assigned %}
+      <tr><td><b>{{ n.name }}</b></td><td class="faint small">{{ n.ip }}</td><td class="num">{{ '{:,}'.format(c) }}</td></tr>
+    {% else %}<tr><td colspan="3" class="empty">No eligible relays.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if result.skipped %}
+  <h4 style="margin-top:14px">Skipped (health only — warm-up is ignored here)</h4>
+  {% for n, why in result.skipped %}
+    <div class="kv"><span>{{ n.name }}</span><span class="badge b-invalid">{{ why|join(', ') }}</span></div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

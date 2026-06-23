@@ -35,6 +35,7 @@ from . import db as D
 from . import ai
 from . import totp
 from . import tasks
+from . import rotation as ROT
 from . import deliverability as DELIV
 from .nav import (NAV, NAV_BY_KEY, NAV_GROUPS, ESSENTIAL, ONBOARDING_STEPS)
 from .verify import verify_email, verify_bulk
@@ -1276,6 +1277,113 @@ def register_modules(app):
             return redirect(url_for("templates"))
         rows = D.query("SELECT * FROM templates WHERE account_id=? ORDER BY id DESC", (aid,))
         return render_template("templates.html", templates=rows)
+
+    # ---- Smart-rotation engines ------------------------------------------ #
+    def _nodes(aid):
+        """Build rotation nodes for the account, with live-ish IP scores."""
+        rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
+        out = []
+        for r in rows:
+            out.append(ROT.node_from_row(r, ip_score=smtp_health_detail(r)["ip_score"]))
+        return out
+
+    PLAN_DAILY = {"Free": 1000, "Pro": 50000, "Business": 250000,
+                  "Enterprise": 2000000}
+
+    @app.route("/rotation/sending", methods=["GET", "POST"])
+    @login_required
+    def rotation_sending():
+        acct = current_account()
+        plan_limit = PLAN_DAILY.get(acct["plan"], 1000)
+        result = None
+        if request.method == "POST":
+            size = int(request.form.get("size") or 0)
+            result = ROT.plan_sending(size, _nodes(acct["id"]), plan_limit)
+            D.log_activity(acct["id"], current_user()["email"],
+                           f"Planned send rotation for {size} emails")
+        return render_template("rotation_sending.html", result=result,
+                               plan_limit=plan_limit, nodes=_nodes(acct["id"]))
+
+    @app.route("/rotation/verification", methods=["GET", "POST"])
+    @login_required
+    def rotation_verification():
+        acct = current_account()
+        result = None
+        if request.method == "POST":
+            size = int(request.form.get("size") or 0)
+            result = ROT.plan_verification(size, _nodes(acct["id"]))
+            D.log_activity(acct["id"], current_user()["email"],
+                           f"Planned verification rotation for {size} addresses")
+        return render_template("rotation_verification.html", result=result,
+                               nodes=_nodes(acct["id"]))
+
+    @app.route("/burst", methods=["GET", "POST"])
+    @login_required
+    def burst():
+        acct = current_account()
+        aid = acct["id"]
+        plan_ok = acct["plan"] in ("Business", "Enterprise")
+        result = None
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action == "reserve":
+                # Convert a relay into the reserved burst pool.
+                D.execute("UPDATE smtp_servers SET purpose='burst' WHERE id=? AND"
+                          " account_id=?", (request.form.get("id"), aid))
+                flash("Relay added to the reserved burst pool.", "success")
+            elif action == "release_pool":
+                D.execute("UPDATE smtp_servers SET purpose='normal', busy=0 WHERE id=?"
+                          " AND account_id=?", (request.form.get("id"), aid))
+                flash("Relay returned to the normal pool.", "success")
+            elif action == "run":
+                if not plan_ok:
+                    flash("Burst sending requires the Business or Enterprise plan.",
+                          "error")
+                    return redirect(url_for("burst"))
+                size = int(request.form.get("size") or 0)
+                batch = int(request.form.get("batch") or 5000)
+                result = ROT.plan_burst(size, _nodes(aid), batch_limit=batch)
+                if result["ok"]:
+                    # Reserve the IPs (mark busy) and record the job.
+                    for nid in result["reserved_ips"]:
+                        D.execute("UPDATE smtp_servers SET busy=1 WHERE id=? AND"
+                                  " account_id=?", (nid, aid))
+                    D.execute("INSERT INTO burst_jobs (account_id, size, status, ips_used,"
+                              " created_at) VALUES (?,?,?,?,?)",
+                              (aid, size, "running",
+                               ",".join(map(str, result["reserved_ips"])), D.now()))
+                    flash(f"Burst job started on {len(result['reserved_ips'])} reserved "
+                          f"IPs.", "success")
+            elif action == "complete":
+                job = D.query("SELECT * FROM burst_jobs WHERE id=? AND account_id=?",
+                              (request.form.get("id"), aid), one=True)
+                if job and job["status"] == "running":
+                    for nid in filter(None, (job["ips_used"] or "").split(",")):
+                        D.execute("UPDATE smtp_servers SET busy=0 WHERE id=?", (nid,))
+                    D.execute("UPDATE burst_jobs SET status='completed' WHERE id=?",
+                              (job["id"],))
+                    flash("Burst job completed — reserved IPs released.", "success")
+            if request.method == "POST" and request.form.get("action") != "run":
+                return redirect(url_for("burst"))
+        servers = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
+        jobs = D.query("SELECT * FROM burst_jobs WHERE account_id=? ORDER BY id DESC LIMIT 10",
+                       (aid,))
+        return render_template("burst.html", servers=servers, jobs=jobs, result=result,
+                               plan_ok=plan_ok)
+
+    @app.route("/ip-health")
+    @login_required
+    def ip_health():
+        aid = current_account()["id"]
+        rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
+        nodes = []
+        for r in rows:
+            h = smtp_health_detail(r)
+            n = ROT.node_from_row(r, ip_score=h["ip_score"])
+            n["detail"] = h
+            n["remaining"] = ROT.remaining(n)
+            nodes.append(n)
+        return render_template("ip_health.html", nodes=nodes)
 
     # ---- Marketplace ----------------------------------------------------- #
     MARKETPLACE = [
