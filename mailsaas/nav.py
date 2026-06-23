@@ -92,6 +92,16 @@ NAV = [
         ],
     },
     {
+        "key": "marketplace", "label": "Marketplace", "icon": "🛍️", "built": True,
+        "items": [
+            ("Email Templates", "Ready-made, branded emails"),
+            ("Automation Templates", "Proven workflow recipes"),
+            ("Landing Page Templates", "High-converting pages"),
+            ("Categories", "Browse by use case"),
+            ("One-click Install", "Add to your workspace"),
+        ],
+    },
+    {
         "key": "landing", "label": "Landing Pages", "icon": "📄", "built": True,
         "items": [
             ("Landing Page Builder", "Build pages fast"),
@@ -360,15 +370,28 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 
 NAV_GROUPS = [
     ("", ["dashboard"]),
-    ("📧 Marketing", ["sender", "campaigns", "contacts", "templates", "landing",
-                      "automation"]),
-    ("🛡️ Deliverability", ["verification", "deliverability", "finder", "domains",
-                           "warmup"]),
-    ("⚙️ Infrastructure", ["smtp", "pools", "queue", "monitoring"]),
-    ("🤖 AI", ["ai"]),
-    ("📊 Analytics", ["reports"]),
-    ("👨‍💻 Developers", ["api", "webhooks", "integrations"]),
-    ("🏢 Administration", ["admin", "billing", "team", "whitelabel", "enterprise",
-                          "notifications", "support", "settings"]),
+    ("👤 User Panel", ["verification", "contacts", "sender", "campaigns", "templates",
+                      "marketplace", "landing", "reports", "ai", "finder",
+                      "deliverability", "automation", "api", "webhooks", "billing"]),
+    ("🛠️ Admin Panel", ["smtp", "pools", "queue", "warmup", "domains", "monitoring",
+                        "admin", "whitelabel", "enterprise"]),
+    ("👥 Workspace", ["team", "integrations", "notifications", "support", "settings"]),
+]
+
+# "Essential" modules shown in Simple mode (progressive disclosure for new
+# users). Everything else is hidden until they switch to Advanced — this keeps
+# the first-run experience from feeling like 25+ menu items.
+ESSENTIAL = {
+    "dashboard", "verification", "domains", "smtp", "contacts", "templates",
+    "campaigns", "reports", "billing", "settings",
+}
+
+# The guided first-run path (Verify Domain → Add SMTP → Import → Campaign → Send).
+ONBOARDING_STEPS = [
+    ("domain", "Verify a domain", "domains", "🌐"),
+    ("smtp", "Add an SMTP server", "smtp", "🖧"),
+    ("contacts", "Import contacts", "contacts", "👥"),
+    ("campaign", "Create a campaign", "campaigns", "🚀"),
+    ("send", "Send your first email", "sender", "📤"),
 ]
 

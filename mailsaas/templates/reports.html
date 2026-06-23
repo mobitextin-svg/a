@@ -1,8 +1,50 @@
 {% extends "base.html" %}
 {% block title %}Reports{% endblock %}
+
+{% macro linechart(series, color, suffix='') %}
+  {% set mx = (series | max) or 1 %}
+  {% set w = 300 %}{% set h = 80 %}{% set step = w / (series|length - 1) %}
+  <svg viewBox="0 0 {{ w }} {{ h+10 }}" width="100%" height="90" preserveAspectRatio="none">
+    <polyline fill="none" stroke="{{ color }}" stroke-width="2"
+      points="{% for v in series %}{{ loop.index0 * step }},{{ h - (v / mx * (h-10)) }} {% endfor %}"/>
+    <circle cx="{{ (series|length - 1) * step }}" cy="{{ h - (series[-1] / mx * (h-10)) }}" r="3" fill="{{ color }}"/>
+  </svg>
+  <div class="faint small" style="text-align:right">now: <b>{{ series[-1] }}{{ suffix }}</b></div>
+{% endmacro %}
+
+{% macro barchart(series, color) %}
+  {% set mx = (series | max) or 1 %}
+  <svg viewBox="0 0 300 80" width="100%" height="90" preserveAspectRatio="none">
+    {% set bw = 300 / series|length %}
+    {% for v in series %}
+      <rect x="{{ loop.index0 * bw + 1 }}" y="{{ 80 - (v / mx * 76) }}" width="{{ bw - 2 }}"
+            height="{{ (v / mx * 76) }}" fill="{{ color }}" rx="1"/>
+    {% endfor %}
+  </svg>
+  <div class="faint small" style="text-align:right">today: <b>{{ '{:,}'.format(series[-1]) }}</b></div>
+{% endmacro %}
+
 {% block content %}
 <h1>Reports &amp; Analytics</h1>
 <p class="muted">Delivery, opens, clicks, bounces, complaints, geo &amp; device breakdowns.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card"><h3>📨 Daily Send Volume</h3>{{ barchart(charts.volume, 'var(--brand)') }}</div>
+  <div class="card"><h3>📥 Inbox Rate</h3>{{ linechart(charts.inbox, '#22c55e', '%') }}</div>
+</div>
+<div class="grid g3">
+  <div class="card"><h3>👁️ Open Rate</h3>{{ linechart(charts.open_rate, '#5b8cff', '%') }}</div>
+  <div class="card"><h3>🖱️ Click Rate</h3>{{ linechart(charts.click_rate, '#22d3a6', '%') }}</div>
+  <div class="card"><h3>↩️ Bounce Trend</h3>{{ linechart(charts.bounce, '#f59e0b', '%') }}</div>
+</div>
+<div class="grid g3">
+  <div class="card"><h3>🚫 Spam Trend</h3>{{ linechart(charts.spam, '#ef4444', '%') }}</div>
+  <div class="card" style="grid-column:span 2"><h3>🖧 SMTP Health</h3>
+    {% for s in smtp %}
+      <div class="kv"><span>{{ s.name }}</span><span class="badge b-{{ s.health }}">{{ s.health }}</span></div>
+    {% else %}<div class="faint small">No SMTP servers configured.</div>{% endfor %}
+  </div>
+</div>
 
 {% set sent = agg.sent or 0 %}
 <div class="grid g4" style="margin-top:14px">

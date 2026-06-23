@@ -8,10 +8,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📨</text></svg>">
 </head>
-<body>
+<body data-simple-default="{{ '1' if simple_default else '0' }}">
 {% set endpoints = {
   'dashboard':'dashboard','verification':'verification','sender':'sender',
   'ai':'ai_center','deliverability':'deliverability','templates':'templates',
+  'marketplace':'marketplace',
   'landing':'landing','finder':'finder','contacts':'contacts','campaigns':'campaigns',
   'smtp':'smtp','pools':'pools','queue':'queue','warmup':'warmup','domains':'domains',
   'reports':'reports','api':'api_keys','webhooks':'webhooks','automation':'automation',
@@ -20,8 +21,14 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">📨 Mail<span class="dot">SaaS</span></div>
+    <div class="mode-switch" id="modeSwitch">
+      <button data-mode="simple" class="ms-btn">Simple</button>
+      <button data-mode="advanced" class="ms-btn">Advanced</button>
+    </div>
     {% for label, keys in NAV_GROUPS %}
-      {% if label %}<div class="group-label">{{ label }}</div>{% endif %}
+      {% set vis = keys | select('in', ESSENTIAL) | list %}
+      {% set grp_adv = (vis | length) == 0 %}
+      {% if label %}<div class="group-label {{ 'adv' if grp_adv }}">{{ label }}</div>{% endif %}
       {% for key in keys if not (key == 'admin' and not is_admin_user) %}
         {% set m = NAV_BY_KEY[key] %}
         {% if key in endpoints %}
@@ -29,7 +36,7 @@
         {% else %}
           {% set href = url_for('module_page', key=key) %}
         {% endif %}
-        <a class="nav-link {{ 'active' if active == key else '' }}" href="{{ href }}">
+        <a class="nav-link {{ 'active' if active == key else '' }} {{ '' if key in ESSENTIAL else 'adv' }}" href="{{ href }}">
           <span class="ic">{{ m.icon }}</span><span>{{ m.label }}</span>
         </a>
       {% endfor %}

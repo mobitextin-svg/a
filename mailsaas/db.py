@@ -257,6 +257,7 @@ _MIGRATIONS = [
     ("accounts", "payment_provider", "TEXT NOT NULL DEFAULT 'Stripe'"),
     ("accounts", "coupon", "TEXT"),
     ("accounts", "is_admin", "INTEGER NOT NULL DEFAULT 0"),
+    ("accounts", "onboarding", "TEXT NOT NULL DEFAULT ''"),  # completed step keys
     # Authentication hardening.
     ("users", "verified", "INTEGER NOT NULL DEFAULT 1"),
     ("users", "verify_token", "TEXT"),
@@ -275,6 +276,17 @@ def _migrate():
         if col not in cols:
             db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
     db.commit()
+
+
+def mark_onboarding(account_id, step):
+    """Record that a user has completed an onboarding step (idempotent).
+    Tracks real actions, separately from the demo data an account is seeded with."""
+    row = query("SELECT onboarding FROM accounts WHERE id=?", (account_id,), one=True)
+    done = set(filter(None, (row["onboarding"] if row else "").split(",")))
+    if step not in done:
+        done.add(step)
+        execute("UPDATE accounts SET onboarding=? WHERE id=?",
+                (",".join(sorted(done)), account_id))
 
 
 def log_activity(account_id, actor, action):

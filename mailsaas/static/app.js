@@ -40,6 +40,30 @@
     });
   }
 
+  // ---- Simple / Advanced sidebar mode ----------------------------------- //
+  function applyMode(mode) {
+    document.body.setAttribute("data-mode", mode);
+    try { localStorage.setItem("mailsaas-mode", mode); } catch (e) {}
+    document.querySelectorAll("#modeSwitch .ms-btn").forEach(function (b) {
+      b.classList.toggle("on", b.getAttribute("data-mode") === mode);
+    });
+  }
+  function initMode() {
+    var sw = document.getElementById("modeSwitch");
+    if (!sw) return;
+    var saved = null;
+    try { saved = localStorage.getItem("mailsaas-mode"); } catch (e) {}
+    // New users (onboarding incomplete) default to Simple; others to Advanced.
+    var def = document.body.getAttribute("data-simple-default") === "1"
+      ? "simple" : "advanced";
+    applyMode(saved || def);
+    sw.querySelectorAll(".ms-btn").forEach(function (b) {
+      b.addEventListener("click", function () {
+        applyMode(b.getAttribute("data-mode"));
+      });
+    });
+  }
+
   // ---- Mobile sidebar toggle -------------------------------------------- //
   function initNav() {
     var burger = document.getElementById("navToggle");
@@ -109,6 +133,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     attachCsrf();
     initTheme();
+    initMode();
     initNav();
     initToasts();
     initCounters();

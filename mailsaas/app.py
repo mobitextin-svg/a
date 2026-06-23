@@ -36,7 +36,7 @@ from . import ai
 from . import totp
 from . import tasks
 from . import deliverability as DELIV
-from .nav import NAV, NAV_BY_KEY, NAV_GROUPS
+from .nav import (NAV, NAV_BY_KEY, NAV_GROUPS, ESSENTIAL, ONBOARDING_STEPS)
 from .verify import verify_email, verify_bulk
 
 
@@ -349,6 +349,21 @@ def is_admin_user():
     return bool(acct and acct["is_admin"])
 
 
+def _onboarding_done_set():
+    acct = current_account()
+    if not acct:
+        return set()
+    return set(filter(None, (acct["onboarding"] or "").split(",")))
+
+
+def _onboarding_incomplete():
+    """True until the user has completed every guided first-run step."""
+    if not current_user():
+        return False
+    done = _onboarding_done_set()
+    return len(done) < len(ONBOARDING_STEPS)
+
+
 def login_required(view):
     @functools.wraps(view)
     def wrapped(*a, **kw):
@@ -365,6 +380,8 @@ def register_context(app):
             "NAV": NAV,
             "NAV_GROUPS": NAV_GROUPS,
             "NAV_BY_KEY": NAV_BY_KEY,
+            "ESSENTIAL": ESSENTIAL,
+            "simple_default": _onboarding_incomplete(),
             "is_superadmin": is_superadmin(),
             "is_admin_user": is_admin_user(),
             "csrf_token": _csrf_token(),
@@ -612,21 +629,11 @@ def register_modules(app):
                                "campaign at the AI-predicted best time.")
         # 7-day sparkline (stable synthetic trend off real totals)
         spark = [max(2, int((sent or 1000) / 30 * (0.6 + 0.1 * i))) for i in range(7)]
-        # Onboarding checklist — each step reflects real account state.
-        u = current_user()
-        has_key = D.query("SELECT 1 FROM api_keys WHERE account_id=? LIMIT 1", (aid,),
-                          one=True) is not None
-        team_n = D.query("SELECT COUNT(*) c FROM users WHERE account_id=?", (aid,),
-                         one=True)["c"]
-        steps = [
-            ("Verify your email", bool(u["verified"]), url_for("settings"), "📧"),
-            ("Turn on two-factor auth", bool(u["twofa"]), url_for("settings"), "🔒"),
-            ("Create an API key", has_key, url_for("api_keys"), "🔌"),
-            ("Verify your first emails", stats["verifications"] > 4,
-             url_for("verification"), "✅"),
-            ("Invite a teammate", team_n > 1, url_for("team"), "🧑‍🤝‍🧑"),
-            ("Upgrade your plan", acct["plan"] != "Free", url_for("billing"), "🚀"),
-        ]
+        # Guided 5-step onboarding (Verify Domain → SMTP → Import → Campaign → Send),
+        # tracked by real user actions (see db.mark_onboarding).
+        done_set = _onboarding_done_set()
+        steps = [(label, key in done_set, url_for(endpoint), icon)
+                 for key, label, endpoint, icon in ONBOARDING_STEPS]
         done = sum(1 for _, ok, _, _ in steps if ok)
         onboarding = {"steps": steps, "done": done, "total": len(steps),
                       "pct": round(100 * done / len(steps))}
@@ -742,6 +749,8 @@ def register_modules(app):
                         "INSERT INTO contacts (account_id, email, name, status, created_at)"
                         " VALUES (?,?,?,?,?)", (aid, email, name, "active", D.now()))
                     count += 1
+                if count:
+                    D.mark_onboarding(aid, "contacts")
                 flash(f"Imported {count} contacts.", "success")
             elif action == "suppress":
                 D.execute("UPDATE contacts SET status='suppressed' WHERE id=? AND account_id=?",
@@ -838,6 +847,7 @@ def register_modules(app):
                      request.form.get("subject", "").strip(),
                      request.form.get("body", "").strip(),
                      current_user()["email"], "Draft", rcpt, D.now()))
+                D.mark_onboarding(aid, "campaign")
                 D.log_activity(aid, current_user()["email"], "Created a campaign draft")
                 flash("Campaign saved as draft.", "success")
             elif action == "clone":
@@ -858,6 +868,9 @@ def register_modules(app):
                 if cur and cur["status"] in flow:
                     D.execute("UPDATE campaigns SET status=? WHERE id=? AND account_id=?",
                               (flow[cur["status"]], cid, aid))
+                    # Starting a campaign counts as "sending your first email".
+                    if flow[cur["status"]] == "Running":
+                        D.mark_onboarding(aid, "send")
             elif action == "pause":
                 D.execute("UPDATE campaigns SET status='Paused' WHERE id=? AND account_id=?"
                           " AND status='Running'", (request.form.get("id"), aid))
@@ -905,6 +918,7 @@ def register_modules(app):
                  request.form.get("dedicated_ip", "").strip(),
                  int(request.form.get("daily_limit") or 10000),
                  "Not started", "Healthy", D.now()))
+            D.mark_onboarding(aid, "smtp")
             flash("SMTP server added.", "success")
             return redirect(url_for("smtp"))
         servers = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
@@ -929,6 +943,7 @@ def register_modules(app):
                 D.execute("UPDATE domains SET spf=1, dkim=1, dmarc=1, verified=1,"
                           " reputation=MIN(reputation+10,99) WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
+                D.mark_onboarding(aid, "domain")
                 flash("DNS records verified ✔", "success")
             return redirect(url_for("domains"))
         rows = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY id", (aid,))
@@ -947,7 +962,29 @@ def register_modules(app):
         per_campaign = D.query(
             "SELECT name, sent, opens, clicks, bounces FROM campaigns WHERE account_id=?"
             " AND sent > 0 ORDER BY sent DESC", (aid,))
-        return render_template("reports.html", agg=agg, per_campaign=per_campaign)
+        # 14-day trend series (stable synthetic curves anchored to real totals).
+        import hashlib
+        base = (agg["sent"] or 5000) / 14
+        seed = int(hashlib.sha256(str(aid).encode()).hexdigest(), 16)
+        days = [(datetime.utcnow() - timedelta(days=13 - i)).strftime("%m/%d")
+                for i in range(14)]
+        def series(centre, spread):
+            return [round(max(0, centre + spread * (((seed >> (i * 3)) % 7) - 3) / 3), 1)
+                    for i in range(14)]
+        sent = agg["sent"] or 0
+        charts = {
+            "days": days,
+            "volume": [int(max(0, base * (0.7 + ((seed >> (i * 2)) % 9) / 10)))
+                       for i in range(14)],
+            "open_rate": series(round(100 * agg["opens"] / sent, 1) if sent else 22, 6),
+            "click_rate": series(round(100 * agg["clicks"] / sent, 1) if sent else 7, 3),
+            "bounce": series(round(100 * agg["bounces"] / sent, 1) if sent else 2, 1.2),
+            "spam": series(0.3, 0.25),
+            "inbox": series(94, 4),
+        }
+        smtp = D.query("SELECT name, health FROM smtp_servers WHERE account_id=?", (aid,))
+        return render_template("reports.html", agg=agg, per_campaign=per_campaign,
+                               charts=charts, smtp=smtp)
 
     # ---- API keys -------------------------------------------------------- #
     @app.route("/api", methods=["GET", "POST"])
@@ -1239,6 +1276,55 @@ def register_modules(app):
             return redirect(url_for("templates"))
         rows = D.query("SELECT * FROM templates WHERE account_id=? ORDER BY id DESC", (aid,))
         return render_template("templates.html", templates=rows)
+
+    # ---- Marketplace ----------------------------------------------------- #
+    MARKETPLACE = [
+        # (id, category, name, blurb, subject, html)
+        ("welcome-modern", "Email", "Modern Welcome", "Clean onboarding welcome",
+         "Welcome aboard, {{name}} 🎉",
+         "<h1>Welcome, {{name}}!</h1><p>We're thrilled to have you.</p>"),
+        ("newsletter-weekly", "Email", "Weekly Newsletter", "Editorial digest layout",
+         "Your weekly roundup", "<h1>This week</h1><ul><li>Story one</li></ul>"),
+        ("promo-flash", "Email", "Flash Sale", "Urgent promo with countdown",
+         "24 hours only — {{discount}}% off", "<h1>Flash Sale</h1><p>Ends tonight!</p>"),
+        ("blackfriday", "Email", "Black Friday", "High-contrast sales push",
+         "Black Friday is here 🖤", "<h1>Up to 70% off</h1>"),
+        ("winback", "Automation", "Win-back Series", "3-email re-engagement flow",
+         None, "Drip: day 0, day 3, day 7"),
+        ("onboarding-drip", "Automation", "Onboarding Drip", "5-step nurture sequence",
+         None, "Welcome → tips → case study → offer → check-in"),
+        ("abandoned-cart", "Automation", "Abandoned Cart", "Recover lost checkouts",
+         None, "Trigger on cart abandonment + 2 reminders"),
+        ("lead-magnet", "Landing", "Lead Magnet", "Ebook download capture page",
+         None, "<section><h1>Free Ebook</h1><form>…</form></section>"),
+        ("webinar-reg", "Landing", "Webinar Registration", "Event sign-up page",
+         None, "<section><h1>Register now</h1></section>"),
+        ("saas-trial", "Landing", "SaaS Free Trial", "Conversion-focused trial page",
+         None, "<section><h1>Start free</h1></section>"),
+    ]
+
+    @app.route("/marketplace", methods=["GET", "POST"])
+    @login_required
+    def marketplace():
+        aid = current_account()["id"]
+        if request.method == "POST":
+            tid = request.form.get("id")
+            item = next((x for x in MARKETPLACE if x[0] == tid), None)
+            if item:
+                _id, cat, name, blurb, subject, html = item
+                D.execute(
+                    "INSERT INTO templates (account_id, name, kind, subject, content,"
+                    " created_at) VALUES (?,?,?,?,?,?)",
+                    (aid, name, "Email" if cat == "Email" else cat, subject, html,
+                     D.now()))
+                D.log_activity(aid, current_user()["email"],
+                               f"Installed marketplace template: {name}")
+                flash(f"'{name}' installed — find it under Templates.", "success")
+            return redirect(url_for("marketplace"))
+        cat = request.args.get("cat")
+        items = [x for x in MARKETPLACE if not cat or x[1] == cat]
+        cats = sorted({x[1] for x in MARKETPLACE})
+        return render_template("marketplace.html", items=items, cats=cats, cat=cat)
 
     # ---- Landing Pages --------------------------------------------------- #
     @app.route("/landing", methods=["GET", "POST"])

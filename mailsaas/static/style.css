@@ -56,6 +56,15 @@ h1{font-size:1.5rem}h2{font-size:1.15rem}h3{font-size:1rem}
   box-shadow:inset 2px 0 0 var(--brand)}
 .sidebar .group-label{color:var(--faint);font-size:.7rem;text-transform:uppercase;
   letter-spacing:.08em;padding:14px 12px 6px}
+/* Simple / Advanced mode switch */
+.mode-switch{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
+  border-radius:9px;padding:3px;margin:0 8px 10px}
+.ms-btn{flex:1;border:none;background:transparent;color:var(--muted);font:inherit;
+  font-size:.8rem;font-weight:600;padding:5px 0;border-radius:7px;cursor:pointer}
+.ms-btn.on{background:var(--brand);color:#fff}
+/* In Simple mode, hide advanced nav links/labels */
+body[data-mode="simple"] .nav-link.adv,
+body[data-mode="simple"] .group-label.adv{display:none}
 
 .main{display:flex;flex-direction:column;min-width:0}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;
