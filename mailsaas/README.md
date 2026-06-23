@@ -8,6 +8,19 @@ The entire product information architecture from the brief is navigable, with a
 fully **functional verification engine** and working CRUD across the core
 modules.
 
+> **Production?** See **[PRODUCTION.md](PRODUCTION.md)** for the NGINX → Gunicorn
+> → Redis → Celery → PostgreSQL topology — scaffolding ships in this repo
+> (`Dockerfile`, `docker-compose.yml`, `deploy/nginx.conf`, `wsgi.py`,
+> `tasks.py`). Run it with `docker compose up --build`.
+
+### Security
+- CSRF protection on every form · sliding 30-min session timeout · HttpOnly/SameSite cookies
+- API-key rotation & revocation · bcrypt hashing · login history · audit logs · 2FA toggle
+
+### UI
+- Dark / light theme toggle · toast notifications · animated counters
+- Live SVG charts · progress bars · mobile-responsive hamburger navigation
+
 ---
 
 ## Quick start

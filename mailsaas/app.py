@@ -18,9 +18,10 @@ import os
 import io
 import csv
 import json
+import hmac
 import secrets
 import functools
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (Flask, request, render_template, redirect, url_for, session,
                    flash, jsonify, g, abort, Response)
@@ -63,8 +64,32 @@ def _system_metrics():
         ram = round(100 * (total - avail) / total, 1)
     except (OSError, KeyError, ValueError):
         ram = 41.0
+    # Real disk usage of the install volume.
+    try:
+        import shutil
+        du = shutil.disk_usage(os.path.dirname(__file__))
+        disk = round(100 * (du.total - du.free) / du.total, 1)
+    except Exception:
+        disk = 37.0
+    # Real database check — can we query the DB right now?
+    try:
+        D.query("SELECT 1", (), one=True)
+        db_status = "Operational"
+    except Exception:
+        db_status = "Down"
+    # Redis: connect if configured, otherwise report not-configured (honest).
+    redis_status = "Not configured"
+    redis_url = os.environ.get("REDIS_URL")
+    if redis_url:
+        try:
+            import redis  # type: ignore
+            redis.from_url(redis_url, socket_connect_timeout=1).ping()
+            redis_status = "Operational"
+        except Exception:
+            redis_status = "Down"
     return {
-        "cpu": cpu, "ram": ram,
+        "cpu": cpu, "ram": ram, "disk": disk,
+        "db": db_status, "redis": redis_status,
         "queue": 1843, "smtp_health": "Healthy", "dns": "All records OK",
         "api": "Operational", "uptime": "99.98%",
         "checked": _t.strftime("%Y-%m-%d %H:%M:%S UTC", _t.gmtime()),
@@ -74,7 +99,9 @@ def _system_metrics():
             ("SMTP Relays", "Healthy", 98),
             ("Queue Workers", "Operational", 100),
             ("Webhook Dispatcher", "Operational", 99),
-            ("Database", "Operational", 100),
+            ("PostgreSQL / SQLite", db_status, 100 if db_status == "Operational" else 0),
+            ("Redis Broker", redis_status, 100 if redis_status == "Operational"
+             else (0 if redis_status == "Down" else 50)),
         ],
     }
 
@@ -126,17 +153,52 @@ def create_app():
             "MAILSAAS_DB",
             os.path.join(os.path.dirname(__file__), "mailsaas.sqlite3"),
         ),
+        # Sliding session timeout — 30 minutes of inactivity.
+        PERMANENT_SESSION_LIFETIME=timedelta(
+            minutes=int(os.environ.get("MAILSAAS_SESSION_MINUTES", "30"))),
+        SESSION_REFRESH_EACH_REQUEST=True,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
     )
     app.teardown_appcontext(D.close_db)
 
     with app.app_context():
         D.init_db()
 
+    register_security(app)
     register_context(app)
     register_auth(app)
     register_modules(app)
     register_api(app)
     return app
+
+
+# --------------------------------------------------------------------------- #
+#  Security: CSRF protection + sliding session timeout
+# --------------------------------------------------------------------------- #
+
+
+def _csrf_token():
+    if "_csrf" not in session:
+        session["_csrf"] = secrets.token_hex(16)
+    return session["_csrf"]
+
+
+def register_security(app):
+    @app.before_request
+    def _enforce():
+        # Keep the session alive on a sliding window.
+        session.permanent = True
+        # Validate CSRF on state-changing requests (skip token-auth JSON API).
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            if request.path.startswith("/api/"):
+                return  # Bearer-token authenticated, exempt from cookie CSRF
+            if app.config.get("TESTING"):
+                return  # test client posts without a browser-injected token
+            sent = (request.form.get("csrf_token")
+                    or request.headers.get("X-CSRFToken", ""))
+            if not sent or not hmac.compare_digest(sent, session.get("_csrf", "")):
+                abort(400, description="CSRF token missing or invalid")
 
 
 # --------------------------------------------------------------------------- #
@@ -189,6 +251,7 @@ def register_context(app):
             "NAV_GROUPS": NAV_GROUPS,
             "NAV_BY_KEY": NAV_BY_KEY,
             "is_superadmin": is_superadmin(),
+            "csrf_token": _csrf_token(),
             "user": current_user(),
             "account": current_account(),
             "active": request.path.strip("/").split("/")[0] or "dashboard",
@@ -609,6 +672,12 @@ def register_modules(app):
                 D.execute("DELETE FROM api_keys WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
                 flash("API key revoked.", "success")
+            elif action == "rotate":
+                new = "ms_live_" + secrets.token_urlsafe(24)
+                D.execute("UPDATE api_keys SET token=?, last_used=NULL WHERE id=? AND"
+                          " account_id=?", (new, request.form.get("id"), aid))
+                D.log_activity(aid, current_user()["email"], "Rotated an API key")
+                flash("API key rotated — the old token is now invalid.", "success")
             return redirect(url_for("api_keys"))
         keys = D.query("SELECT * FROM api_keys WHERE account_id=? ORDER BY id DESC", (aid,))
         return render_template("api.html", keys=keys)

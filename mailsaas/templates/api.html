@@ -19,9 +19,11 @@
         <tr><td>{{ k.label }}</td>
           <td class="small"><code>{{ k.token[:16] }}…{{ k.token[-4:] }}</code></td>
           <td class="faint small">{{ k.last_used or 'never' }}</td>
-          <td class="num"><form class="inline-form" method="post">
-            <input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="{{ k.id }}">
-            <button class="btn danger sm">Revoke</button></form></td></tr>
+          <td class="num">
+            <form class="inline-form" method="post"><input type="hidden" name="action" value="rotate">
+              <input type="hidden" name="id" value="{{ k.id }}"><button class="btn ghost sm">Rotate</button></form>
+            <form class="inline-form" method="post"><input type="hidden" name="action" value="revoke">
+              <input type="hidden" name="id" value="{{ k.id }}"><button class="btn danger sm">Revoke</button></form></td></tr>
       {% else %}
         <tr><td colspan="4" class="empty">No API keys yet.</td></tr>
       {% endfor %}

@@ -9,15 +9,22 @@
     <div class="meter" style="margin-top:6px"><i style="width:{{ metrics.cpu }}%"></i></div></div>
   <div class="stat"><div class="k">RAM</div><div class="v">{{ metrics.ram }}<span class="unit">%</span></div>
     <div class="meter" style="margin-top:6px"><i style="width:{{ metrics.ram }}%"></i></div></div>
+  <div class="stat"><div class="k">Disk</div><div class="v">{{ metrics.disk }}<span class="unit">%</span></div>
+    <div class="meter" style="margin-top:6px"><i style="width:{{ metrics.disk }}%"></i></div></div>
   <div class="stat"><div class="k">Queue depth</div><div class="v">{{ '{:,}'.format(metrics.queue) }}</div></div>
-  <div class="stat"><div class="k">Uptime</div><div class="v">{{ metrics.uptime }}</div></div>
 </div>
 
 <div class="grid g4">
+  <div class="stat"><div class="k">Database</div><div class="v" style="font-size:1.1rem;color:{{ 'var(--good)' if metrics.db=='Operational' else 'var(--bad)' }}">{{ metrics.db }}</div></div>
+  <div class="stat"><div class="k">Redis broker</div><div class="v" style="font-size:1.1rem;color:{{ 'var(--good)' if metrics.redis=='Operational' else ('var(--bad)' if metrics.redis=='Down' else 'var(--warn)') }}">{{ metrics.redis }}</div></div>
   <div class="stat"><div class="k">SMTP Health</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.smtp_health }}</div></div>
+  <div class="stat"><div class="k">Uptime</div><div class="v">{{ metrics.uptime }}</div></div>
+</div>
+<div class="grid g4">
   <div class="stat"><div class="k">DNS Status</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.dns }}</div></div>
   <div class="stat"><div class="k">API Status</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.api }}</div></div>
   <div class="stat"><div class="k">Region</div><div class="v" style="font-size:1.1rem">us-east</div></div>
+  <div class="stat"><div class="k">Workers</div><div class="v" style="font-size:1.1rem">Celery ×4</div></div>
 </div>
 
 <div class="card">

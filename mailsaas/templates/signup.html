@@ -2,8 +2,10 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Create account · MailSaaS</title>
+<meta name="csrf-token" content="{{ csrf_token }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head><body>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 <div class="auth-wrap"><div class="auth-card">
   <div class="logo">📨 Mail<span class="dot">SaaS</span></div>
   <p class="sub">Create your free workspace — 1,000 verifications included</p>

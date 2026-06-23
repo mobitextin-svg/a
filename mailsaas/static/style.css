@@ -6,8 +6,21 @@
   --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --risky:#f59e0b;
   --radius:12px; --shadow:0 6px 24px rgba(0,0,0,.28);
 }
+/* Light theme overrides */
+:root[data-theme="light"]{
+  --bg:#eef2f9; --bg2:#ffffff; --panel:#ffffff; --panel2:#f4f7fc;
+  --line:#dde4f0; --line2:#cbd5e8;
+  --text:#1a2540; --muted:#5a6b8c; --faint:#8595b4;
+  --brand:#3b6fff; --brand2:#2657e6; --accent:#10b981;
+  --shadow:0 6px 20px rgba(30,50,90,.10);
+}
+:root[data-theme="light"] body{
+  background:radial-gradient(1200px 600px at 80% -10%,#dbe6ff55,#eef2f9),var(--bg);
+}
+:root[data-theme="light"] .code{background:#0d1426;color:#cdd9f5}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+.transition,.nav-link,.btn,.stat,.card{transition:background .2s,color .2s,border-color .2s}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
   background:radial-gradient(1200px 600px at 80% -10%,#16224500,#0b1220),var(--bg);
@@ -136,3 +149,28 @@ textarea{resize:vertical;min-height:90px}
 .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;
   padding:1px 7px;font-size:.74rem;color:var(--muted);margin:1px 2px}
 .empty{text-align:center;color:var(--faint);padding:34px}
+
+/* Icon button (theme toggle, hamburger) */
+.iconbtn{background:var(--panel);border:1px solid var(--line);color:var(--text);
+  width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:1rem;display:grid;
+  place-items:center;padding:0}
+.iconbtn:hover{background:var(--panel2)}
+#navToggle{display:none}
+
+/* Toast notifications */
+.toast-wrap{position:fixed;top:16px;right:16px;z-index:50;display:flex;flex-direction:column;gap:10px}
+.toast{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--good);border-radius:10px;padding:12px 16px;min-width:240px;
+  max-width:360px;box-shadow:var(--shadow);transform:translateX(120%);opacity:0;
+  transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .3s}
+.toast.show{transform:translateX(0);opacity:1}
+.toast.error{border-left-color:var(--bad)}
+
+/* Mobile responsive navigation */
+@media(max-width:680px){
+  #navToggle{display:grid}
+  .sidebar{display:block;position:fixed;left:0;top:0;bottom:0;width:248px;z-index:40;
+    transform:translateX(-100%);transition:transform .25s ease}
+  .sidebar.open{transform:translateX(0);box-shadow:0 0 40px rgba(0,0,0,.5)}
+  .app{grid-template-columns:1fr}
+}
