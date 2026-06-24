@@ -113,12 +113,13 @@ def test_dual_scope_bounce(admin, user):
 def test_burst_quota_purchase_and_launch(user, query):
     aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
     # over-limit quote shows both payment regions
-    r = user.post("/burst-campaign", data={"action": "quote", "size": "1000000"})
+    r = user.post("/burst-campaign", data={"action": "quote", "emails": "1000000",
+                                           "duration": "1"})
     assert b"Confirm" in r.data and b"India" in r.data
     # India payment (test mode — no Razorpay keys set)
     user.post("/burst-campaign", data={"action": "pay", "emails": "100000",
-                                       "usd": "69", "inr": "4999", "region": "india"},
-              follow_redirects=True)
+                                       "usd": "69", "inr": "4999", "region": "india",
+                                       "duration": "1"}, follow_redirects=True)
     p = query("SELECT * FROM burst_purchases WHERE account_id=?", aid)[0]
     assert p["gateway"].startswith("Razorpay") and p["currency"] == "INR"
     assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == 100000

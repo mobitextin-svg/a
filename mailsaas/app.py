@@ -286,6 +286,18 @@ def execute_campaign_send(account_id, campaign_id, base_url):
     return {"sent": sent, "failed": failed, "real": real, "overflow": overflow}
 
 
+def expire_burst(account_id):
+    """If a burst allocation has passed its valid-until, revert to the normal
+    daily limit (clear the temporary quota)."""
+    a = D.query("SELECT burst_quota, burst_valid_until FROM accounts WHERE id=?",
+                (account_id,), one=True)
+    if a and a["burst_quota"] and a["burst_valid_until"] and a["burst_valid_until"] < D.now():
+        D.execute("UPDATE accounts SET burst_quota=0, burst_valid_until=NULL WHERE id=?",
+                  (account_id,))
+        D.log_activity(account_id, "system",
+                       "Burst allocation expired — returned to normal daily limit")
+
+
 def execute_list_clean(account_id):
     """Remove bounced/unsubscribed + suppress role/disposable/invalid. Worker-safe."""
     removed = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND status IN"
@@ -703,6 +715,7 @@ def register_modules(app):
     @app.route("/dashboard")
     @login_required
     def dashboard():
+        expire_burst(current_account()["id"])
         acct = current_account()
         aid = acct["id"]
         stats = {
@@ -1835,14 +1848,20 @@ def register_modules(app):
                 req = D.query("SELECT * FROM burst_purchases WHERE id=?",
                               (request.form.get("id"),), one=True)
                 if req and req["status"] == "pending":
-                    D.execute("UPDATE burst_purchases SET status='active' WHERE id=?",
-                              (req["id"],))
-                    D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
-                              (req["emails"], req["account_id"]))
+                    # Re-base validity from approval time so the user gets the
+                    # full duration regardless of how long approval took.
+                    dur = req["duration_days"] if "duration_days" in req.keys() else 1
+                    valid_until = (datetime.utcnow() + timedelta(days=dur or 1)).strftime(
+                        "%Y-%m-%d %H:%M:%S")
+                    D.execute("UPDATE burst_purchases SET status='active', valid_until=?"
+                              " WHERE id=?", (valid_until, req["id"]))
+                    D.execute("UPDATE accounts SET burst_quota=burst_quota+?,"
+                              " burst_valid_until=? WHERE id=?",
+                              (req["emails"], valid_until, req["account_id"]))
                     D.log_activity(aid, current_user()["email"],
                                    f"Approved burst request #{req['id']} "
                                    f"({req['emails']:,} emails)")
-                    flash("Request approved — quota granted to the user.", "success")
+                    flash("Request approved — burst pool assigned to the user.", "success")
             elif action == "reject":
                 D.execute("UPDATE burst_purchases SET status='rejected' WHERE id=? AND"
                           " status='pending'", (request.form.get("id"),))
@@ -1858,7 +1877,7 @@ def register_modules(app):
                        (aid,))
         # Cross-tenant burst requests for the approval queue.
         requests_q = D.query(
-            "SELECT bp.*, a.name acct FROM burst_purchases bp JOIN accounts a"
+            "SELECT bp.*, a.name acct, a.plan plan FROM burst_purchases bp JOIN accounts a"
             " ON a.id=bp.account_id ORDER BY (bp.status='pending') DESC, bp.id DESC"
             " LIMIT 30")
         auto_approve = D.get_setting("burst_auto_approve", "1") == "1"
@@ -1866,35 +1885,45 @@ def register_modules(app):
                                plan_ok=plan_ok, requests=requests_q,
                                auto_approve=auto_approve)
 
-    # ---- Burst Campaign (user) — over-limit → buy quota → run burst ------- #
-    # Quota packs: (emails, USD price, INR price). Minimum 50,000.
-    BURST_PACKS = [(50000, 39, 2999), (100000, 69, 4999), (500000, 249, 18999),
-                   (1000000, 449, 34999)]   # 10 lakh tier
+    # ---- Burst Campaign (user) — request capacity → pay → activate -------- #
+    # Pricing: ₹25 per 1,000 emails for 1 day; duration scales the multiplier.
+    BURST_RATE_INR = 25
+    BURST_USD_RATE = 83          # ₹ per $
+    BURST_DURATION = {1: 1.0, 3: 2.5, 7: 5.0}
     PAY_METHODS = {
         "international": [("stripe_card", "💳 Card (Stripe)"), ("paypal", "🅿️ PayPal")],
         "india": [("upi", "📲 UPI"), ("razorpay_card", "💳 Card (Razorpay)"),
                   ("netbanking", "🏦 Net Banking")],
     }
-    GATEWAY = {"stripe_card": "Stripe", "paypal": "PayPal", "upi": "Razorpay",
-               "razorpay_card": "Razorpay", "netbanking": "Razorpay"}
+
+    def _burst_cost(emails, duration):
+        mult = BURST_DURATION.get(duration, 1.0)
+        inr = int((-(-emails // 1000)) * BURST_RATE_INR * mult)   # ceil per-1k
+        usd = max(1, round(inr / BURST_USD_RATE))
+        return inr, usd
 
     @app.route("/burst-campaign", methods=["GET", "POST"])
     @login_required
     def burst_campaign():
+        expire_burst(current_account()["id"])     # auto-revert if the boost lapsed
         acct = current_account()
         aid = acct["id"]
         plan_limit = PLAN_DAILY_LIMITS.get(acct["plan"], 1000)
         quote = None
         rzp_order = None
 
-        def _grant_burst(emails, amount, currency, gateway, method, status=None):
+        def _grant_burst(emails, amount, currency, gateway, method, duration, reason,
+                         status=None):
             sym = "₹" if currency == "INR" else "$"
             auto = D.get_setting("burst_auto_approve", "1") == "1"
-            # Auto-approve → activate immediately; else queue for admin approval.
             st = status or ("active" if auto else "pending")
+            valid_until = (datetime.utcnow() + timedelta(days=duration)).strftime(
+                "%Y-%m-%d %H:%M:%S")
             D.execute("INSERT INTO burst_purchases (account_id, emails, amount, currency,"
-                      " gateway, method, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                      (aid, emails, amount, currency, gateway, method, st, D.now()))
+                      " gateway, method, status, duration_days, reason, valid_until,"
+                      " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                      (aid, emails, amount, currency, gateway, method, st, duration,
+                       reason, valid_until, D.now()))
             D.execute("INSERT INTO invoices (account_id, number, amount, status,"
                       " created_at) VALUES (?,?,?,?,?)",
                       (aid, "BURST-" + secrets.token_hex(3).upper(), amount, "Paid",
@@ -1902,81 +1931,81 @@ def register_modules(app):
             D.log_activity(aid, current_user()["email"],
                            f"Paid {emails:,} burst emails ({sym}{amount:g} via {gateway})")
             if st == "active":
-                D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
-                          (emails, aid))
-                flash(f"Payment successful via {gateway} — {emails:,} burst emails "
-                      "added. Launch your burst below.", "success")
+                D.execute("UPDATE accounts SET burst_quota=burst_quota+?,"
+                          " burst_valid_until=? WHERE id=?", (emails, valid_until, aid))
+                flash(f"Payment successful via {gateway} — {emails:,} burst emails active "
+                      f"until {valid_until[:10]}.", "success")
             else:
-                flash(f"Payment received via {gateway}. Your request for {emails:,} "
-                      "burst emails is pending admin approval.", "success")
+                flash(f"Payment received via {gateway}. Your request for {emails:,} burst "
+                      "emails is pending admin approval.", "success")
+
+        def _read_req():
+            emails = max(0, int(request.form.get("emails") or 0))
+            duration = int(request.form.get("duration") or 1)
+            if duration not in BURST_DURATION:
+                duration = 1
+            reason = (request.form.get("reason") or "").strip()[:120]
+            return emails, duration, reason
 
         if request.method == "POST":
             action = request.form.get("action")
             if action == "quote":
-                size = max(0, int(request.form.get("size") or 0))
-                allowance = plan_limit + acct["burst_quota"]
-                if size <= allowance:
-                    flash(f"{size:,} is within your allowance ({allowance:,}). "
-                          "Send it as a normal campaign.", "success")
+                emails, duration, reason = _read_req()
+                if emails < 1000:
+                    flash("Enter at least 1,000 emails of burst capacity.", "error")
                 else:
-                    need = size - allowance
-                    pack = next((p for p in BURST_PACKS if p[0] >= need), BURST_PACKS[-1])
-                    quote = {"size": size, "need": need, "pack": pack}
+                    inr, usd = _burst_cost(emails, duration)
+                    quote = {"emails": emails, "duration": duration, "reason": reason,
+                             "inr": inr, "usd": usd}
             elif action == "pay":
-                emails = int(request.form.get("emails") or 0)
+                emails, duration, reason = _read_req()
                 usd = float(request.form.get("usd") or 0)
                 inr = float(request.form.get("inr") or 0)
                 region = request.form.get("region", "international")
                 if emails <= 0:
-                    flash("Pick a pack first.", "error")
                     return redirect(url_for("burst_campaign"))
                 currency, amount = ("INR", inr) if region == "india" else ("USD", usd)
-                # India + Razorpay configured → create a REAL order and open Checkout.
                 if region == "india" and PAY.razorpay_configured():
                     try:
                         order = PAY.create_order(amount, "burst-" + secrets.token_hex(4))
                         rzp_order = {"key": PAY.key_id(), "order_id": order["id"],
                                      "amount": order["amount"], "emails": emails,
-                                     "inr": inr, "name": current_user()["name"],
+                                     "inr": inr, "duration": duration, "reason": reason,
+                                     "name": current_user()["name"],
                                      "email": current_user()["email"]}
                     except Exception:  # noqa: BLE001
-                        flash("Couldn't reach Razorpay — check your keys. Using test "
-                              "confirmation.", "error")
-                        _grant_burst(emails, inr, "INR", "Razorpay (test)", "test")
+                        _grant_burst(emails, inr, "INR", "Razorpay (test)", "test",
+                                     duration, reason)
                         return redirect(url_for("burst_campaign"))
                 else:
-                    # International (simulated) or India without keys (test mode).
                     gw = "Razorpay (test)" if region == "india" else "Stripe (test)"
-                    _grant_burst(emails, amount, currency, gw, "test")
+                    _grant_burst(emails, amount, currency, gw, "test", duration, reason)
                     return redirect(url_for("burst_campaign"))
             elif action == "rzp_verify":
-                # Razorpay Checkout success callback — verify the signature.
                 ok = PAY.verify_signature(request.form.get("razorpay_order_id"),
                                           request.form.get("razorpay_payment_id"),
                                           request.form.get("razorpay_signature"))
-                emails = int(request.form.get("emails") or 0)
+                emails, duration, reason = _read_req()
                 inr = float(request.form.get("inr") or 0)
                 if ok and emails > 0:
-                    _grant_burst(emails, inr, "INR", "Razorpay", "razorpay")
+                    _grant_burst(emails, inr, "INR", "Razorpay", "razorpay", duration,
+                                 reason)
                 else:
                     flash("Payment verification failed — not charged.", "error")
                 return redirect(url_for("burst_campaign"))
             elif action == "manual_paid":
-                # UPI-QR or bank-transfer: user confirms they've paid (verify offline).
-                emails = int(request.form.get("emails") or 0)
+                emails, duration, reason = _read_req()
                 inr = float(request.form.get("inr") or 0)
-                method = request.form.get("method", "upi_qr")
                 if emails > 0:
-                    _grant_burst(emails, inr, "INR", "UPI/Bank", method,
-                                 status="pending-verify")
+                    _grant_burst(emails, inr, "INR", "UPI/Bank", "upi_qr", duration,
+                                 reason, status="pending-verify")
                 return redirect(url_for("burst_campaign"))
             elif action == "launch":
                 acct = current_account()
                 quota = acct["burst_quota"]
                 if quota <= 0:
-                    flash("No burst quota — purchase a pack first.", "error")
+                    flash("No active burst capacity — request some first.", "error")
                     return redirect(url_for("burst_campaign"))
-                # Distribute across reserved IPs: 5,000 per IP per the spec.
                 per_ip = 5000
                 ip_count = (quota + per_ip - 1) // per_ip
                 D.execute("INSERT INTO burst_jobs (account_id, size, status, ips_used,"
@@ -1984,24 +2013,24 @@ def register_modules(app):
                           (aid, quota, "completed",
                            ",".join(f"RES-IP{i+1}" for i in range(min(ip_count, 10))),
                            D.now()))
-                D.execute("UPDATE accounts SET burst_quota=0 WHERE id=?", (aid,))  # expires
+                D.execute("UPDATE accounts SET burst_quota=0, burst_valid_until=NULL"
+                          " WHERE id=?", (aid,))
                 D.log_activity(aid, current_user()["email"],
                                f"Ran burst campaign of {quota:,} on {ip_count} reserved IPs")
                 flash(f"Burst sent: {quota:,} emails across {min(ip_count,10)} reserved "
-                      f"IPs ({per_ip:,}/IP). Reserved IPs released; quota expired.",
-                      "success")
+                      f"IPs ({per_ip:,}/IP). Reserved IPs released.", "success")
                 return redirect(url_for("burst_campaign"))
         acct = current_account()
         purchases = D.query("SELECT * FROM burst_purchases WHERE account_id=? ORDER BY id"
                             " DESC LIMIT 12", (aid,))
         invoices = D.query("SELECT * FROM invoices WHERE account_id=? AND number LIKE"
                            " 'BURST-%' ORDER BY id DESC LIMIT 12", (aid,))
+        latest = purchases[0] if purchases else None
         return render_template("burst_campaign.html", plan_limit=plan_limit, acct=acct,
-                               quote=quote, packs=BURST_PACKS, methods=PAY_METHODS,
-                               purchases=purchases, invoices=invoices,
-                               rzp_order=rzp_order, rzp_live=PAY.razorpay_configured(),
-                               upi=PAY.upi_details(), upi_link=PAY.upi_link,
-                               bank=PAY.bank_details())
+                               quote=quote, methods=PAY_METHODS, purchases=purchases,
+                               invoices=invoices, latest=latest, rzp_order=rzp_order,
+                               rzp_live=PAY.razorpay_configured(), upi=PAY.upi_details(),
+                               upi_link=PAY.upi_link, bank=PAY.bank_details())
 
     @app.route("/invoice/<int:inv_id>")
     @login_required

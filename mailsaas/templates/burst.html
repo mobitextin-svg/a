@@ -13,16 +13,16 @@
       <button class="btn ghost sm">Switch to {{ 'Manual' if auto_approve else 'Auto' }}</button></form>
   </div>
   <table>
-    <thead><tr><th>Req</th><th>User</th><th class="num">Emails</th><th class="num">Amount</th><th>Status</th><th>When</th><th></th></tr></thead>
+    <thead><tr><th>Req</th><th>User</th><th>Current Plan</th><th class="num">Requested</th><th class="num">Payment</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for r in requests %}
       <tr>
         <td>#BR{{ '%04d'|format(r.id) }}</td>
         <td class="small">{{ r.acct }} <span class="faint">#{{ r.account_id }}</span></td>
+        <td class="small">{{ r.plan }}</td>
         <td class="num">{{ '{:,}'.format(r.emails) }}</td>
-        <td class="num">{{ '₹' if r.currency=='INR' else '$' }}{{ '%g'|format(r.amount) }}</td>
+        <td class="num">{{ '₹' if r.currency=='INR' else '$' }}{{ '%g'|format(r.amount) }} <span class="badge b-valid">paid</span></td>
         <td><span class="badge {{ 'b-valid' if r.status=='active' else ('b-risky' if r.status in ('pending','pending-verify') else 'b-invalid') }}">{{ r.status }}</span></td>
-        <td class="faint small">{{ r.created_at }}</td>
         <td class="num">
           {% if r.status in ('pending','pending-verify') %}
           <form class="inline-form" method="post"><input type="hidden" name="action" value="approve">

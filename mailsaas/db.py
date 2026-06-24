@@ -365,6 +365,10 @@ _MIGRATIONS = [
     ("accounts", "ip_allowlist", "TEXT"),     # comma IPs/CIDRs; empty = allow all
     ("domains", "bimi", "INTEGER NOT NULL DEFAULT 0"),
     ("accounts", "burst_quota", "INTEGER NOT NULL DEFAULT 0"),  # purchased one-time boost
+    ("accounts", "burst_valid_until", "TEXT"),                  # when the boost expires
+    ("burst_purchases", "valid_until", "TEXT"),
+    ("burst_purchases", "duration_days", "INTEGER NOT NULL DEFAULT 1"),
+    ("burst_purchases", "reason", "TEXT"),
 ]
 
 

@@ -2,126 +2,137 @@
 {% block title %}Dedicated Burst Pool{% endblock %}
 {% block content %}
 <h1>⭐ Dedicated Burst Pool</h1>
-<p class="muted">Send far beyond your daily plan with reserved IPs — pay only when you need it.</p>
 
 <div class="card" style="margin-top:14px">
   <h2>Current Plan</h2>
-  <div class="grid g3">
-    <div class="stat"><div class="k">Plan</div><div class="v" style="font-size:1.2rem">{{ acct.plan }}</div></div>
-    <div class="stat"><div class="k">Daily limit</div><div class="v">{{ '{:,}'.format(plan_limit) }}<span class="unit"> emails</span></div></div>
-    <div class="stat"><div class="k">Active burst quota</div><div class="v" style="color:{{ 'var(--good)' if acct.burst_quota else 'var(--text)' }}">{{ '{:,}'.format(acct.burst_quota) }}</div></div>
-  </div>
+  <div class="kv"><span>Plan</span><b>{{ acct.plan }}</b></div>
+  <div class="kv"><span>Daily Limit</span><b>{{ '{:,}'.format(plan_limit) }} emails</b></div>
 </div>
 
-{% if acct.burst_quota > 0 %}
+{# ---- Status ---- #}
+{% if acct.burst_quota > 0 and acct.burst_valid_until %}
 <div class="card" style="border-color:var(--accent)">
-  <div class="section-head"><h2>🚀 Burst pool active</h2>
-    <span class="pill">{{ '{:,}'.format(acct.burst_quota) }} emails ready</span></div>
-  <p class="muted small">Split across reserved IPs (5,000/IP) and released automatically after the campaign.</p>
-  <form method="post"><input type="hidden" name="action" value="launch">
-    <button class="btn">Use burst pool now</button></form>
+  <div class="section-head"><h2>🟢 Approved &amp; Active</h2>
+    <form class="inline-form" method="post"><input type="hidden" name="action" value="launch">
+      <button class="btn">Use burst pool</button></form></div>
+  <div class="grid g2">
+    <div class="stat"><div class="k">Burst Limit</div><div class="v">{{ '{:,}'.format(acct.burst_quota) }}<span class="unit"> emails</span></div></div>
+    <div class="stat"><div class="k">Valid Until</div><div class="v" style="font-size:1.2rem">{{ acct.burst_valid_until[:10] }}</div></div>
+  </div>
+  <p class="faint small" style="margin-top:6px">When the allocation expires, your account automatically returns to the normal daily limit.</p>
+</div>
+{% elif latest and latest.status in ('pending', 'pending-verify') %}
+<div class="card" style="border-color:var(--warn)">
+  <h2>🟡 Pending Approval</h2>
+  <p class="muted">Your request for <b>{{ '{:,}'.format(latest.emails) }}</b> burst emails
+    is awaiting admin approval. You'll be notified once it's activated.</p>
 </div>
 {% endif %}
 
 {% if not quote %}
 <div class="card">
-  <h2>Need More Capacity?</h2>
-  <p class="muted small">Pick a volume to see the price and pay online. Quota activates instantly after payment.</p>
-  <div class="feature-grid">
-    {% for emails, usd, inr in packs %}
-    <form method="post" class="feature" style="text-align:center">
-      <input type="hidden" name="action" value="quote">
-      <input type="hidden" name="size" value="{{ emails + plan_limit }}">
-      <h3 style="margin:0">{{ '{:,}'.format(emails) }}</h3>
-      <p style="margin:2px 0">emails</p>
-      <div style="font-weight:700;margin:6px 0">₹{{ inr }} <span class="faint small">/ ${{ usd }}</span></div>
-      <button class="btn sm" style="width:100%">Request Burst Pool</button>
-    </form>
-    {% endfor %}
-    <form method="post" class="feature" style="text-align:center">
-      <input type="hidden" name="action" value="quote">
-      <h3 style="margin:0">Custom</h3>
-      <p style="margin:2px 0">volume</p>
-      <input name="size" type="number" placeholder="e.g. 250000" style="margin:6px 0">
-      <button class="btn sm ghost" style="width:100%">Get price</button>
-    </form>
+  <h2>Need to send more?</h2>
+  <div class="grid g2" style="margin-top:6px">
+    <div class="kv"><span>✓ High-speed delivery</span></div>
+    <div class="kv"><span>✓ Dedicated SMTP resources</span></div>
+    <div class="kv"><span>✓ Priority queue</span></div>
+    <div class="kv"><span>✓ Temporary higher sending limits</span></div>
   </div>
 </div>
+
+<div class="card" style="border-color:var(--brand)">
+  <h2>Request Burst Capacity</h2>
+  <form method="post" id="reqForm">
+    <input type="hidden" name="action" value="quote">
+    <label>Emails Required</label>
+    <input name="emails" id="emails" type="number" value="100000" min="1000" required>
+    <label style="margin-top:12px">Duration</label>
+    <div class="row" style="gap:16px">
+      <label style="flex:0;display:flex;align-items:center;gap:6px"><input type="radio" name="duration" value="1" checked style="width:auto"> 1 Day</label>
+      <label style="flex:0;display:flex;align-items:center;gap:6px"><input type="radio" name="duration" value="3" style="width:auto"> 3 Days</label>
+      <label style="flex:0;display:flex;align-items:center;gap:6px"><input type="radio" name="duration" value="7" style="width:auto"> 7 Days</label>
+    </div>
+    <label style="margin-top:12px">Reason</label>
+    <input name="reason" placeholder="Campaign / Promotion">
+    <div class="card tight" style="background:var(--panel2);margin-top:14px">
+      <div class="section-head" style="margin:0"><span>Estimated Cost</span>
+        <b id="cost" style="font-size:1.4rem">₹2,500</b></div>
+      <div class="faint small" id="costUsd">≈ $30</div>
+    </div>
+    <div style="margin-top:14px"><button class="btn" style="width:100%">Proceed to Payment</button></div>
+  </form>
+</div>
+<script>
+(function(){
+  var RATE=25, USD=83, MULT={"1":1,"3":2.5,"7":5};
+  function calc(){
+    var e=parseInt(document.getElementById('emails').value||0,10);
+    var d=document.querySelector('input[name=duration]:checked').value;
+    var inr=Math.ceil(e/1000)*RATE*MULT[d];
+    document.getElementById('cost').textContent='₹'+inr.toLocaleString();
+    document.getElementById('costUsd').textContent='≈ $'+Math.max(1,Math.round(inr/USD));
+  }
+  document.getElementById('emails').addEventListener('input',calc);
+  document.querySelectorAll('input[name=duration]').forEach(function(r){r.addEventListener('change',calc);});
+  calc();
+})();
+</script>
 {% endif %}
 
 {% if quote %}
 <div class="card" style="border-color:var(--brand)">
-  <h2>Confirm &amp; pay</h2>
-  <p>Requested send: <b>{{ '{:,}'.format(quote.size) }}</b> · Your allowance:
-    <b>{{ '{:,}'.format(plan_limit + acct.burst_quota) }}</b> · Shortfall:
-    <b style="color:var(--warn)">{{ '{:,}'.format(quote.need) }}</b></p>
-  {% set emails, usd, inr = quote.pack %}
-  <div class="card tight" style="background:var(--panel2)">
-    <h3 style="margin:0 0 6px">Burst pack: {{ '{:,}'.format(emails) }} emails</h3>
-    <div class="tabs" id="payTabs" style="margin-top:6px">
-      <a class="tab active" data-pane="intl" href="javascript:void(0)">🌍 International</a>
-      <a class="tab" data-pane="india" href="javascript:void(0)">🇮🇳 India</a>
-    </div>
+  <h2>Confirm &amp; Pay</h2>
+  <div class="kv"><span>Burst capacity</span><b>{{ '{:,}'.format(quote.emails) }} emails</b></div>
+  <div class="kv"><span>Duration</span><b>{{ quote.duration }} day(s)</b></div>
+  {% if quote.reason %}<div class="kv"><span>Reason</span><span>{{ quote.reason }}</span></div>{% endif %}
+  <div class="kv"><span>Amount</span><b style="font-size:1.2rem">₹{{ quote.inr }} <span class="faint small">/ ${{ quote.usd }}</span></b></div>
+
+  <div class="card tight" style="background:var(--panel2);margin-top:10px">
+    <div class="tabs" id="payTabs"><a class="tab active" data-pane="intl" href="javascript:void(0)">🌍 International</a>
+      <a class="tab" data-pane="india" href="javascript:void(0)">🇮🇳 India</a></div>
     <form method="post">
       <input type="hidden" name="action" value="pay">
-      <input type="hidden" name="emails" value="{{ emails }}">
-      <input type="hidden" name="usd" value="{{ usd }}">
-      <input type="hidden" name="inr" value="{{ inr }}">
+      <input type="hidden" name="emails" value="{{ quote.emails }}">
+      <input type="hidden" name="duration" value="{{ quote.duration }}">
+      <input type="hidden" name="reason" value="{{ quote.reason }}">
+      <input type="hidden" name="usd" value="{{ quote.usd }}">
+      <input type="hidden" name="inr" value="{{ quote.inr }}">
       <input type="hidden" name="region" id="region" value="international">
       <div class="pay-pane" data-pane="intl">
-        <div class="kv"><span>Amount</span><b style="font-size:1.2rem">${{ usd }}</b></div>
-        {% for m, lbl in methods.international %}
-        <label style="display:flex;align-items:center;gap:8px;font-weight:500">
-          <input type="radio" name="method" value="{{ m }}" style="width:auto" {{ 'checked' if loop.first }}> {{ lbl }}</label>
-        {% endfor %}
-        <div style="margin-top:12px"><button class="btn" style="width:100%">🔒 Pay ${{ usd }}</button></div>
+        <div class="kv"><span>Pay</span><b>${{ quote.usd }}</b></div>
+        {% for m, lbl in methods.international %}<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="radio" name="method" value="{{ m }}" style="width:auto" {{ 'checked' if loop.first }}> {{ lbl }}</label>{% endfor %}
+        <div style="margin-top:12px"><button class="btn" style="width:100%">🔒 Pay ${{ quote.usd }}</button></div>
       </div>
       <div class="pay-pane" data-pane="india" style="display:none">
-        <div class="kv"><span>Amount</span><b style="font-size:1.2rem">₹{{ inr }}</b></div>
-        <p class="muted small">Razorpay covers UPI · UPI-QR · Cards · Net Banking · Wallets.</p>
-        <button class="btn" style="width:100%">
-          {{ '💳 Pay with Razorpay' if rzp_live else '💳 Pay with Razorpay (test mode)' }}</button>
+        <div class="kv"><span>Pay</span><b>₹{{ quote.inr }}</b></div>
+        <p class="muted small">Razorpay: UPI · QR · Cards · Net Banking.</p>
+        <button class="btn" style="width:100%">{{ '💳 Pay with Razorpay' if rzp_live else '💳 Pay with Razorpay (test)' }}</button>
       </div>
     </form>
-
     <div class="pay-pane" data-pane="india" style="display:none">
-      <hr style="border-color:var(--line);margin:14px 0">
-      <div class="grid g2">
-        <div style="text-align:center">
-          <b class="small">Or scan UPI QR</b>
-          <div style="background:#fff;padding:10px;border-radius:10px;display:inline-block;margin-top:8px">
-            <img width="140" height="140" alt="UPI QR"
-                 src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data={{ upi_link(inr, 'Burst ' ~ emails)|urlencode }}"></div>
-          <div class="faint small" style="margin-top:6px">UPI ID: <b>{{ upi.vpa }}</b></div>
-        </div>
-        <div>
-          <b class="small">Or bank transfer</b>
-          <div class="kv"><span>A/C name</span><b>{{ bank.name }}</b></div>
-          <div class="kv"><span>A/C no.</span><b>{{ bank.account }}</b></div>
-          <div class="kv"><span>IFSC</span><b>{{ bank.ifsc }}</b></div>
-        </div>
-      </div>
-      <form method="post" style="margin-top:10px">
+      <hr style="border-color:var(--line);margin:12px 0">
+      <div style="text-align:center"><b class="small">Or scan UPI QR</b><br>
+        <span style="background:#fff;padding:8px;border-radius:8px;display:inline-block;margin-top:6px">
+        <img width="130" height="130" alt="UPI QR" src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&data={{ upi_link(quote.inr, 'Burst')|urlencode }}"></span>
+        <div class="faint small">UPI: {{ upi.vpa }} · {{ bank.bank }} A/C {{ bank.account }} IFSC {{ bank.ifsc }}</div></div>
+      <form method="post" style="margin-top:8px">
         <input type="hidden" name="action" value="manual_paid">
-        <input type="hidden" name="emails" value="{{ emails }}">
-        <input type="hidden" name="inr" value="{{ inr }}">
-        <input type="hidden" name="method" value="upi_qr">
+        <input type="hidden" name="emails" value="{{ quote.emails }}">
+        <input type="hidden" name="duration" value="{{ quote.duration }}">
+        <input type="hidden" name="reason" value="{{ quote.reason }}">
+        <input type="hidden" name="inr" value="{{ quote.inr }}">
         <button class="btn ghost sm" style="width:100%">I've paid by UPI / bank</button>
       </form>
     </div>
-    <p class="faint small" style="margin-top:8px">International is simulated; India uses Razorpay (live when keys are set).</p>
   </div>
+  <a class="small" href="{{ url_for('burst_campaign') }}">← Change request</a>
 </div>
 <script>
 (function(){
   var tabs=document.querySelectorAll('#payTabs .tab');
-  function pick(p){
-    tabs.forEach(function(t){t.classList.toggle('active', t.getAttribute('data-pane')===p);});
-    document.querySelectorAll('.pay-pane').forEach(function(el){
-      el.style.display = el.getAttribute('data-pane')===p ? '' : 'none';
-    });
-    document.getElementById('region').value=(p==='india')?'india':'international';
-  }
+  function pick(p){tabs.forEach(function(t){t.classList.toggle('active',t.getAttribute('data-pane')===p);});
+    document.querySelectorAll('.pay-pane').forEach(function(el){el.style.display=el.getAttribute('data-pane')===p?'':'none';});
+    document.getElementById('region').value=(p==='india')?'india':'international';}
   tabs.forEach(function(t){t.addEventListener('click',function(){pick(t.getAttribute('data-pane'));});});
   pick('intl');
 })();
@@ -134,56 +145,47 @@
   <input type="hidden" name="action" value="rzp_verify">
   <input type="hidden" name="emails" value="{{ rzp_order.emails }}">
   <input type="hidden" name="inr" value="{{ rzp_order.inr }}">
+  <input type="hidden" name="duration" value="{{ rzp_order.duration }}">
+  <input type="hidden" name="reason" value="{{ rzp_order.reason }}">
   <input type="hidden" name="razorpay_payment_id" id="rzp_pid">
   <input type="hidden" name="razorpay_order_id" id="rzp_oid">
   <input type="hidden" name="razorpay_signature" id="rzp_sig">
 </form>
 <script>
 (function(){
-  var opts={ key:"{{ rzp_order.key }}", amount:{{ rzp_order.amount }}, currency:"INR",
-    name:"MailSaaS", description:"Burst pack — {{ rzp_order.emails }} emails",
-    order_id:"{{ rzp_order.order_id }}",
-    prefill:{ name:"{{ rzp_order.name }}", email:"{{ rzp_order.email }}" },
-    theme:{ color:"#7c5cff" },
-    handler:function(r){
-      document.getElementById('rzp_pid').value=r.razorpay_payment_id;
+  var o={key:"{{ rzp_order.key }}",amount:{{ rzp_order.amount }},currency:"INR",name:"MailSaaS",
+    description:"Burst {{ rzp_order.emails }} emails",order_id:"{{ rzp_order.order_id }}",
+    prefill:{name:"{{ rzp_order.name }}",email:"{{ rzp_order.email }}"},theme:{color:"#7c5cff"},
+    handler:function(r){document.getElementById('rzp_pid').value=r.razorpay_payment_id;
       document.getElementById('rzp_oid').value=r.razorpay_order_id;
       document.getElementById('rzp_sig').value=r.razorpay_signature;
-      document.getElementById('rzpVerify').submit();
-    }};
-  new Razorpay(opts).open();
+      document.getElementById('rzpVerify').submit();}};
+  new Razorpay(o).open();
 })();
 </script>
 {% endif %}
 
 <div class="grid g2">
-  <div class="card">
-    <h2>My Requests</h2>
-    <table>
-      <thead><tr><th>Req ID</th><th class="num">Emails</th><th class="num">Amount</th><th>Status</th><th>Valid until</th></tr></thead>
-      <tbody>
-      {% for p in purchases %}
-        <tr><td>#BR{{ '%04d'|format(p.id) }}</td>
-          <td class="num">{{ '{:,}'.format(p.emails) }}</td>
-          <td class="num">{{ '₹' if p.currency=='INR' else '$' }}{{ '%g'|format(p.amount) }}</td>
-          <td><span class="badge {{ 'b-valid' if p.status=='paid' else 'b-risky' }}">{{ p.status }}</span></td>
-          <td class="faint small">on campaign completion</td></tr>
-      {% else %}<tr><td colspan="5" class="empty">No requests yet.</td></tr>{% endfor %}
-      </tbody>
-    </table>
+  <div class="card"><h2>My Requests</h2>
+    <table><thead><tr><th>Req</th><th class="num">Emails</th><th class="num">Amount</th><th>Status</th><th>Valid Until</th></tr></thead>
+    <tbody>
+    {% for p in purchases %}
+      <tr><td>#BR{{ '%04d'|format(p.id) }}</td><td class="num">{{ '{:,}'.format(p.emails) }}</td>
+        <td class="num">{{ '₹' if p.currency=='INR' else '$' }}{{ '%g'|format(p.amount) }}</td>
+        <td><span class="badge {{ 'b-valid' if p.status=='active' else ('b-risky' if p.status in ('pending','pending-verify') else 'b-invalid') }}">{{ p.status }}</span></td>
+        <td class="faint small">{{ p.valid_until[:10] if p.valid_until else '—' }}</td></tr>
+    {% else %}<tr><td colspan="5" class="empty">No requests yet.</td></tr>{% endfor %}
+    </tbody></table>
   </div>
-  <div class="card">
-    <h2>Payment History</h2>
-    <table>
-      <thead><tr><th>Invoice</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-      {% for inv in invoices %}
-        <tr><td>{{ inv.number }}</td><td class="num">{{ '%.2f'|format(inv.amount) }}</td>
-          <td><span class="badge b-valid">{{ inv.status }}</span></td>
-          <td class="num"><a class="btn ghost sm" href="{{ url_for('invoice_download', inv_id=inv.id) }}">⬇</a></td></tr>
-      {% else %}<tr><td colspan="4" class="empty">No invoices yet.</td></tr>{% endfor %}
-      </tbody>
-    </table>
+  <div class="card"><h2>Payment History</h2>
+    <table><thead><tr><th>Invoice</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for inv in invoices %}
+      <tr><td>{{ inv.number }}</td><td class="num">{{ '%.2f'|format(inv.amount) }}</td>
+        <td><span class="badge b-valid">{{ inv.status }}</span></td>
+        <td class="num"><a class="btn ghost sm" href="{{ url_for('invoice_download', inv_id=inv.id) }}">⬇</a></td></tr>
+    {% else %}<tr><td colspan="4" class="empty">No invoices yet.</td></tr>{% endfor %}
+    </tbody></table>
   </div>
 </div>
 {% endblock %}
