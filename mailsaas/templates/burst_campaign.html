@@ -119,11 +119,13 @@
     <label>Emails Required</label>
     <input name="emails" id="emails" type="number" value="100000" min="1000" required>
     <label style="margin-top:12px">Validity</label>
-    <div class="row" style="gap:16px">
-      <label style="flex:0;display:flex;align-items:center;gap:6px"><input type="radio" name="duration" value="1" checked style="width:auto"> 1 Day</label>
-      <label style="flex:0;display:flex;align-items:center;gap:6px"><input type="radio" name="duration" value="3" style="width:auto"> 3 Days</label>
-      <label style="flex:0;display:flex;align-items:center;gap:6px"><input type="radio" name="duration" value="7" style="width:auto"> 7 Days</label>
-    </div>
+    <select name="duration" id="duration">
+      <option value="1">1 Day</option>
+      <option value="3">3 Days</option>
+      <option value="7">7 Days</option>
+      <option value="15">15 Days</option>
+      <option value="30">30 Days</option>
+    </select>
     <label style="margin-top:12px">Reason</label>
     <input name="reason" placeholder="Campaign / Promotion">
     <div class="card tight" style="background:var(--panel2);margin-top:14px">
@@ -137,16 +139,16 @@
 </div>
 <script>
 (function(){
-  var RATE=25, USD=83, MULT={"1":1,"3":2.5,"7":5};
+  var RATE=25, USD=83, MULT={"1":1,"3":2.5,"7":5,"15":10,"30":18};
   function calc(){
     var e=parseInt(document.getElementById('emails').value||0,10);
-    var d=document.querySelector('input[name=duration]:checked').value;
+    var d=document.getElementById('duration').value;
     var inr=Math.ceil(e/1000)*RATE*MULT[d];
     document.getElementById('cost').textContent='₹'+inr.toLocaleString();
     document.getElementById('costUsd').textContent='≈ $'+Math.max(1,Math.round(inr/USD));
   }
   document.getElementById('emails').addEventListener('input',calc);
-  document.querySelectorAll('input[name=duration]').forEach(function(r){r.addEventListener('change',calc);});
+  document.getElementById('duration').addEventListener('change',calc);
   calc();
 })();
 </script>

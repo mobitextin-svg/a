@@ -529,11 +529,20 @@ def login_required(view):
 def register_context(app):
     @app.context_processor
     def inject():
+        badges = {}
+        if is_admin_user():
+            # Burst requests awaiting an admin action (approve a request or
+            # activate a paid one). Shown as a sidebar notification badge.
+            row = D.query("SELECT COUNT(*) c FROM burst_purchases WHERE status IN"
+                          " ('requested','paid')", one=True)
+            if row and row["c"]:
+                badges["burst"] = row["c"]
         return {
             "NAV": NAV,
             "NAV_GROUPS": ADMIN_GROUPS if is_admin_user() else USER_GROUPS,
             "NAV_BY_KEY": NAV_BY_KEY,
             "ESSENTIAL": ESSENTIAL,
+            "nav_badges": badges,
             "simple_default": _onboarding_incomplete(),
             "is_superadmin": is_superadmin(),
             "is_admin_user": is_admin_user(),
@@ -1902,7 +1911,7 @@ def register_modules(app):
     # Pricing: ₹25 per 1,000 emails for 1 day; duration scales the multiplier.
     BURST_RATE_INR = 25
     BURST_USD_RATE = 83          # ₹ per $
-    BURST_DURATION = {1: 1.0, 3: 2.5, 7: 5.0}
+    BURST_DURATION = {1: 1.0, 3: 2.5, 7: 5.0, 15: 10.0, 30: 18.0}
     PAY_METHODS = {
         "international": [("stripe_card", "💳 Card (Stripe)"), ("paypal", "🅿️ PayPal")],
         "india": [("upi", "📲 UPI"), ("razorpay_card", "💳 Card (Razorpay)"),

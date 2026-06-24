@@ -64,6 +64,10 @@ h1{font-size:1.5rem}h2{font-size:1.15rem}h3{font-size:1rem}
 .nav-sub{margin:0 0 2px 0}
 .nav-link.sub{padding-left:30px;font-size:.9rem}
 .nav-link.sub .ic{font-size:.85rem}
+.nav-badge{margin-left:auto;background:#ef4444;color:#fff;font-size:.7rem;font-weight:700;
+  min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;
+  padding:0 5px;box-shadow:0 0 0 2px rgba(239,68,68,.25)}
+.nav-toggle .nav-badge ~ .caret{margin-left:6px}
 
 /* Role accent themes (admin = indigo/purple, user = blue/emerald) */
 body[data-role="admin"]{--brand:#7c5cff;--brand2:#9b7bff;--accent:#8b5cf6}

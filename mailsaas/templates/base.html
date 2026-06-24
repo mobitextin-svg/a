@@ -40,19 +40,24 @@
         {# Single-feature section → the header is a direct link #}
         {% set key = keys[0] %}
         <a class="nav-link {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
-          <span class="ic">{{ label.split(' ')[0] }}</span><span>{{ label.split(' ',1)[1] }}</span></a>
+          <span class="ic">{{ label.split(' ')[0] }}</span><span>{{ label.split(' ',1)[1] }}</span>
+          {% if nav_badges.get(key) %}<span class="nav-badge">{{ nav_badges[key] }}</span>{% endif %}</a>
       {% else %}
         {# Multi-feature section → collapsible #}
         {% set open = (active in keys) %}
+        {% set ns = namespace(total=0) %}
+        {% for k in keys %}{% set ns.total = ns.total + (nav_badges.get(k) or 0) %}{% endfor %}
         <div class="nav-sec {{ 'adv' if grp_adv else '' }}" data-sec>
           <button type="button" class="nav-link nav-toggle {{ 'open' if open else '' }}">
             <span class="ic">{{ label.split(' ')[0] }}</span><span>{{ label.split(' ',1)[1] }}</span>
+            {% if ns.total %}<span class="nav-badge">{{ ns.total }}</span>{% endif %}
             <span class="caret">▸</span>
           </button>
           <div class="nav-sub" {{ '' if open else 'hidden' }}>
             {% for key in keys if not (key == 'admin' and not is_admin_user) %}
               <a class="nav-link sub {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
-                <span class="ic">{{ NAV_BY_KEY[key].icon }}</span><span>{{ NAV_BY_KEY[key].label }}</span></a>
+                <span class="ic">{{ NAV_BY_KEY[key].icon }}</span><span>{{ NAV_BY_KEY[key].label }}</span>
+                {% if nav_badges.get(key) %}<span class="nav-badge">{{ nav_badges[key] }}</span>{% endif %}</a>
             {% endfor %}
           </div>
         </div>
