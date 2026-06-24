@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Burst Campaigns{% endblock %}
+{% block content %}
+<h1>💥 Burst Campaigns</h1>
+<p class="muted">Need to send more than your daily plan allows? Buy a one-time burst pack
+  and send a huge campaign on reserved IPs.</p>
+
+<div class="grid g3" style="margin-top:14px">
+  <div class="stat"><div class="k">Your plan</div><div class="v" style="font-size:1.2rem">{{ acct.plan }}</div></div>
+  <div class="stat"><div class="k">Daily limit</div><div class="v">{{ '{:,}'.format(plan_limit) }}</div></div>
+  <div class="stat"><div class="k">Burst quota (available)</div><div class="v" style="color:{{ 'var(--good)' if acct.burst_quota else 'var(--text)' }}">{{ '{:,}'.format(acct.burst_quota) }}</div></div>
+</div>
+
+{% if acct.burst_quota > 0 %}
+<div class="card" style="border-color:var(--accent)">
+  <div class="section-head"><h2>🚀 Ready to launch</h2>
+    <span class="pill">{{ '{:,}'.format(acct.burst_quota) }} emails queued</span></div>
+  <p class="muted small">Your purchased quota will be split across reserved IPs (5,000 per IP)
+    and released automatically when the campaign finishes.</p>
+  <form method="post"><input type="hidden" name="action" value="launch">
+    <button class="btn">Launch burst campaign</button></form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>1. Plan your campaign</h2>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="action" value="quote">
+    <div style="flex:2"><label>How many emails do you want to send?</label>
+      <input name="size" type="number" value="100000" required></div>
+    <div style="flex:0"><button class="btn">Check</button></div>
+  </form>
+</div>
+
+{% if quote %}
+<div class="card" style="border-color:var(--brand)">
+  <h2>2. Daily limit exceeded</h2>
+  <p>You want to send <b>{{ '{:,}'.format(quote.size) }}</b> but your allowance is
+    <b>{{ '{:,}'.format(plan_limit + acct.burst_quota) }}</b>.
+    You need <b style="color:var(--warn)">{{ '{:,}'.format(quote.need) }}</b> more.</p>
+  {% set emails, usd, inr = quote.pack %}
+  <div class="card tight" style="background:var(--panel2)">
+    <h3 style="margin:0 0 6px">Recommended pack: {{ '{:,}'.format(emails) }} burst emails</h3>
+
+    <div class="tabs" id="payTabs" style="margin-top:6px">
+      <a class="tab active" data-pane="intl" href="javascript:void(0)">🌍 International</a>
+      <a class="tab" data-pane="india" href="javascript:void(0)">🇮🇳 India</a>
+    </div>
+
+    <form method="post">
+      <input type="hidden" name="action" value="pay">
+      <input type="hidden" name="emails" value="{{ emails }}">
+      <input type="hidden" name="usd" value="{{ usd }}">
+      <input type="hidden" name="inr" value="{{ inr }}">
+      <input type="hidden" name="region" id="region" value="international">
+
+      <div class="pay-pane" data-pane="intl">
+        <div class="kv"><span>Amount</span><b style="font-size:1.2rem">${{ usd }}</b></div>
+        <label>Payment method</label>
+        {% for m, lbl in methods.international %}
+        <label style="display:flex;align-items:center;gap:8px;font-weight:500">
+          <input type="radio" name="method" value="{{ m }}" style="width:auto" {{ 'checked' if loop.first }}> {{ lbl }}</label>
+        {% endfor %}
+      </div>
+
+      <div class="pay-pane" data-pane="india" style="display:none">
+        <div class="kv"><span>Amount</span><b style="font-size:1.2rem">₹{{ inr }}</b></div>
+        <label>Payment method</label>
+        {% for m, lbl in methods.india %}
+        <label style="display:flex;align-items:center;gap:8px;font-weight:500">
+          <input type="radio" name="method" value="{{ m }}" style="width:auto"> {{ lbl }}</label>
+        {% endfor %}
+      </div>
+
+      <div style="margin-top:14px"><button class="btn" style="width:100%">🔒 Pay now &amp; add quota</button></div>
+      <p class="faint small" style="margin-top:8px">Simulated checkout — no real charge. Plug Stripe/PayPal or Razorpay keys into the payment hook to go live.</p>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var tabs=document.querySelectorAll('#payTabs .tab');
+  function pick(p){
+    tabs.forEach(function(t){t.classList.toggle('active', t.getAttribute('data-pane')===p);});
+    document.querySelectorAll('.pay-pane').forEach(function(el){
+      el.style.display = el.getAttribute('data-pane')===p ? '' : 'none';
+      el.querySelectorAll('input[name=method]').forEach(function(r){ r.disabled = (el.style.display==='none'); });
+    });
+    document.getElementById('region').value = (p==='india')?'india':'international';
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ pick(t.getAttribute('data-pane')); }); });
+  pick('intl');
+})();
+</script>
+{% endif %}
+
+<div class="card">
+  <h2>Purchase history</h2>
+  <table>
+    <thead><tr><th>Emails</th><th>Amount</th><th>Gateway</th><th>Method</th><th>Status</th><th>When</th></tr></thead>
+    <tbody>
+    {% for p in purchases %}
+      <tr><td>{{ '{:,}'.format(p.emails) }}</td>
+        <td>{{ '₹' if p.currency=='INR' else '$' }}{{ '%g'|format(p.amount) }}</td>
+        <td>{{ p.gateway }}</td><td class="small">{{ p.method }}</td>
+        <td><span class="badge b-valid">{{ p.status }}</span></td>
+        <td class="faint small">{{ p.created_at }}</td></tr>
+    {% else %}<tr><td colspan="6" class="empty">No purchases yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1830,6 +1830,96 @@ def register_modules(app):
         return render_template("burst.html", servers=servers, jobs=jobs, result=result,
                                plan_ok=plan_ok)
 
+    # ---- Burst Campaign (user) — over-limit → buy quota → run burst ------- #
+    # Quota packs: (emails, USD price, INR price)
+    BURST_PACKS = [(10000, 9, 749), (50000, 39, 2999), (100000, 69, 4999),
+                   (500000, 249, 18999)]
+    PAY_METHODS = {
+        "international": [("stripe_card", "💳 Card (Stripe)"), ("paypal", "🅿️ PayPal")],
+        "india": [("upi", "📲 UPI"), ("razorpay_card", "💳 Card (Razorpay)"),
+                  ("netbanking", "🏦 Net Banking")],
+    }
+    GATEWAY = {"stripe_card": "Stripe", "paypal": "PayPal", "upi": "Razorpay",
+               "razorpay_card": "Razorpay", "netbanking": "Razorpay"}
+
+    @app.route("/burst-campaign", methods=["GET", "POST"])
+    @login_required
+    def burst_campaign():
+        acct = current_account()
+        aid = acct["id"]
+        plan_limit = PLAN_DAILY_LIMITS.get(acct["plan"], 1000)
+        quote = None
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action == "quote":
+                size = max(0, int(request.form.get("size") or 0))
+                allowance = plan_limit + acct["burst_quota"]
+                if size <= allowance:
+                    flash(f"{size:,} is within your allowance ({allowance:,}). "
+                          "Send it as a normal campaign.", "success")
+                else:
+                    need = size - allowance
+                    # smallest pack(s) covering the shortfall
+                    pack = next((p for p in BURST_PACKS if p[0] >= need), BURST_PACKS[-1])
+                    quote = {"size": size, "need": need, "pack": pack}
+            elif action == "pay":
+                emails = int(request.form.get("emails") or 0)
+                usd = float(request.form.get("usd") or 0)
+                inr = float(request.form.get("inr") or 0)
+                region = request.form.get("region", "international")
+                method = request.form.get("method", "")
+                valid = {m for ms in PAY_METHODS.values() for m, _ in ms}
+                if emails <= 0 or method not in valid:
+                    flash("Pick a pack and a payment method.", "error")
+                    return redirect(url_for("burst_campaign"))
+                currency, amount = ("INR", inr) if region == "india" else ("USD", usd)
+                # --- Simulated payment success. Plug a real gateway in here. ---
+                D.execute("INSERT INTO burst_purchases (account_id, emails, amount,"
+                          " currency, gateway, method, status, created_at)"
+                          " VALUES (?,?,?,?,?,?,?,?)",
+                          (aid, emails, amount, currency, GATEWAY[method], method,
+                           "paid", D.now()))
+                sym = "₹" if currency == "INR" else "$"
+                D.execute("INSERT INTO invoices (account_id, number, amount, status,"
+                          " created_at) VALUES (?,?,?,?,?)",
+                          (aid, "BURST-" + secrets.token_hex(3).upper(), amount,
+                           "Paid", D.now()))
+                D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
+                          (emails, aid))
+                D.log_activity(aid, current_user()["email"],
+                               f"Purchased {emails:,} burst emails ({sym}{amount:g} via "
+                               f"{GATEWAY[method]})")
+                flash(f"Payment successful via {GATEWAY[method]} — {emails:,} burst "
+                      f"emails added. Launch your burst below.", "success")
+                return redirect(url_for("burst_campaign"))
+            elif action == "launch":
+                acct = current_account()
+                quota = acct["burst_quota"]
+                if quota <= 0:
+                    flash("No burst quota — purchase a pack first.", "error")
+                    return redirect(url_for("burst_campaign"))
+                # Distribute across reserved IPs: 5,000 per IP per the spec.
+                per_ip = 5000
+                ip_count = (quota + per_ip - 1) // per_ip
+                D.execute("INSERT INTO burst_jobs (account_id, size, status, ips_used,"
+                          " created_at) VALUES (?,?,?,?,?)",
+                          (aid, quota, "completed",
+                           ",".join(f"RES-IP{i+1}" for i in range(min(ip_count, 10))),
+                           D.now()))
+                D.execute("UPDATE accounts SET burst_quota=0 WHERE id=?", (aid,))  # expires
+                D.log_activity(aid, current_user()["email"],
+                               f"Ran burst campaign of {quota:,} on {ip_count} reserved IPs")
+                flash(f"Burst sent: {quota:,} emails across {min(ip_count,10)} reserved "
+                      f"IPs ({per_ip:,}/IP). Reserved IPs released; quota expired.",
+                      "success")
+                return redirect(url_for("burst_campaign"))
+        acct = current_account()
+        purchases = D.query("SELECT * FROM burst_purchases WHERE account_id=? ORDER BY id"
+                            " DESC LIMIT 8", (aid,))
+        return render_template("burst_campaign.html", plan_limit=plan_limit, acct=acct,
+                               quote=quote, packs=BURST_PACKS, methods=PAY_METHODS,
+                               purchases=purchases)
+
     @app.route("/ip-health")
     @login_required
     def ip_health():

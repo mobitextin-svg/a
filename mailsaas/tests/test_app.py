@@ -110,6 +110,25 @@ def test_dual_scope_bounce(admin, user):
     assert b"by account" not in user.get("/bounce").data
 
 
+def test_burst_quota_purchase_and_launch(user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    # over-limit quote shows both payment regions
+    r = user.post("/burst-campaign", data={"action": "quote", "size": "1000000"})
+    assert b"Daily limit exceeded" in r.data and b"India" in r.data
+    # India / UPI payment
+    user.post("/burst-campaign", data={"action": "pay", "emails": "100000",
+                                       "usd": "69", "inr": "4999", "region": "india",
+                                       "method": "upi"}, follow_redirects=True)
+    p = query("SELECT * FROM burst_purchases WHERE account_id=?", aid)[0]
+    assert p["gateway"] == "Razorpay" and p["currency"] == "INR"
+    assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == 100000
+    # launch consumes quota and records a completed burst job
+    user.post("/burst-campaign", data={"action": "launch"}, follow_redirects=True)
+    assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == 0
+    assert query("SELECT status FROM burst_jobs WHERE account_id=? ORDER BY id DESC"
+                 " LIMIT 1", aid)[0]["status"] == "completed"
+
+
 # ------------------------------ admin ------------------------------------- #
 
 def test_admin_can_create_user_who_logs_in(app, admin, query):

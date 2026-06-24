@@ -428,6 +428,11 @@ NAV = [
     {"key": "blacklist", "label": "Blacklist Center", "icon": "🚫", "built": True,
      "items": [("RBL/DNSBL checks", "Across major lists"), ("Domains", "Your domains"),
                ("IPs", "Your sending IPs"), ("Delisting", "Request removal")]},
+    {"key": "burstcamp", "label": "Burst Campaigns", "icon": "💥", "built": True,
+     "items": [("Over-limit detection", "When you exceed your daily plan"),
+               ("Buy burst quota", "Pay-as-you-go top-up"),
+               ("International & India pay", "Stripe/PayPal · UPI/Razorpay"),
+               ("Reserved IP burst", "5,000/IP, auto-released")]},
     # --- Admin-only platform modules ------------------------------------- #
     {"key": "plans", "label": "Plans", "icon": "💳", "built": True,
      "items": [("Tiers", "Free → Enterprise"), ("Credits", "Per-plan allowances"),
@@ -460,7 +465,7 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 
 USER_GROUPS = [
     ("", ["dashboard"]),
-    ("📨 Email", ["contacts", "campaigns", "templates", "verification"]),
+    ("📨 Email", ["contacts", "campaigns", "burstcamp", "templates", "verification"]),
     ("🛠 Infrastructure", ["smtp", "domains"]),
     ("📈 Deliverability", ["deliverability"]),
     ("📊 Insights", ["reports"]),
@@ -505,7 +510,7 @@ ESSENTIAL = {
     "dashboard", "smtp", "pools", "domains", "queue", "warmup", "deliverability",
     "admin", "reports", "billing", "mktmgmt", "logs", "monitoring", "settings",
     # user essentials
-    "contacts", "campaigns", "templates", "verification", "api",
+    "contacts", "campaigns", "burstcamp", "templates", "verification", "api",
 }
 
 # The guided first-run path (Verify Domain → Add SMTP → Import → Campaign → Send).

@@ -312,6 +312,18 @@ CREATE TABLE IF NOT EXISTS api_logs (
     created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_apilogs_acct ON api_logs(account_id);
+
+CREATE TABLE IF NOT EXISTS burst_purchases (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    emails       INTEGER NOT NULL,
+    amount       REAL NOT NULL,
+    currency     TEXT NOT NULL,
+    gateway      TEXT NOT NULL,
+    method       TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'paid',
+    created_at   TEXT NOT NULL
+);
 """
 
 # Idempotent column additions for accounts that predate these features.
@@ -337,6 +349,7 @@ _MIGRATIONS = [
     ("smtp_servers", "use_tls", "INTEGER NOT NULL DEFAULT 1"),
     ("accounts", "ip_allowlist", "TEXT"),     # comma IPs/CIDRs; empty = allow all
     ("domains", "bimi", "INTEGER NOT NULL DEFAULT 0"),
+    ("accounts", "burst_quota", "INTEGER NOT NULL DEFAULT 0"),  # purchased one-time boost
 ]
 
 
