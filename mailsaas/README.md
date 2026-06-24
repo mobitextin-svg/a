@@ -50,6 +50,16 @@ python run.py
 
 Use a different port with the `PORT` env var, e.g. `PORT=5060 python run.py`.
 
+### Tests
+```bash
+pip install -r requirements-dev.txt
+python -m pytest mailsaas/tests -q     # from the repo root
+```
+The suite (`mailsaas/tests/`) covers the engines (verification, rotation,
+deliverability AI, TOTP, rendering) and the app (auth, 2FA, role split + access
+gating, real send + open/click/unsubscribe tracking, deliverability, admin,
+CSRF, API rate-limit).
+
 Create an account on the signup screen — your workspace is auto-seeded with
 realistic demo data (contacts, campaigns, SMTP relays, domains, invoices) so
 every screen has something to show.

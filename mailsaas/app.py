@@ -214,6 +214,90 @@ def smtp_health_detail(server):
 
 
 # --------------------------------------------------------------------------- #
+#  Campaign send / list-clean cores — context-independent so they can run
+#  inline (dev) or inside a Celery worker (prod) without the request object.
+# --------------------------------------------------------------------------- #
+
+SEND_CAP = 100   # per-batch safety cap
+PLAN_DAILY_LIMITS = {"Free": 1000, "Pro": 50000, "Business": 250000,
+                     "Enterprise": 2000000}
+
+
+def execute_campaign_send(account_id, campaign_id, base_url):
+    """Send a campaign through the rotation engine. Returns a result dict.
+    No request/session use — safe to call from a background worker."""
+    camp = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                   (campaign_id, account_id), one=True)
+    if not camp:
+        return {"error": "Campaign not found."}
+    acct = D.query("SELECT * FROM accounts WHERE id=?", (account_id,), one=True)
+    recipients = D.query(
+        "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
+        " ORDER BY id LIMIT ?", (account_id, SEND_CAP + 1))
+    if not recipients:
+        return {"error": "No active contacts to send to."}
+    overflow = len(recipients) > SEND_CAP
+    recipients = recipients[:SEND_CAP]
+
+    rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id",
+                   (account_id,))
+    nodes = [ROT.node_from_row(r, ip_score=smtp_health_detail(r)["ip_score"])
+             for r in rows]
+    plan = ROT.plan_sending(len(recipients), nodes,
+                            PLAN_DAILY_LIMITS.get(acct["plan"], 1000))
+    assigned_ids = [n["id"] for n, c in plan["assigned"]]
+    if not assigned_ids:
+        return {"error": "No healthy, warmed-up relay available — check IP Health."}
+    rows_by_id = {r["id"]: r for r in rows}
+
+    env_cfg = SEND.env_transport()
+    sent = failed = 0
+    real = bool(env_cfg) or any(SEND.server_transport(rows_by_id[i])
+                                for i in assigned_ids)
+    for i, contact in enumerate(recipients):
+        sid = assigned_ids[i % len(assigned_ids)]
+        token = SEND.make_token()
+        html = SEND.render_html(camp["body"], dict(contact), base_url, token)
+        cfg = SEND.server_transport(rows_by_id[sid]) or env_cfg
+        status, err = "dry-run", None
+        if cfg:
+            ok, info = SEND.smtp_send(cfg, contact["email"], camp["subject"], html,
+                                      from_addr=camp["from_email"])
+            status, err = ("sent", None) if ok else ("failed", info)
+        D.execute(
+            "INSERT INTO messages (account_id, campaign_id, email, token, smtp_id,"
+            " status, error, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (account_id, camp["id"], contact["email"], token, sid, status, err, D.now()))
+        failed += status == "failed"
+        sent += status != "failed"
+        D.execute("UPDATE smtp_servers SET sent_today=sent_today+1 WHERE id=?", (sid,))
+
+    D.execute("UPDATE campaigns SET status='Completed', recipients=?, sent=?, bounces=?"
+              " WHERE id=?", (len(recipients), sent, failed, camp["id"]))
+    D.mark_onboarding(account_id, "send")
+    D.log_activity(account_id, "system", f"Sent '{camp['name']}' to {sent} recipients")
+    return {"sent": sent, "failed": failed, "real": real, "overflow": overflow}
+
+
+def execute_list_clean(account_id):
+    """Remove bounced/unsubscribed + suppress role/disposable/invalid. Worker-safe."""
+    removed = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND status IN"
+                      " ('bounced','unsubscribed')", (account_id,), one=True)["c"]
+    D.execute("DELETE FROM contacts WHERE account_id=? AND status IN"
+              " ('bounced','unsubscribed')", (account_id,))
+    risky = 0
+    for c in D.query("SELECT id, email FROM contacts WHERE account_id=? AND"
+                     " status='active'", (account_id,)):
+        r = verify_email(c["email"])
+        if (r["result"] == "invalid" or not r["checks"].get("disposable", True)
+                or not r["checks"].get("not_role", True)):
+            D.execute("UPDATE contacts SET status='suppressed' WHERE id=?", (c["id"],))
+            risky += 1
+    D.log_activity(account_id, "system", "Ran automatic list cleaning")
+    return {"removed": removed, "suppressed": risky}
+
+
+# --------------------------------------------------------------------------- #
 #  App factory
 # --------------------------------------------------------------------------- #
 
@@ -1403,26 +1487,16 @@ def register_modules(app):
         aid = current_account()["id"]
         cleaned = None
         if request.method == "POST" and request.form.get("action") == "autoclean":
-            # Remove bounced + unsubscribed; suppress role/disposable addresses.
-            removed = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
-                              " status IN ('bounced','unsubscribed')", (aid,),
-                              one=True)["c"]
-            D.execute("DELETE FROM contacts WHERE account_id=? AND status IN"
-                      " ('bounced','unsubscribed')", (aid,))
-            # Suppress risky (disposable/role) active contacts.
-            risky = 0
-            for c in D.query("SELECT id, email FROM contacts WHERE account_id=? AND"
-                             " status='active'", (aid,)):
-                r = verify_email(c["email"])
-                if r["result"] == "invalid" or not r["checks"].get("disposable", True) \
-                        or not r["checks"].get("not_role", True):
-                    D.execute("UPDATE contacts SET status='suppressed' WHERE id=?",
-                              (c["id"],))
-                    risky += 1
-            cleaned = {"removed": removed, "suppressed": risky}
-            D.log_activity(aid, current_user()["email"], "Ran automatic list cleaning")
-            flash(f"Cleaned list: removed {removed}, suppressed {risky} risky addresses.",
-                  "success")
+            # List cleaning does live DNS per contact — run it on the worker in
+            # production so it can't block the web tier; inline only in dev.
+            if tasks.HAVE_CELERY:
+                tasks.enqueue(tasks.clean_list_job, aid)
+                flash("List cleaning started in the background — refresh shortly.",
+                      "success")
+            else:
+                cleaned = execute_list_clean(aid)
+                flash(f"Cleaned list: removed {cleaned['removed']}, suppressed "
+                      f"{cleaned['suppressed']} risky addresses.", "success")
 
         if admin:
             # Platform view: worst accounts by predicted score.
@@ -2099,8 +2173,6 @@ def register_modules(app):
         return render_template("module.html", mod=mod)
 
     # ---- Campaign send pipeline (real SMTP via the rotation engine) ------- #
-    SEND_CAP = 100   # inline safety cap; larger lists belong on the queue
-
     def _send_campaign_now(aid, campaign_id):
         camp = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
                        (campaign_id, aid), one=True)
@@ -2108,61 +2180,25 @@ def register_modules(app):
             return ("error", "Campaign not found.")
         if camp["status"] in ("Running", "Completed"):
             return ("error", "Campaign already sent.")
-        recipients = D.query(
-            "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
-            " ORDER BY id LIMIT ?", (aid, SEND_CAP + 1))
-        if not recipients:
+        if not D.query("SELECT 1 FROM contacts WHERE account_id=? AND status='active'"
+                       " LIMIT 1", (aid,), one=True):
             return ("error", "No active contacts to send to. Import contacts first.")
-        overflow = len(recipients) > SEND_CAP
-        recipients = recipients[:SEND_CAP]
-
-        # Pick relays via the Sending rotation engine.
-        rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
-        nodes = [ROT.node_from_row(r, ip_score=smtp_health_detail(r)["ip_score"])
-                 for r in rows]
-        plan_limit = PLAN_DAILY.get(current_account()["plan"], 1000)
-        plan = ROT.plan_sending(len(recipients), nodes, plan_limit)
-        assigned_ids = [n["id"] for n, c in plan["assigned"]]
-        if not assigned_ids:
-            return ("error", "No healthy, warmed-up relay available — check IP Health.")
-        rows_by_id = {r["id"]: r for r in rows}
-
         base = request.host_url.rstrip("/")
-        env_cfg = SEND.env_transport()
-        sent = failed = 0
-        real = bool(env_cfg) or any(SEND.server_transport(rows_by_id[i])
-                                    for i in assigned_ids)
-        for i, contact in enumerate(recipients):
-            sid = assigned_ids[i % len(assigned_ids)]
-            token = SEND.make_token()
-            html = SEND.render_html(camp["body"], dict(contact), base, token)
-            cfg = SEND.server_transport(rows_by_id[sid]) or env_cfg
-            status, err = "dry-run", None
-            if cfg:
-                ok, info = SEND.smtp_send(cfg, contact["email"], camp["subject"], html,
-                                          from_addr=camp["from_email"])
-                status, err = ("sent", None) if ok else ("failed", info)
-            D.execute(
-                "INSERT INTO messages (account_id, campaign_id, email, token, smtp_id,"
-                " status, error, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                (aid, camp["id"], contact["email"], token, sid, status, err, D.now()))
-            if status == "failed":
-                failed += 1
-            else:
-                sent += 1
-            # Count per-relay usage toward daily limits.
-            D.execute("UPDATE smtp_servers SET sent_today=sent_today+1 WHERE id=?", (sid,))
-
-        D.execute("UPDATE campaigns SET status='Completed', recipients=?, sent=?,"
-                  " bounces=? WHERE id=?",
-                  (len(recipients), sent, failed, camp["id"]))
-        D.mark_onboarding(aid, "send")
-        D.log_activity(aid, current_user()["email"],
-                       f"Sent campaign '{camp['name']}' to {sent} recipients")
-        mode = "delivered via SMTP" if real else "simulated (dry-run — set MAILSAAS_SMTP_* to send for real)"
-        extra = f" {SEND_CAP}+ contacts — capped to {SEND_CAP} this send." if overflow else ""
-        return ("success", f"Campaign sent to {sent} recipients ({mode}); "
-                           f"{failed} failed.{extra} Opens & clicks will track live.")
+        # In production, send off the request via the worker so a slow SMTP
+        # server can never stall the web tier; inline only in dev.
+        if tasks.HAVE_CELERY:
+            D.execute("UPDATE campaigns SET status='Running' WHERE id=?", (campaign_id,))
+            tasks.enqueue(tasks.send_campaign_job, aid, int(campaign_id), base)
+            return ("success", "Campaign queued — sending in the background. "
+                               "Watch the report for live opens & clicks.")
+        res = execute_campaign_send(aid, int(campaign_id), base)
+        if res.get("error"):
+            return ("error", res["error"])
+        mode = ("delivered via SMTP" if res["real"]
+                else "simulated (dry-run — set MAILSAAS_SMTP_* to send for real)")
+        extra = f" Capped to {SEND_CAP} this batch." if res["overflow"] else ""
+        return ("success", f"Campaign sent to {res['sent']} recipients ({mode}); "
+                           f"{res['failed']} failed.{extra} Opens & clicks track live.")
 
     @app.route("/campaigns/<int:cid>/report")
     @login_required

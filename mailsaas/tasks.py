@@ -61,6 +61,22 @@ def process_bounce(event):
     return {"processed": True, "event": event}
 
 
+@_task
+def send_campaign_job(account_id, campaign_id, base_url):
+    """Run a real campaign send inside an app context (Celery worker)."""
+    from .app import app, execute_campaign_send  # deferred to avoid import cycle
+    with app.app_context():
+        return execute_campaign_send(account_id, campaign_id, base_url)
+
+
+@_task
+def clean_list_job(account_id):
+    """Run automatic list cleaning inside an app context (Celery worker)."""
+    from .app import app, execute_list_clean
+    with app.app_context():
+        return execute_list_clean(account_id)
+
+
 def enqueue(task, *args, **kwargs):
     """Submit a task to the broker, or run it inline when Celery is absent."""
     if HAVE_CELERY:
