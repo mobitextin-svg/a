@@ -200,7 +200,7 @@ NAV = [
         ],
     },
     {
-        "key": "iphealth", "label": "IP Health Dashboard", "icon": "❤️‍🩹", "built": True,
+        "key": "iphealth", "label": "IP Health", "icon": "❤️‍🩹", "built": True,
         "items": [
             ("IP Reputation", "Per-IP score"),
             ("RBL / Blacklist", "Listing status"),
@@ -328,7 +328,7 @@ NAV = [
         ],
     },
     {
-        "key": "monitoring", "label": "Monitoring", "icon": "📟", "built": True,
+        "key": "monitoring", "label": "System Monitor", "icon": "📟", "built": True,
         "items": [
             ("CPU", "Compute load"),
             ("RAM", "Memory usage"),
@@ -465,26 +465,24 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 
 USER_GROUPS = [
     ("", ["dashboard"]),
-    ("📨 Email", ["contacts", "campaigns", "burstcamp", "templates", "verification"]),
-    ("🛠 Infrastructure", ["smtp", "domains"]),
-    ("📈 Deliverability", ["deliverability"]),
-    ("📊 Insights", ["reports"]),
-    ("🔌 Developers", ["api"]),
-    ("⚙️ Account", ["billing", "settings"]),
-    ("🔧 More", ["sender", "finder", "landing", "automation", "ai", "marketplace",
-                "webhooks", "team", "integrations", "notifications", "support",
-                "deliverai", "gmail_pm", "ms_snds", "blacklist", "inboxtest",
-                "bounce", "complaints", "dmarc"]),
+    ("📨 Email", ["campaigns", "burstcamp", "contacts", "templates", "landing",
+                 "verification", "finder"]),
+    ("🌐 Domains", ["domains"]),
+    ("📊 Account", ["reports", "billing", "marketplace", "api", "settings"]),
+    ("🔧 More", ["sender", "smtp", "deliverability", "ai", "automation", "webhooks",
+                "team", "integrations", "notifications", "support", "deliverai",
+                "gmail_pm", "ms_snds", "blacklist", "inboxtest", "bounce",
+                "complaints", "dmarc"]),
 ]
 
 ADMIN_GROUPS = [
     ("", ["dashboard"]),
-    ("🛠 Sending Infrastructure", ["smtp", "pools", "domains", "queue", "warmup"]),
-    ("📈 Deliverability", ["deliverability"]),
-    ("👥 Platform", ["admin", "reports", "billing", "mktmgmt", "logs", "monitoring",
-                    "settings"]),
-    ("🔧 More", ["iphealth", "rotsend", "rotverify", "burst", "whitelabel",
-                "enterprise", "plans", "coupons", "apimgmt", "backups",
+    ("👥 Users", ["admin"]),
+    ("🛠 Sending Infrastructure", ["smtp", "pools", "queue", "warmup", "iphealth"]),
+    ("🌐 Domains & Deliverability", ["domains", "deliverability"]),
+    ("📊 Platform", ["reports", "monitoring", "billing", "settings"]),
+    ("🔧 More", ["rotsend", "rotverify", "burst", "whitelabel", "enterprise",
+                "plans", "coupons", "mktmgmt", "apimgmt", "logs", "backups",
                 "integrations", "deliverai", "gmail_pm", "ms_snds", "blacklist",
                 "inboxtest", "bounce", "complaints", "dmarc"]),
 ]
@@ -506,11 +504,12 @@ ADMIN_ONLY = {
 # Simple mode shows exactly the recommended, focused menu; the "More" group
 # (everything else) appears only in Advanced.
 ESSENTIAL = {
-    # shared / admin essentials
-    "dashboard", "smtp", "pools", "domains", "queue", "warmup", "deliverability",
-    "admin", "reports", "billing", "mktmgmt", "logs", "monitoring", "settings",
+    # admin essentials
+    "dashboard", "admin", "smtp", "pools", "queue", "warmup", "iphealth",
+    "domains", "deliverability", "reports", "monitoring", "billing", "settings",
     # user essentials
-    "contacts", "campaigns", "burstcamp", "templates", "verification", "api",
+    "campaigns", "burstcamp", "contacts", "templates", "landing", "verification",
+    "finder", "marketplace", "api",
 }
 
 # The guided first-run path (Verify Domain → Add SMTP → Import → Campaign → Send).

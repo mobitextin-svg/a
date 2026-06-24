@@ -32,8 +32,8 @@
       <button data-mode="advanced" class="ms-btn">Advanced</button>
     </div>
     {% for label, keys in NAV_GROUPS %}
-      {% set vis = keys | select('in', ESSENTIAL) | list %}
-      {% set grp_adv = (vis | length) == 0 %}
+      {# Only the "More" group is advanced (hidden in Simple mode). #}
+      {% set grp_adv = 'More' in label %}
       {% if label %}<div class="group-label {{ 'adv' if grp_adv }}">{{ label }}</div>{% endif %}
       {% for key in keys if not (key == 'admin' and not is_admin_user) %}
         {% set m = NAV_BY_KEY[key] %}
@@ -42,7 +42,7 @@
         {% else %}
           {% set href = url_for('module_page', key=key) %}
         {% endif %}
-        <a class="nav-link {{ 'active' if active == key else '' }} {{ '' if key in ESSENTIAL else 'adv' }}" href="{{ href }}">
+        <a class="nav-link {{ 'active' if active == key else '' }} {{ 'adv' if grp_adv else '' }}" href="{{ href }}">
           <span class="ic">{{ m.icon }}</span><span>{{ m.label }}</span>
         </a>
       {% endfor %}
