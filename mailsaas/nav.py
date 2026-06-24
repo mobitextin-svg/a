@@ -195,7 +195,7 @@ NAV = [
             ("Reserved IP Pool", "Isolated from normal sending"),
             ("Reserve & Release", "Per-job IP locking"),
             ("Smart Burst Rotation", "Even split, batch limits"),
-            ("Premium Only", "Business / Enterprise"),
+            ("All plans", "Available to every user"),
             ("Auto-release", "Freed on completion"),
         ],
     },
@@ -467,7 +467,8 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 # a direct link; a multi-key section renders as a collapsible group.
 USER_GROUPS = [
     ("", ["dashboard"]),
-    ("📧 Email", ["contacts", "campaigns", "templates", "verification", "sender"]),
+    ("📧 Email", ["contacts", "campaigns", "templates", "verification", "burstcamp",
+                 "sender"]),
     ("🤖 AI", ["ai"]),
     ("📈 Analytics", ["reports", "deliverability", "deliverai", "gmail_pm", "ms_snds",
                      "blacklist", "inboxtest", "bounce", "complaints", "dmarc"]),
@@ -475,7 +476,6 @@ USER_GROUPS = [
     ("⚡ Automation", ["automation", "webhooks", "integrations"]),
     ("👥 Workspace", ["team", "notifications"]),
     ("🌐 Settings", ["domains", "api", "billing", "settings"]),
-    ("⭐ Premium", ["burstcamp"]),
     ("❓ Help", ["support"]),
 ]
 

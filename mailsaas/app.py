@@ -1803,7 +1803,7 @@ def register_modules(app):
     def burst():
         acct = current_account()
         aid = acct["id"]
-        plan_ok = acct["plan"] in ("Business", "Enterprise")
+        plan_ok = True  # Burst Pool is available to every user on any plan
         result = None
         if request.method == "POST":
             action = request.form.get("action")
