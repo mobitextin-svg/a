@@ -40,8 +40,9 @@ def test_user_blocked_from_infra(user):
         assert user.get(p).status_code == 403, p
 
 
-def test_user_can_reach_own_smtp_and_domains(user):
-    assert user.get("/smtp").status_code == 200
+def test_user_smtp_admin_only_domains_ok(user):
+    # SMTP is admin-only infrastructure; Domains stay user-accessible.
+    assert user.get("/smtp").status_code == 403
     assert user.get("/domains").status_code == 200
 
 

@@ -478,7 +478,7 @@ USER_GROUPS = [
     ("🔌 API", ["api"]),
     ("💳 Billing", ["billing"]),
     ("⚙️ Account", ["settings"]),
-    ("🔧 More", ["finder", "landing", "marketplace", "sender", "smtp",
+    ("🔧 More", ["finder", "landing", "marketplace", "sender",
                 "deliverability", "automation", "webhooks", "team", "integrations",
                 "notifications", "support", "deliverai", "gmail_pm", "ms_snds",
                 "blacklist", "inboxtest", "bounce", "complaints", "dmarc"]),
@@ -507,10 +507,10 @@ ADMIN_GROUPS = [
 NAV_GROUPS = USER_GROUPS
 
 # Modules only admins may open (shared infrastructure & platform control).
-# SMTP and Domains are intentionally NOT here — users manage their own.
+# SMTP is admin-only infrastructure; users never see or reach it.
 ADMIN_ONLY = {
     "admin", "plans", "coupons", "mktmgmt", "apimgmt", "logs", "backups",
-    "pools", "warmup", "queue", "rotsend", "rotverify", "burst",
+    "smtp", "pools", "warmup", "queue", "rotsend", "rotverify", "burst",
     "iphealth", "monitoring", "whitelabel", "enterprise",
 }
 

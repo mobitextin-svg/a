@@ -414,8 +414,8 @@ def register_security(app):
                 session.clear()
         # Admin-only sections: block regular users at the route level so the
         # infrastructure pages can't be reached by typing the URL.
-        # SMTP and Domains are intentionally NOT gated — users manage their own.
-        ADMIN_PREFIXES = ("/pools", "/warmup", "/queue", "/rotation",
+        # SMTP is admin-only infrastructure. Domains stay user-accessible.
+        ADMIN_PREFIXES = ("/smtp", "/pools", "/warmup", "/queue", "/rotation",
                           "/burst", "/ip-health", "/monitoring",
                           "/whitelabel", "/enterprise", "/admin")
         p = request.path
