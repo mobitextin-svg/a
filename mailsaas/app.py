@@ -1831,9 +1831,9 @@ def register_modules(app):
                                plan_ok=plan_ok)
 
     # ---- Burst Campaign (user) — over-limit → buy quota → run burst ------- #
-    # Quota packs: (emails, USD price, INR price)
-    BURST_PACKS = [(10000, 9, 749), (50000, 39, 2999), (100000, 69, 4999),
-                   (500000, 249, 18999)]
+    # Quota packs: (emails, USD price, INR price). Minimum 50,000.
+    BURST_PACKS = [(50000, 39, 2999), (100000, 69, 4999), (500000, 249, 18999),
+                   (1000000, 449, 34999)]   # 10 lakh tier
     PAY_METHODS = {
         "international": [("stripe_card", "💳 Card (Stripe)"), ("paypal", "🅿️ PayPal")],
         "india": [("upi", "📲 UPI"), ("razorpay_card", "💳 Card (Razorpay)"),
