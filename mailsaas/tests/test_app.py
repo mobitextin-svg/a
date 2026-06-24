@@ -129,6 +129,26 @@ def test_burst_quota_purchase_and_launch(user, query):
                  " LIMIT 1", aid)[0]["status"] == "completed"
 
 
+def test_burst_manual_approval_workflow(admin, user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    # admin switches to manual approval
+    admin.post("/burst", data={"action": "auto_toggle"}, follow_redirects=True)
+    before = query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"]
+    # user pays → request goes pending, quota not granted yet
+    r = user.post("/burst-campaign", data={"action": "pay", "emails": "100000",
+                                           "usd": "69", "inr": "4999", "region": "india"},
+                  follow_redirects=True)
+    assert b"pending admin approval" in r.data
+    assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == before
+    req = query("SELECT * FROM burst_purchases WHERE status='pending' ORDER BY id DESC"
+                " LIMIT 1")[0]
+    # admin approves → quota granted
+    admin.post("/burst", data={"action": "approve", "id": req["id"]},
+               follow_redirects=True)
+    assert query("SELECT burst_quota FROM accounts WHERE id=?",
+                 aid)[0]["burst_quota"] == before + 100000
+
+
 # ------------------------------ admin ------------------------------------- #
 
 def test_admin_can_create_user_who_logs_in(app, admin, query):

@@ -321,10 +321,25 @@ CREATE TABLE IF NOT EXISTS burst_purchases (
     currency     TEXT NOT NULL,
     gateway      TEXT NOT NULL,
     method       TEXT NOT NULL,
-    status       TEXT NOT NULL DEFAULT 'paid',
+    status       TEXT NOT NULL DEFAULT 'paid',  -- active / pending / rejected
     created_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS platform_settings (
+    key          TEXT PRIMARY KEY,
+    value        TEXT
+);
 """
+
+
+def get_setting(key, default=None):
+    row = query("SELECT value FROM platform_settings WHERE key=?", (key,), one=True)
+    return row["value"] if row else default
+
+
+def set_setting(key, value):
+    execute("INSERT INTO platform_settings (key, value) VALUES (?,?) ON CONFLICT(key)"
+            " DO UPDATE SET value=excluded.value", (key, str(value)))
 
 # Idempotent column additions for accounts that predate these features.
 _MIGRATIONS = [
@@ -390,6 +405,9 @@ def init_db():
         for code, pct in [("WELCOME20", 20), ("SAVE50", 50), ("ENTERPRISE", 30)]:
             execute("INSERT INTO coupons (code, percent, active, created_at)"
                     " VALUES (?,?,?,?)", (code, pct, 1, now()))
+    # Burst pool defaults to auto-approve on payment.
+    if get_setting("burst_auto_approve") is None:
+        set_setting("burst_auto_approve", "1")
 
 
 def seed_demo(account_id, user_email):

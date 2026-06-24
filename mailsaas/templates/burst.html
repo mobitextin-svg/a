@@ -1,8 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Dedicated Burst Pool{% endblock %}
 {% block content %}
-<h1>💥 Dedicated Burst Pool</h1>
-<p class="muted">Reserved IPs for very large campaigns only. Never used for normal sending or verification.</p>
+<h1>⭐ Dedicated Burst Pool — Admin</h1>
+<p class="muted">Reserve IPs, set approval mode, and approve user burst requests.</p>
+
+<div class="card" style="margin-top:14px">
+  <div class="section-head">
+    <div><h2>Burst Requests</h2>
+      <div class="faint small">Approval mode:
+        <b style="color:{{ 'var(--good)' if auto_approve else 'var(--warn)' }}">{{ 'Auto-approve on payment' if auto_approve else 'Manual approval' }}</b></div></div>
+    <form class="inline-form" method="post"><input type="hidden" name="action" value="auto_toggle">
+      <button class="btn ghost sm">Switch to {{ 'Manual' if auto_approve else 'Auto' }}</button></form>
+  </div>
+  <table>
+    <thead><tr><th>Req</th><th>User</th><th class="num">Emails</th><th class="num">Amount</th><th>Status</th><th>When</th><th></th></tr></thead>
+    <tbody>
+    {% for r in requests %}
+      <tr>
+        <td>#BR{{ '%04d'|format(r.id) }}</td>
+        <td class="small">{{ r.acct }} <span class="faint">#{{ r.account_id }}</span></td>
+        <td class="num">{{ '{:,}'.format(r.emails) }}</td>
+        <td class="num">{{ '₹' if r.currency=='INR' else '$' }}{{ '%g'|format(r.amount) }}</td>
+        <td><span class="badge {{ 'b-valid' if r.status=='active' else ('b-risky' if r.status in ('pending','pending-verify') else 'b-invalid') }}">{{ r.status }}</span></td>
+        <td class="faint small">{{ r.created_at }}</td>
+        <td class="num">
+          {% if r.status in ('pending','pending-verify') %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="approve">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn sm">Approve</button></form>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="reject">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn danger sm">Reject</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">No burst requests.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
 
 {% if not plan_ok %}
 <div class="flash error">Burst sending is a premium feature — upgrade to <b>Business</b> or

@@ -1823,13 +1823,40 @@ def register_modules(app):
                     D.execute("UPDATE burst_jobs SET status='completed' WHERE id=?",
                               (job["id"],))
                     flash("Burst job completed — reserved IPs released.", "success")
+            elif action == "approve":
+                req = D.query("SELECT * FROM burst_purchases WHERE id=?",
+                              (request.form.get("id"),), one=True)
+                if req and req["status"] == "pending":
+                    D.execute("UPDATE burst_purchases SET status='active' WHERE id=?",
+                              (req["id"],))
+                    D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
+                              (req["emails"], req["account_id"]))
+                    D.log_activity(aid, current_user()["email"],
+                                   f"Approved burst request #{req['id']} "
+                                   f"({req['emails']:,} emails)")
+                    flash("Request approved — quota granted to the user.", "success")
+            elif action == "reject":
+                D.execute("UPDATE burst_purchases SET status='rejected' WHERE id=? AND"
+                          " status='pending'", (request.form.get("id"),))
+                flash("Request rejected.", "success")
+            elif action == "auto_toggle":
+                cur = D.get_setting("burst_auto_approve", "1")
+                D.set_setting("burst_auto_approve", "0" if cur == "1" else "1")
+                flash("Burst approval mode updated.", "success")
             if request.method == "POST" and request.form.get("action") != "run":
                 return redirect(url_for("burst"))
         servers = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
         jobs = D.query("SELECT * FROM burst_jobs WHERE account_id=? ORDER BY id DESC LIMIT 10",
                        (aid,))
+        # Cross-tenant burst requests for the approval queue.
+        requests_q = D.query(
+            "SELECT bp.*, a.name acct FROM burst_purchases bp JOIN accounts a"
+            " ON a.id=bp.account_id ORDER BY (bp.status='pending') DESC, bp.id DESC"
+            " LIMIT 30")
+        auto_approve = D.get_setting("burst_auto_approve", "1") == "1"
         return render_template("burst.html", servers=servers, jobs=jobs, result=result,
-                               plan_ok=plan_ok)
+                               plan_ok=plan_ok, requests=requests_q,
+                               auto_approve=auto_approve)
 
     # ---- Burst Campaign (user) — over-limit → buy quota → run burst ------- #
     # Quota packs: (emails, USD price, INR price). Minimum 50,000.
@@ -1852,22 +1879,28 @@ def register_modules(app):
         quote = None
         rzp_order = None
 
-        def _grant_burst(emails, amount, currency, gateway, method, status="paid"):
+        def _grant_burst(emails, amount, currency, gateway, method, status=None):
             sym = "₹" if currency == "INR" else "$"
+            auto = D.get_setting("burst_auto_approve", "1") == "1"
+            # Auto-approve → activate immediately; else queue for admin approval.
+            st = status or ("active" if auto else "pending")
             D.execute("INSERT INTO burst_purchases (account_id, emails, amount, currency,"
                       " gateway, method, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                      (aid, emails, amount, currency, gateway, method, status, D.now()))
+                      (aid, emails, amount, currency, gateway, method, st, D.now()))
             D.execute("INSERT INTO invoices (account_id, number, amount, status,"
                       " created_at) VALUES (?,?,?,?,?)",
                       (aid, "BURST-" + secrets.token_hex(3).upper(), amount, "Paid",
                        D.now()))
-            D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
-                      (emails, aid))
             D.log_activity(aid, current_user()["email"],
-                           f"Purchased {emails:,} burst emails ({sym}{amount:g} via "
-                           f"{gateway})")
-            flash(f"Payment successful via {gateway} — {emails:,} burst emails added. "
-                  "Launch your burst below.", "success")
+                           f"Paid {emails:,} burst emails ({sym}{amount:g} via {gateway})")
+            if st == "active":
+                D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
+                          (emails, aid))
+                flash(f"Payment successful via {gateway} — {emails:,} burst emails "
+                      "added. Launch your burst below.", "success")
+            else:
+                flash(f"Payment received via {gateway}. Your request for {emails:,} "
+                      "burst emails is pending admin approval.", "success")
 
         if request.method == "POST":
             action = request.form.get("action")
