@@ -180,5 +180,39 @@
   </div>
 </div>
 
+<div class="grid g2">
+  <div class="card">
+    <h2>📉 Bounce Prediction</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="bounce">
+      <label>Email address</label>
+      <div class="row"><input name="email" placeholder="someone@company.com" required style="flex:3">
+        <button class="btn" style="flex:1">Predict</button></div>
+    </form>
+    {% if out.tool=='bounce' %}
+      <div class="card tight" style="margin-top:12px;background:var(--panel2)">
+        <div class="section-head"><b>{{ out.bounce.email }}</b>
+          <span class="badge {{ 'b-invalid' if out.bounce.band=='High' else ('b-risky' if out.bounce.band=='Medium' else 'b-valid') }}">{{ out.bounce.band }} risk · {{ out.bounce.bounce_risk }}</span></div>
+        <p class="muted small" style="margin:.2em 0">{{ out.bounce.recommend }}</p>
+        {% for r in out.bounce.reasons %}<span class="tag">{{ r }}</span>{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>✨ Subject Optimization</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="subjectopt">
+      <label>Subject line</label>
+      <textarea name="subject" placeholder="Your subject line…"></textarea>
+      <div style="margin-top:10px"><button class="btn">Optimize</button></div>
+    </form>
+    {% if out.tool=='subjectopt' %}
+      <div class="section-head" style="margin-top:12px"><b>Grade {{ out.subjectopt.grade }}</b>
+        <span class="score-ring" style="color:{{ 'var(--good)' if out.subjectopt.score>=70 else 'var(--warn)' }}">{{ out.subjectopt.score }}</span></div>
+      {% for t in out.subjectopt.tips %}<div class="kv"><span class="small">• {{ t }}</span></div>{% endfor %}
+    {% endif %}
+  </div>
+</div>
+
 <p class="faint small">⚙️ These tools run on a built-in generator so they work offline and free. Plug in a real LLM by implementing <code>ai._llm_complete()</code> and setting <code>USE_LLM=True</code>.</p>
 {% endblock %}

@@ -24,7 +24,7 @@
   <div class="stat"><div class="k">DNS Status</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.dns }}</div></div>
   <div class="stat"><div class="k">API Status</div><div class="v" style="font-size:1.1rem;color:var(--good)">{{ metrics.api }}</div></div>
   <div class="stat"><div class="k">Region</div><div class="v" style="font-size:1.1rem">us-east</div></div>
-  <div class="stat"><div class="k">Workers</div><div class="v" style="font-size:1.1rem">Celery ×4</div></div>
+  <div class="stat"><div class="k">Workers</div><div class="v" style="font-size:1.05rem;color:{{ 'var(--good)' if 'Celery' in metrics.workers else 'var(--warn)' }}">{{ metrics.workers }}</div></div>
 </div>
 
 <div class="card">

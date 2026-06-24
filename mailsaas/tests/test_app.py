@@ -155,3 +155,24 @@ def test_api_verify_requires_key_and_rate_limits(app, admin, query):
     c = app.test_client()
     assert c.get("/api/v1/verify?email=a@gmail.com").status_code == 401
     assert c.get(f"/api/v1/verify?email=a@gmail.com&api_key={token}").status_code == 200
+
+
+def test_api_calls_are_logged(app, admin, query):
+    admin.post("/api", data={"action": "create", "label": "L"}, follow_redirects=True)
+    token = query("SELECT token FROM api_keys ORDER BY id DESC LIMIT 1")[0]["token"]
+    app.test_client().get(f"/api/v1/verify?email=a@gmail.com&api_key={token}")
+    assert query("SELECT COUNT(*) c FROM api_logs")[0]["c"] >= 1
+    assert b"API access logs" in admin.get("/admin/logs").data
+
+
+def test_ip_restriction_blocks_other_ip(app, admin):
+    # Admin is already logged in (via the fixture). Restrict to an IP that is
+    # NOT the test client's, enable enforcement, and confirm access is blocked.
+    import os
+    import sqlite3
+    con = sqlite3.connect(os.environ["MAILSAAS_DB"])
+    con.execute("UPDATE accounts SET ip_allowlist='9.9.9.9' WHERE id=1")
+    con.commit()
+    con.close()
+    app.config["TESTING"] = False  # enable IP enforcement in before_request
+    assert admin.get("/dashboard").status_code == 403

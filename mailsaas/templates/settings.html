@@ -61,11 +61,19 @@
       <form class="inline-form" method="post"><input type="hidden" name="action" value="signout_all">
         <button class="btn ghost sm">Sign out everywhere</button></form>
     </div>
+    <hr style="border-color:var(--line);margin:18px 0">
+    <form method="post">
+      <input type="hidden" name="action" value="ipallow">
+      <label>IP restrictions <span class="faint">(comma-separated IPs / CIDRs — blank = allow all)</span></label>
+      <input name="ip_allowlist" value="{{ account.ip_allowlist or '' }}" placeholder="203.0.113.4, 10.0.0.0/24">
+      <div class="faint small" style="margin:6px 0">Your current IP: <code>{{ request.remote_addr }}</code> — it must be included or the save is rejected.</div>
+      <button class="btn sm">Save IP restrictions</button>
+    </form>
   </div>
 </div>
 
 <div class="card">
-  <h2>Recent login history</h2>
+  <h2>Device sessions &amp; login history</h2>
   <table>
     <thead><tr><th>User</th><th>IP</th><th>Device</th><th>Result</th><th>When</th></tr></thead>
     <tbody>

@@ -19,6 +19,8 @@
     <div class="kv"><span>SPF</span><span class="{{ 'dot-ok' if d.spf else 'dot-bad' }}">{{ '✅ Pass' if d.spf else '❌ Fail' }}</span></div>
     <div class="kv"><span>DKIM</span><span class="{{ 'dot-ok' if d.dkim else 'dot-bad' }}">{{ '✅ Pass' if d.dkim else '❌ Fail' }}</span></div>
     <div class="kv"><span>DMARC</span><span class="{{ 'dot-ok' if d.dmarc else 'dot-bad' }}">{{ '✅ Pass' if d.dmarc else '❌ Fail' }}</span></div>
+    <div class="kv"><span>BIMI <span class="faint small">(brand logo in inbox)</span></span>
+      <span class="{{ 'dot-ok' if d.bimi else 'dot-warn' }}">{{ '✅ Published' if d.bimi else ('◻ Eligible — add BIMI record' if d.dmarc else '— needs DMARC first') }}</span></div>
   </div>
   {% if not (d.spf and d.dkim and d.dmarc) %}
   <div class="flash error" style="margin-top:10px">Suggestions:

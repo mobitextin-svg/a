@@ -325,6 +325,69 @@ def detect_reply_intent(text):
     return {"intent": "Neutral", "action": "Log and continue sequence"}
 
 
+def predict_bounce(email):
+    """Predict the likelihood an address will bounce, from verification signals."""
+    from .verify import verify_email
+    v = verify_email(email)
+    risk = 100 - v["score"]
+    if v["result"] == "invalid":
+        risk = max(risk, 85)
+    band = "High" if risk >= 60 else "Medium" if risk >= 30 else "Low"
+    reasons = []
+    ch = v.get("checks", {})
+    if not ch.get("mx", True):
+        reasons.append("No MX records")
+    if not ch.get("smtp", True):
+        reasons.append("Mailbox not confirmed")
+    if not ch.get("not_role", True):
+        reasons.append("Role address")
+    if not ch.get("disposable", True):
+        reasons.append("Disposable domain")
+    if v.get("suggestion"):
+        reasons.append(f"Likely typo — {v['local']}@{v['suggestion']}?")
+    return {"email": v["email"], "bounce_risk": risk, "band": band,
+            "recommend": "Remove before sending" if band == "High"
+            else "Verify first" if band == "Medium" else "Safe to send",
+            "reasons": reasons or ["No strong bounce signals"]}
+
+
+def optimize_subject(subject):
+    """Score a subject line and suggest concrete improvements."""
+    subject = (subject or "").strip()
+    score = 100
+    tips = []
+    n = len(subject)
+    if n == 0:
+        return {"score": 0, "grade": "—", "tips": ["Enter a subject line."],
+                "length": 0, "emoji": False}
+    if n > 60:
+        score -= 15
+        tips.append(f"Shorten to under 60 chars (currently {n}) — mobile truncates.")
+    elif n < 20:
+        score -= 8
+        tips.append("A little longer (30–50 chars) often reads better.")
+    if subject.count("!") >= 1:
+        score -= 10
+        tips.append("Drop exclamation marks — they trip spam filters.")
+    if subject.isupper() or sum(c.isupper() for c in subject if c.isalpha()) > len(subject) * 0.5:
+        score -= 12
+        tips.append("Avoid ALL CAPS.")
+    low = subject.lower()
+    spammy = [w for w in _SPAM_WORDS if w in low]
+    if spammy:
+        score -= 8 * len(spammy)
+        tips.append(f"Remove spammy words: {', '.join(spammy[:4])}.")
+    has_emoji = any(ord(c) > 0x2600 for c in subject)
+    if not has_emoji:
+        tips.append("One relevant emoji can lift opens ~5%.")
+    if "{{" not in subject:
+        tips.append("Personalise with {{name}} for higher opens.")
+    score = max(0, min(100, score))
+    grade = "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 50 else "D"
+    return {"score": score, "grade": grade, "tips": tips or ["Looks great!"],
+            "length": n, "emoji": has_emoji}
+
+
 def predict_send_time(audience="general", timezone="recipient"):
     table = {
         "general": ("Tuesday", "10:00", 24.1),

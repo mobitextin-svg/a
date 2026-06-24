@@ -93,9 +93,15 @@ def _system_metrics():
             redis_status = "Operational"
         except Exception:
             redis_status = "Down"
+    # Honest worker status: are Celery workers actually wired up?
+    try:
+        from . import tasks as _tasks
+        workers = "Celery active" if _tasks.HAVE_CELERY else "Inline (no broker)"
+    except Exception:
+        workers = "Inline (no broker)"
     return {
         "cpu": cpu, "ram": ram, "disk": disk,
-        "db": db_status, "redis": redis_status,
+        "db": db_status, "redis": redis_status, "workers": workers,
         "queue": 1843, "smtp_health": "Healthy", "dns": "All records OK",
         "api": "Operational", "uptime": "99.98%",
         "checked": _t.strftime("%Y-%m-%d %H:%M:%S UTC", _t.gmtime()),
@@ -341,6 +347,28 @@ def _csrf_token():
     return session["_csrf"]
 
 
+def _ip_allowed(allowlist, ip):
+    """True if `ip` matches the comma-separated IP/CIDR allowlist (empty = all)."""
+    allowlist = (allowlist or "").strip()
+    if not allowlist:
+        return True
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for entry in (e.strip() for e in allowlist.split(",") if e.strip()):
+        try:
+            if "/" in entry:
+                if addr in ipaddress.ip_network(entry, strict=False):
+                    return True
+            elif addr == ipaddress.ip_address(entry):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 # In-memory sliding-window rate limiter. Fine for a single process; in the
 # multi-process production topology back this with Redis (see PRODUCTION.md).
 _RL_BUCKETS = {}
@@ -382,6 +410,13 @@ def register_security(app):
                                       for x in ADMIN_PREFIXES):
             if not is_admin_user():
                 abort(403)
+        # IP restrictions: if the account has an allowlist, enforce it.
+        if session.get("uid") and not app.config.get("TESTING"):
+            acct = current_account()
+            if acct and acct["ip_allowlist"] and not p.startswith(("/static", "/t/")):
+                if not _ip_allowed(acct["ip_allowlist"], request.remote_addr or ""):
+                    session.clear()
+                    abort(403, description="Access blocked by IP restriction.")
         # Validate CSRF on state-changing requests (skip token-auth JSON API).
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             if request.path.startswith("/api/"):
@@ -1261,6 +1296,18 @@ def register_modules(app):
                 session["stoken"] = stoken  # keep THIS device signed in
                 D.log_activity(acct["id"], u["email"], "Signed out all other sessions")
                 flash("Signed out of all other sessions.", "success")
+            elif action == "ipallow":
+                val = request.form.get("ip_allowlist", "").strip()
+                # Guard against self-lockout: the current IP must be allowed.
+                if val and not _ip_allowed(val, request.remote_addr or ""):
+                    flash("Your current IP isn't in that list — not saved (would lock "
+                          "you out).", "error")
+                else:
+                    D.execute("UPDATE accounts SET ip_allowlist=? WHERE id=?",
+                              (val, acct["id"]))
+                    D.log_activity(acct["id"], u["email"], "Updated IP restrictions")
+                    flash("IP restrictions saved." if val else "IP restrictions cleared.",
+                          "success")
             return redirect(url_for("settings"))
         audit = D.query("SELECT * FROM activity WHERE account_id=? ORDER BY id DESC LIMIT 30",
                         (acct["id"],))
@@ -1321,6 +1368,10 @@ def register_modules(app):
                 out["tone"] = ai.analyze_tone(request.form.get("text", ""))
             elif tool == "intent":
                 out["intent"] = ai.detect_reply_intent(request.form.get("text", ""))
+            elif tool == "bounce":
+                out["bounce"] = ai.predict_bounce(request.form.get("email", ""))
+            elif tool == "subjectopt":
+                out["subjectopt"] = ai.optimize_subject(request.form.get("subject", ""))
             D.log_activity(current_account()["id"], current_user()["email"],
                            f"Used AI tool: {tool}")
         return render_template("ai.html", out=out)
@@ -2173,7 +2224,9 @@ def register_modules(app):
     def logs():
         activity = D.query("SELECT * FROM activity ORDER BY id DESC LIMIT 80")
         logins = D.query("SELECT * FROM login_history ORDER BY id DESC LIMIT 80")
-        return render_template("admin_logs.html", activity=activity, logins=logins)
+        api = D.query("SELECT * FROM api_logs ORDER BY id DESC LIMIT 80")
+        return render_template("admin_logs.html", activity=activity, logins=logins,
+                               api=api)
 
     # ---- Admin: Backups -------------------------------------------------- #
     @app.route("/admin/backups", methods=["GET", "POST"])
@@ -2360,17 +2413,30 @@ def register_api(app):
         D.execute("UPDATE api_keys SET last_used=? WHERE id=?", (D.now(), row["id"]))
         return row["account_id"]
 
+    def _log_api(account_id, status):
+        D.execute("INSERT INTO api_logs (account_id, endpoint, ip, status, created_at)"
+                  " VALUES (?,?,?,?,?)",
+                  (account_id, request.path, request.remote_addr or "-", status, D.now()))
+
     @app.route("/api/v1/verify")
     def api_verify():
         acct = _auth_account()
         if acct is None:
+            _log_api(None, 401)
             return jsonify({"error": "invalid or missing api key"}), 401
-        # Per-account API rate limit (60 req/min).
+        # Enforce the account's IP allowlist on API access too.
+        row = D.query("SELECT ip_allowlist FROM accounts WHERE id=?", (acct,), one=True)
+        if row and not _ip_allowed(row["ip_allowlist"], request.remote_addr or ""):
+            _log_api(acct, 403)
+            return jsonify({"error": "IP not allowed"}), 403
         if not rate_limit(f"apiverify:{acct}", limit=60, window=60):
+            _log_api(acct, 429)
             return jsonify({"error": "rate limit exceeded", "retry_after": 60}), 429
         email = request.args.get("email", "")
         if not email:
+            _log_api(acct, 400)
             return jsonify({"error": "email parameter required"}), 400
+        _log_api(acct, 200)
         return jsonify(verify_email(email))
 
     @app.route("/api/v1/health")

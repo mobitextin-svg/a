@@ -14,4 +14,18 @@
     {% else %}<div class="empty">No logins.</div>{% endfor %}
   </div>
 </div>
+<div class="card">
+  <h3>API access logs</h3>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Account</th><th>IP</th><th class="num">Status</th><th>When</th></tr></thead>
+    <tbody>
+    {% for a in api %}
+      <tr><td class="small"><code>{{ a.endpoint }}</code></td><td>#{{ a.account_id or '—' }}</td>
+        <td class="faint small">{{ a.ip }}</td>
+        <td class="num"><span class="badge {{ 'b-valid' if a.status==200 else 'b-invalid' }}">{{ a.status }}</span></td>
+        <td class="faint small">{{ a.created_at }}</td></tr>
+    {% else %}<tr><td colspan="5" class="empty">No API calls logged yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

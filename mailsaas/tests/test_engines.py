@@ -68,6 +68,21 @@ def test_recommendations_prioritise_critical():
     assert recs[0]["severity"] == "critical"
 
 
+# --------------------------- AI predictions ------------------------------- #
+
+def test_ai_bounce_prediction():
+    from mailsaas import ai
+    assert ai.predict_bounce("typo@gmial.com")["band"] in ("High", "Medium")
+    assert ai.predict_bounce("real@gmail.com")["band"] == "Low"
+
+
+def test_ai_subject_optimizer():
+    from mailsaas import ai
+    bad = ai.optimize_subject("FREE!!! WIN BIG NOW")
+    good = ai.optimize_subject("Your weekly product update")
+    assert bad["score"] < good["score"] and bad["tips"]
+
+
 # ------------------------------ TOTP -------------------------------------- #
 
 def test_totp_roundtrip():

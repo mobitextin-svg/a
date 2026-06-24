@@ -302,6 +302,16 @@ CREATE TABLE IF NOT EXISTS integrations (
     config       TEXT,
     created_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS api_logs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER,
+    endpoint     TEXT NOT NULL,
+    ip           TEXT,
+    status       INTEGER NOT NULL,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_apilogs_acct ON api_logs(account_id);
 """
 
 # Idempotent column additions for accounts that predate these features.
@@ -325,6 +335,8 @@ _MIGRATIONS = [
     ("smtp_servers", "busy", "INTEGER NOT NULL DEFAULT 0"),         # reserved & in-use
     ("smtp_servers", "password", "TEXT"),                          # optional, for real send
     ("smtp_servers", "use_tls", "INTEGER NOT NULL DEFAULT 1"),
+    ("accounts", "ip_allowlist", "TEXT"),     # comma IPs/CIDRs; empty = allow all
+    ("domains", "bimi", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
