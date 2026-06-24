@@ -428,7 +428,7 @@ NAV = [
     {"key": "blacklist", "label": "Blacklist Center", "icon": "🚫", "built": True,
      "items": [("RBL/DNSBL checks", "Across major lists"), ("Domains", "Your domains"),
                ("IPs", "Your sending IPs"), ("Delisting", "Request removal")]},
-    {"key": "burstcamp", "label": "Burst Campaigns", "icon": "💥", "built": True,
+    {"key": "burstcamp", "label": "Dedicated Burst Pool", "icon": "⭐", "built": True,
      "items": [("Over-limit detection", "When you exceed your daily plan"),
                ("Buy burst quota", "Pay-as-you-go top-up"),
                ("International & India pay", "Stripe/PayPal · UPI/Razorpay"),
@@ -463,28 +463,44 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 # Two completely separate menus, chosen by role at render time.
 # Regular users never see (or can reach) the admin/infrastructure modules.
 
+# Each tuple is (section header, [module keys]). A single-key section renders as
+# a direct link; a multi-key section renders as a collapsible group.
 USER_GROUPS = [
     ("", ["dashboard"]),
-    ("📨 Email", ["campaigns", "burstcamp", "contacts", "templates", "landing",
-                 "verification", "finder"]),
+    ("👥 Contacts", ["contacts"]),
+    ("📤 Campaigns", ["campaigns"]),
+    ("🧱 Templates", ["templates"]),
+    ("✅ Email Verification", ["verification"]),
+    ("⭐ Dedicated Burst Pool", ["burstcamp"]),
+    ("🤖 AI Center", ["ai"]),
+    ("📈 Reports", ["reports"]),
     ("🌐 Domains", ["domains"]),
-    ("📊 Account", ["reports", "billing", "marketplace", "api", "settings"]),
-    ("🔧 More", ["sender", "smtp", "deliverability", "ai", "automation", "webhooks",
-                "team", "integrations", "notifications", "support", "deliverai",
-                "gmail_pm", "ms_snds", "blacklist", "inboxtest", "bounce",
-                "complaints", "dmarc"]),
+    ("🔌 API", ["api"]),
+    ("💳 Billing", ["billing"]),
+    ("⚙️ Account", ["settings"]),
+    ("🔧 More", ["finder", "landing", "marketplace", "sender", "smtp",
+                "deliverability", "automation", "webhooks", "team", "integrations",
+                "notifications", "support", "deliverai", "gmail_pm", "ms_snds",
+                "blacklist", "inboxtest", "bounce", "complaints", "dmarc"]),
 ]
 
 ADMIN_GROUPS = [
     ("", ["dashboard"]),
-    ("👥 Users", ["admin"]),
-    ("🛠 Sending Infrastructure", ["smtp", "pools", "queue", "warmup", "iphealth"]),
-    ("🌐 Domains & Deliverability", ["domains", "deliverability"]),
-    ("📊 Platform", ["reports", "monitoring", "billing", "settings"]),
-    ("🔧 More", ["rotsend", "rotverify", "burst", "whitelabel", "enterprise",
-                "plans", "coupons", "mktmgmt", "apimgmt", "logs", "backups",
-                "integrations", "deliverai", "gmail_pm", "ms_snds", "blacklist",
-                "inboxtest", "bounce", "complaints", "dmarc"]),
+    ("👥 User Management", ["admin"]),
+    ("📧 SMTP Infrastructure", ["smtp", "pools", "iphealth", "logs"]),
+    ("🔄 Smart Rotation", ["rotsend", "rotverify"]),
+    ("🔥 IP Warm-up", ["warmup"]),
+    ("⭐ Dedicated Burst Pool", ["burst"]),
+    ("🌐 Domain Management", ["domains"]),
+    ("📬 Queue Manager", ["queue"]),
+    ("📈 Deliverability", ["deliverability", "gmail_pm", "ms_snds", "blacklist",
+                          "inboxtest", "deliverai", "bounce", "complaints", "dmarc"]),
+    ("📊 Reports", ["reports"]),
+    ("🔌 API", ["apimgmt"]),
+    ("💳 Billing", ["billing"]),
+    ("⚙️ Settings", ["settings"]),
+    ("🔧 More", ["monitoring", "plans", "coupons", "mktmgmt", "backups",
+                "whitelabel", "enterprise", "integrations"]),
 ]
 
 # Default menu used where role is unknown (e.g. before login context).

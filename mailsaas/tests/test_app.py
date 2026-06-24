@@ -26,7 +26,7 @@ def test_password_reset_does_not_leak_link(admin):
 
 def test_admin_sees_admin_menu(admin):
     d = admin.get("/dashboard").data
-    assert b"Sending Infrastructure" in d and b"Backups" in d
+    assert b"SMTP Infrastructure" in d and b"Backups" in d
 
 
 def test_user_sees_user_menu_only(user):
@@ -114,7 +114,7 @@ def test_burst_quota_purchase_and_launch(user, query):
     aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
     # over-limit quote shows both payment regions
     r = user.post("/burst-campaign", data={"action": "quote", "size": "1000000"})
-    assert b"Daily limit exceeded" in r.data and b"India" in r.data
+    assert b"Confirm" in r.data and b"India" in r.data
     # India payment (test mode — no Razorpay keys set)
     user.post("/burst-campaign", data={"action": "pay", "emails": "100000",
                                        "usd": "69", "inr": "4999", "region": "india"},

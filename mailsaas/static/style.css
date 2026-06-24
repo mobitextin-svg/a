@@ -56,6 +56,22 @@ h1{font-size:1.5rem}h2{font-size:1.15rem}h3{font-size:1rem}
   box-shadow:inset 2px 0 0 var(--brand)}
 .sidebar .group-label{color:var(--faint);font-size:.7rem;text-transform:uppercase;
   letter-spacing:.08em;padding:14px 12px 6px}
+/* Collapsible nav sections */
+.nav-toggle{width:100%;background:transparent;border:none;font:inherit;cursor:pointer;
+  text-align:left;justify-content:flex-start}
+.nav-toggle .caret{margin-left:auto;transition:transform .15s;font-size:.7rem;opacity:.7}
+.nav-toggle.open .caret{transform:rotate(90deg)}
+.nav-sub{margin:0 0 2px 0}
+.nav-link.sub{padding-left:30px;font-size:.9rem}
+.nav-link.sub .ic{font-size:.85rem}
+
+/* Role accent themes (admin = indigo/purple, user = blue/emerald) */
+body[data-role="admin"]{--brand:#7c5cff;--brand2:#9b7bff;--accent:#8b5cf6}
+body[data-role="admin"] .sidebar{background:#0c0a1e;border-right-color:#241a47}
+body[data-role="admin"] .nav-link.active{box-shadow:inset 2px 0 0 #9b7bff;
+  background:linear-gradient(90deg,#241a47,#16223f)}
+body[data-role="user"]{--brand:#3b82f6;--brand2:#60a5fa;--accent:#10b981}
+
 /* Simple / Advanced mode switch */
 .mode-switch{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
   border-radius:9px;padding:3px;margin:0 8px 10px}
@@ -64,6 +80,7 @@ h1{font-size:1.5rem}h2{font-size:1.15rem}h3{font-size:1rem}
 .ms-btn.on{background:var(--brand);color:#fff}
 /* In Simple mode, hide advanced nav links/labels */
 body[data-mode="simple"] .nav-link.adv,
+body[data-mode="simple"] .nav-sec.adv,
 body[data-mode="simple"] .group-label.adv{display:none}
 
 .main{display:flex;flex-direction:column;min-width:0}

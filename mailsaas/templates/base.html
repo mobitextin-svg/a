@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📨</text></svg>">
 </head>
-<body data-simple-default="{{ '1' if simple_default else '0' }}">
+<body data-simple-default="{{ '1' if simple_default else '0' }}" data-role="{{ 'admin' if is_admin_user else 'user' }}">
 {% set endpoints = {
   'dashboard':'dashboard','verification':'verification','sender':'sender',
   'ai':'ai_center','deliverability':'deliverability','templates':'templates',
@@ -25,28 +25,43 @@
   'apimgmt':'api_mgmt','logs':'logs','backups':'backups',
   'settings':'settings','enterprise':'enterprise'} %}
 <div class="app">
+  {% macro href_for(key) %}{% if key in endpoints %}{{ url_for(endpoints[key]) }}{% else %}{{ url_for('module_page', key=key) }}{% endif %}{% endmacro %}
   <aside class="sidebar">
     <div class="brand">📨 Mail<span class="dot">SaaS</span></div>
-    <div class="mode-switch" id="modeSwitch">
+    {% for label, keys in NAV_GROUPS %}
+      {% set grp_adv = 'More' in label %}
+      {% if not label %}
+        {# Standalone links (Dashboard) #}
+        {% for key in keys %}
+          <a class="nav-link {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
+            <span class="ic">{{ NAV_BY_KEY[key].icon }}</span><span>{{ NAV_BY_KEY[key].label }}</span></a>
+        {% endfor %}
+      {% elif keys|length == 1 and not grp_adv %}
+        {# Single-feature section → the header is a direct link #}
+        {% set key = keys[0] %}
+        <a class="nav-link {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
+          <span class="ic">{{ label.split(' ')[0] }}</span><span>{{ label.split(' ',1)[1] }}</span></a>
+      {% else %}
+        {# Multi-feature section → collapsible #}
+        {% set open = (active in keys) %}
+        <div class="nav-sec {{ 'adv' if grp_adv else '' }}" data-sec>
+          <button type="button" class="nav-link nav-toggle {{ 'open' if open else '' }}">
+            <span class="ic">{{ label.split(' ')[0] }}</span><span>{{ label.split(' ',1)[1] }}</span>
+            <span class="caret">▸</span>
+          </button>
+          <div class="nav-sub" {{ '' if open else 'hidden' }}>
+            {% for key in keys if not (key == 'admin' and not is_admin_user) %}
+              <a class="nav-link sub {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
+                <span class="ic">{{ NAV_BY_KEY[key].icon }}</span><span>{{ NAV_BY_KEY[key].label }}</span></a>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+    <div class="mode-switch" id="modeSwitch" style="margin-top:14px">
       <button data-mode="simple" class="ms-btn">Simple</button>
       <button data-mode="advanced" class="ms-btn">Advanced</button>
     </div>
-    {% for label, keys in NAV_GROUPS %}
-      {# Only the "More" group is advanced (hidden in Simple mode). #}
-      {% set grp_adv = 'More' in label %}
-      {% if label %}<div class="group-label {{ 'adv' if grp_adv }}">{{ label }}</div>{% endif %}
-      {% for key in keys if not (key == 'admin' and not is_admin_user) %}
-        {% set m = NAV_BY_KEY[key] %}
-        {% if key in endpoints %}
-          {% set href = url_for(endpoints[key]) %}
-        {% else %}
-          {% set href = url_for('module_page', key=key) %}
-        {% endif %}
-        <a class="nav-link {{ 'active' if active == key else '' }} {{ 'adv' if grp_adv else '' }}" href="{{ href }}">
-          <span class="ic">{{ m.icon }}</span><span>{{ m.label }}</span>
-        </a>
-      {% endfor %}
-    {% endfor %}
   </aside>
 
   <div class="main">

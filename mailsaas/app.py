@@ -1952,13 +1952,34 @@ def register_modules(app):
                 return redirect(url_for("burst_campaign"))
         acct = current_account()
         purchases = D.query("SELECT * FROM burst_purchases WHERE account_id=? ORDER BY id"
-                            " DESC LIMIT 8", (aid,))
+                            " DESC LIMIT 12", (aid,))
+        invoices = D.query("SELECT * FROM invoices WHERE account_id=? AND number LIKE"
+                           " 'BURST-%' ORDER BY id DESC LIMIT 12", (aid,))
         return render_template("burst_campaign.html", plan_limit=plan_limit, acct=acct,
                                quote=quote, packs=BURST_PACKS, methods=PAY_METHODS,
-                               purchases=purchases, rzp_order=rzp_order,
-                               rzp_live=PAY.razorpay_configured(),
+                               purchases=purchases, invoices=invoices,
+                               rzp_order=rzp_order, rzp_live=PAY.razorpay_configured(),
                                upi=PAY.upi_details(), upi_link=PAY.upi_link,
                                bank=PAY.bank_details())
+
+    @app.route("/invoice/<int:inv_id>")
+    @login_required
+    def invoice_download(inv_id):
+        acct = current_account()
+        inv = D.query("SELECT * FROM invoices WHERE id=? AND account_id=?",
+                      (inv_id, acct["id"]), one=True)
+        if not inv:
+            abort(404)
+        body = (
+            f"MAILSAAS — INVOICE\n{'='*40}\n"
+            f"Invoice : {inv['number']}\n"
+            f"Account : {acct['name']} (#{acct['id']})\n"
+            f"Date    : {inv['created_at']}\n"
+            f"Amount  : {inv['amount']:.2f}\n"
+            f"Status  : {inv['status']}\n{'='*40}\n"
+            f"Thank you for your business.\n")
+        return Response(body, mimetype="text/plain", headers={
+            "Content-Disposition": f"attachment; filename={inv['number']}.txt"})
 
     @app.route("/ip-health")
     @login_required

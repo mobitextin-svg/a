@@ -64,6 +64,29 @@
     });
   }
 
+  // ---- Collapsible sidebar sections ------------------------------------- //
+  function initSections() {
+    var KEY = "mailsaas-open-secs";
+    var openSet = {};
+    try { openSet = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+    document.querySelectorAll(".nav-sec").forEach(function (sec, i) {
+      var btn = sec.querySelector(".nav-toggle");
+      var sub = sec.querySelector(".nav-sub");
+      if (!btn || !sub) return;
+      var id = btn.textContent.trim().slice(0, 24) + i;
+      // Restore persisted state (unless the active item forced it open).
+      if (!btn.classList.contains("open") && openSet[id]) {
+        btn.classList.add("open"); sub.removeAttribute("hidden");
+      }
+      btn.addEventListener("click", function () {
+        var isOpen = btn.classList.toggle("open");
+        if (isOpen) sub.removeAttribute("hidden"); else sub.setAttribute("hidden", "");
+        openSet[id] = isOpen;
+        try { localStorage.setItem(KEY, JSON.stringify(openSet)); } catch (e) {}
+      });
+    });
+  }
+
   // ---- Mobile sidebar toggle -------------------------------------------- //
   function initNav() {
     var burger = document.getElementById("navToggle");
@@ -134,6 +157,7 @@
     attachCsrf();
     initTheme();
     initMode();
+    initSections();
     initNav();
     initToasts();
     initCounters();
