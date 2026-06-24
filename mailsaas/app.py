@@ -230,6 +230,16 @@ PLAN_DAILY_LIMITS = {"Free": 1000, "Pro": 50000, "Business": 250000,
                      "Enterprise": 2000000}
 
 
+def plan_credits(plan):
+    """Email-verification credits always equal the plan's daily send limit.
+
+    Single source of truth: there is no separate per-plan verification number —
+    selecting, upgrading or renewing a plan sets the verification credits equal
+    to that plan's daily sending limit.
+    """
+    return PLAN_DAILY_LIMITS.get(plan, PLAN_DAILY_LIMITS["Free"])
+
+
 def execute_campaign_send(account_id, campaign_id, base_url):
     """Send a campaign through the rotation engine. Returns a result dict.
     No request/session use — safe to call from a background worker."""
@@ -1194,12 +1204,24 @@ def register_modules(app):
             action = request.form.get("action")
             if action == "plan":
                 plan = request.form.get("plan")
-                credits = {"Free": 1000, "Pro": 50000, "Business": 250000,
-                           "Enterprise": 2000000}.get(plan, acct["credits"])
+                if plan not in PLAN_DAILY_LIMITS:
+                    flash("Unknown plan.", "error")
+                    return redirect(url_for("billing"))
+                # Verification credits are derived from the plan's daily send limit.
+                credits = plan_credits(plan)
                 D.execute("UPDATE accounts SET plan=?, credits=? WHERE id=?",
                           (plan, credits, aid))
-                D.log_activity(aid, current_user()["email"], f"Switched to {plan} plan")
-                flash(f"You're now on the {plan} plan.", "success")
+                D.log_activity(aid, current_user()["email"],
+                               f"Switched to {plan} plan ({credits:,} verification credits)")
+                flash(f"You're now on the {plan} plan — {credits:,} verification credits "
+                      "(matches your daily send limit).", "success")
+            elif action == "renew":
+                # Subscription renewal resets verification credits to the plan limit.
+                credits = plan_credits(acct["plan"])
+                D.execute("UPDATE accounts SET credits=? WHERE id=?", (credits, aid))
+                D.log_activity(aid, current_user()["email"],
+                               f"Renewed {acct['plan']} — credits reset to {credits:,}")
+                flash(f"Plan renewed — verification credits reset to {credits:,}.", "success")
             elif action == "credits":
                 amt = int(request.form.get("amount") or 0)
                 D.execute("UPDATE accounts SET credits=credits+? WHERE id=?", (amt, aid))
@@ -1228,7 +1250,8 @@ def register_modules(app):
             ("Business", 299, "250,000 verifications · dedicated IP · SMTP rotation · SSO"),
             ("Enterprise", 0, "Unlimited · multi-region · white-label · SLA · TAM"),
         ]
-        return render_template("billing.html", invoices=invoices, plans=plans)
+        return render_template("billing.html", invoices=invoices, plans=plans,
+                               plan_limits=PLAN_DAILY_LIMITS)
 
     # ---- Team ------------------------------------------------------------ #
     @app.route("/team", methods=["GET", "POST"])
@@ -1777,14 +1800,11 @@ def register_modules(app):
             out.append(ROT.node_from_row(r, ip_score=smtp_health_detail(r)["ip_score"]))
         return out
 
-    PLAN_DAILY = {"Free": 1000, "Pro": 50000, "Business": 250000,
-                  "Enterprise": 2000000}
-
     @app.route("/rotation/sending", methods=["GET", "POST"])
     @login_required
     def rotation_sending():
         acct = current_account()
-        plan_limit = PLAN_DAILY.get(acct["plan"], 1000)
+        plan_limit = PLAN_DAILY_LIMITS.get(acct["plan"], 1000)
         result = None
         if request.method == "POST":
             size = int(request.form.get("size") or 0)
@@ -2329,8 +2349,8 @@ def register_modules(app):
         return render_template("webhooks.html", hooks=hooks, all_events=WEBHOOK_EVENTS)
 
     # ---- Admin Panel (cross-tenant user management) ---------------------- #
-    PLAN_CREDITS = {"Free": 1000, "Pro": 50000, "Business": 250000,
-                    "Enterprise": 2000000}
+    # Verification credits are always the plan's daily send limit.
+    PLAN_CREDITS = PLAN_DAILY_LIMITS
 
     @app.route("/admin", methods=["GET", "POST"])
     @login_required

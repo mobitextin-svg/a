@@ -2,7 +2,13 @@
 {% block title %}Billing{% endblock %}
 {% block content %}
 <h1>Billing &amp; Plans</h1>
-<p class="muted">You're on the <b>{{ account.plan }}</b> plan with <b>{{ '{:,}'.format(account.credits) }}</b> credits remaining.</p>
+<p class="muted">You're on the <b>{{ account.plan }}</b> plan with
+  <b>{{ '{:,}'.format(account.credits) }}</b> verification credits remaining.
+  <span class="faint small">Verification credits equal your daily send limit and reset on renewal.</span>
+  <form class="inline-form" method="post" style="margin-left:8px">
+    <input type="hidden" name="action" value="renew">
+    <button class="btn ghost sm">↻ Renew / reset credits</button></form>
+</p>
 
 <div class="grid g4" style="margin-top:14px">
   {% for name, price, desc in plans %}
@@ -12,6 +18,8 @@
       {% if name=='Enterprise' %}Custom{% else %}${{ price }}<span class="unit muted" style="font-size:.85rem">/mo</span>{% endif %}
     </div>
     <p class="muted small" style="min-height:54px">{{ desc }}</p>
+    <div class="kv small"><span>Daily send limit</span><b>{{ '{:,}'.format(plan_limits.get(name, 0)) if name != 'Enterprise' else 'Unlimited' }}</b></div>
+    <div class="kv small"><span>Verification credits</span><b>{{ '{:,}'.format(plan_limits.get(name, 0)) if name != 'Enterprise' else 'Unlimited' }}</b></div>
     <form method="post"><input type="hidden" name="action" value="plan"><input type="hidden" name="plan" value="{{ name }}">
       <button class="btn {{ 'ghost' if name==account.plan }}" {{ 'disabled' if name==account.plan }} style="width:100%">
         {{ 'Current plan' if name==account.plan else ('Contact sales' if name=='Enterprise' else 'Choose '+name) }}</button>
