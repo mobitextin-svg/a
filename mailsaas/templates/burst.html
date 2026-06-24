@@ -12,27 +12,37 @@
     <form class="inline-form" method="post"><input type="hidden" name="action" value="auto_toggle">
       <button class="btn ghost sm">Switch to {{ 'Manual' if auto_approve else 'Auto' }}</button></form>
   </div>
+  <p class="faint small">Flow: <b>Request</b> → Approve → User pays → <b>Activate</b> → Active.</p>
   <table>
-    <thead><tr><th>Req</th><th>User</th><th>Current Plan</th><th class="num">Requested</th><th class="num">Payment</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Req</th><th>User</th><th>Plan</th><th class="num">Emails</th><th class="num">Validity</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for r in requests %}
       <tr>
-        <td>#BR{{ '%04d'|format(r.id) }}</td>
+        <td>#BP{{ '%04d'|format(r.id) }}</td>
         <td class="small">{{ r.acct }} <span class="faint">#{{ r.account_id }}</span></td>
         <td class="small">{{ r.plan }}</td>
         <td class="num">{{ '{:,}'.format(r.emails) }}</td>
-        <td class="num">{{ '₹' if r.currency=='INR' else '$' }}{{ '%g'|format(r.amount) }} <span class="badge b-valid">paid</span></td>
-        <td><span class="badge {{ 'b-valid' if r.status=='active' else ('b-risky' if r.status in ('pending','pending-verify') else 'b-invalid') }}">{{ r.status }}</span></td>
+        <td class="num">{{ r.duration_days }}d</td>
+        <td class="num">{{ '₹' if r.currency=='INR' else '$' }}{{ '%g'|format(r.amount) }}</td>
+        <td><span class="badge {{ 'b-valid' if r.status=='active' else ('b-risky' if r.status in ('requested','awaiting-payment','paid') else 'b-invalid') }}">
+          {% if r.status=='awaiting-payment' %}awaiting payment{% elif r.status=='paid' %}paid · verify{% else %}{{ r.status }}{% endif %}</span></td>
         <td class="num">
-          {% if r.status in ('pending','pending-verify') %}
+          {% if r.status=='requested' %}
           <form class="inline-form" method="post"><input type="hidden" name="action" value="approve">
             <input type="hidden" name="id" value="{{ r.id }}"><button class="btn sm">Approve</button></form>
           <form class="inline-form" method="post"><input type="hidden" name="action" value="reject">
             <input type="hidden" name="id" value="{{ r.id }}"><button class="btn danger sm">Reject</button></form>
+          {% elif r.status=='awaiting-payment' %}
+          <span class="faint small">waiting for payment</span>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="reject">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn danger sm">Cancel</button></form>
+          {% elif r.status=='paid' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="activate">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn sm">Activate Burst Pool</button></form>
           {% endif %}
         </td>
       </tr>
-    {% else %}<tr><td colspan="7" class="empty">No burst requests.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="8" class="empty">No burst requests.</td></tr>{% endfor %}
     </tbody>
   </table>
 </div>

@@ -467,21 +467,16 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 # a direct link; a multi-key section renders as a collapsible group.
 USER_GROUPS = [
     ("", ["dashboard"]),
-    ("👥 Contacts", ["contacts"]),
-    ("📤 Campaigns", ["campaigns"]),
-    ("🧱 Templates", ["templates"]),
-    ("✅ Email Verification", ["verification"]),
-    ("⭐ Dedicated Burst Pool", ["burstcamp"]),
-    ("🤖 AI Center", ["ai"]),
-    ("📈 Reports", ["reports"]),
-    ("🌐 Domains", ["domains"]),
-    ("🔌 API", ["api"]),
-    ("💳 Billing", ["billing"]),
-    ("⚙️ Account", ["settings"]),
-    ("🔧 More", ["finder", "landing", "marketplace", "sender",
-                "deliverability", "automation", "webhooks", "team", "integrations",
-                "notifications", "support", "deliverai", "gmail_pm", "ms_snds",
-                "blacklist", "inboxtest", "bounce", "complaints", "dmarc"]),
+    ("📧 Email", ["contacts", "campaigns", "templates", "verification", "sender"]),
+    ("🤖 AI", ["ai"]),
+    ("📈 Analytics", ["reports", "deliverability", "deliverai", "gmail_pm", "ms_snds",
+                     "blacklist", "inboxtest", "bounce", "complaints", "dmarc"]),
+    ("🚀 Marketing", ["finder", "landing", "marketplace"]),
+    ("⚡ Automation", ["automation", "webhooks", "integrations"]),
+    ("👥 Workspace", ["team", "notifications"]),
+    ("🌐 Settings", ["domains", "api", "billing", "settings"]),
+    ("⭐ Premium", ["burstcamp"]),
+    ("❓ Help", ["support"]),
 ]
 
 ADMIN_GROUPS = [

@@ -112,41 +112,55 @@ def test_dual_scope_bounce(admin, user):
 
 
 def test_burst_quota_purchase_and_launch(user, query):
+    # Auto-approve mode (default): request → awaiting-payment → pay → active.
     aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
-    # over-limit quote shows both payment regions
-    r = user.post("/burst-campaign", data={"action": "quote", "emails": "1000000",
-                                           "duration": "1"})
-    assert b"Confirm" in r.data and b"India" in r.data
-    # India payment (test mode — no Razorpay keys set)
-    user.post("/burst-campaign", data={"action": "pay", "emails": "100000",
-                                       "usd": "69", "inr": "4999", "region": "india",
-                                       "duration": "1"}, follow_redirects=True)
-    p = query("SELECT * FROM burst_purchases WHERE account_id=?", aid)[0]
-    assert p["gateway"].startswith("Razorpay") and p["currency"] == "INR"
+    user.post("/burst-campaign", data={"action": "request", "emails": "100000",
+                                       "duration": "1", "reason": "launch"},
+              follow_redirects=True)
+    req = query("SELECT * FROM burst_purchases WHERE account_id=? ORDER BY id DESC"
+                " LIMIT 1", aid)[0]
+    assert req["status"] == "awaiting-payment"   # auto-approved, not yet paid
+    assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == 0
+    # India payment (test mode — no Razorpay keys set) auto-activates the pool
+    user.post("/burst-campaign", data={"action": "pay", "id": req["id"],
+                                       "region": "india"}, follow_redirects=True)
+    p = query("SELECT * FROM burst_purchases WHERE id=?", req["id"])[0]
+    assert p["status"] == "active" and p["currency"] == "INR"
     assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == 100000
     # launch consumes quota and records a completed burst job
     user.post("/burst-campaign", data={"action": "launch"}, follow_redirects=True)
     assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == 0
     assert query("SELECT status FROM burst_jobs WHERE account_id=? ORDER BY id DESC"
                  " LIMIT 1", aid)[0]["status"] == "completed"
+    assert query("SELECT status FROM burst_purchases WHERE id=?",
+                 req["id"])[0]["status"] == "expired"
 
 
 def test_burst_manual_approval_workflow(admin, user, query):
+    # Manual mode: request → admin approve → pay → admin activate → active.
     aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
-    # admin switches to manual approval
     admin.post("/burst", data={"action": "auto_toggle"}, follow_redirects=True)
     before = query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"]
-    # user pays → request goes pending, quota not granted yet
-    r = user.post("/burst-campaign", data={"action": "pay", "emails": "100000",
-                                           "usd": "69", "inr": "4999", "region": "india"},
-                  follow_redirects=True)
-    assert b"pending admin approval" in r.data
-    assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == before
-    req = query("SELECT * FROM burst_purchases WHERE status='pending' ORDER BY id DESC"
+    # user requests → goes to 'requested', no payment yet
+    r = user.post("/burst-campaign", data={"action": "request", "emails": "100000",
+                                           "duration": "1"}, follow_redirects=True)
+    assert b"admin will review" in r.data
+    req = query("SELECT * FROM burst_purchases WHERE status='requested' ORDER BY id DESC"
                 " LIMIT 1")[0]
-    # admin approves → quota granted
-    admin.post("/burst", data={"action": "approve", "id": req["id"]},
-               follow_redirects=True)
+    # admin approves → user may now pay (still no quota)
+    admin.post("/burst", data={"action": "approve", "id": req["id"]}, follow_redirects=True)
+    assert query("SELECT status FROM burst_purchases WHERE id=?",
+                 req["id"])[0]["status"] == "awaiting-payment"
+    # user pays → status 'paid', quota still not granted (manual activation pending)
+    user.post("/burst-campaign", data={"action": "pay", "id": req["id"],
+                                       "region": "india"}, follow_redirects=True)
+    assert query("SELECT status FROM burst_purchases WHERE id=?",
+                 req["id"])[0]["status"] == "paid"
+    assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == before
+    # admin activates → quota granted
+    admin.post("/burst", data={"action": "activate", "id": req["id"]}, follow_redirects=True)
+    assert query("SELECT status FROM burst_purchases WHERE id=?",
+                 req["id"])[0]["status"] == "active"
     assert query("SELECT burst_quota FROM accounts WHERE id=?",
                  aid)[0]["burst_quota"] == before + 100000
 

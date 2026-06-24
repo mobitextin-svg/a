@@ -369,6 +369,7 @@ _MIGRATIONS = [
     ("burst_purchases", "valid_until", "TEXT"),
     ("burst_purchases", "duration_days", "INTEGER NOT NULL DEFAULT 1"),
     ("burst_purchases", "reason", "TEXT"),
+    ("burst_purchases", "used", "INTEGER NOT NULL DEFAULT 0"),  # emails consumed
 ]
 
 
