@@ -460,29 +460,28 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 
 USER_GROUPS = [
     ("", ["dashboard"]),
-    ("📨 Email", ["contacts", "campaigns", "templates"]),
+    ("📨 Email", ["contacts", "campaigns", "templates", "verification"]),
     ("🛠 Infrastructure", ["smtp", "domains"]),
-    ("📈 Deliverability", ["gmail_pm", "ms_snds", "blacklist", "inboxtest",
-                          "deliverai"]),
+    ("📈 Deliverability", ["deliverability"]),
     ("📊 Insights", ["reports"]),
     ("🔌 Developers", ["api"]),
     ("⚙️ Account", ["billing", "settings"]),
-    ("🔧 More", ["sender", "verification", "finder", "landing", "automation", "ai",
-                "marketplace", "webhooks", "team", "integrations", "notifications",
-                "support", "deliverability", "bounce", "complaints", "dmarc"]),
+    ("🔧 More", ["sender", "finder", "landing", "automation", "ai", "marketplace",
+                "webhooks", "team", "integrations", "notifications", "support",
+                "deliverai", "gmail_pm", "ms_snds", "blacklist", "inboxtest",
+                "bounce", "complaints", "dmarc"]),
 ]
 
 ADMIN_GROUPS = [
     ("", ["dashboard"]),
-    ("🛠 Sending Infrastructure", ["smtp", "pools", "domains", "queue", "warmup",
-                                  "iphealth"]),
-    ("📈 Deliverability", ["gmail_pm", "ms_snds", "blacklist", "inboxtest",
-                          "deliverai"]),
-    ("👥 Platform", ["admin", "billing", "reports", "settings"]),
-    ("🔧 More", ["plans", "coupons", "monitoring", "rotsend", "rotverify", "burst",
-                "whitelabel", "enterprise", "integrations", "mktmgmt", "apimgmt",
-                "logs", "backups", "deliverability", "bounce", "complaints",
-                "dmarc"]),
+    ("🛠 Sending Infrastructure", ["smtp", "pools", "domains", "queue", "warmup"]),
+    ("📈 Deliverability", ["deliverability"]),
+    ("👥 Platform", ["admin", "reports", "billing", "mktmgmt", "logs", "monitoring",
+                    "settings"]),
+    ("🔧 More", ["iphealth", "rotsend", "rotverify", "burst", "whitelabel",
+                "enterprise", "plans", "coupons", "apimgmt", "backups",
+                "integrations", "deliverai", "gmail_pm", "ms_snds", "blacklist",
+                "inboxtest", "bounce", "complaints", "dmarc"]),
 ]
 
 # Default menu used where role is unknown (e.g. before login context).
@@ -502,10 +501,11 @@ ADMIN_ONLY = {
 # Simple mode shows exactly the recommended, focused menu; the "More" group
 # (everything else) appears only in Advanced.
 ESSENTIAL = {
-    "dashboard", "smtp", "pools", "domains", "queue", "warmup", "iphealth",
-    "gmail_pm", "ms_snds", "blacklist", "inboxtest", "deliverai",
-    "admin", "billing", "reports", "settings", "contacts", "campaigns",
-    "templates", "api",
+    # shared / admin essentials
+    "dashboard", "smtp", "pools", "domains", "queue", "warmup", "deliverability",
+    "admin", "reports", "billing", "mktmgmt", "logs", "monitoring", "settings",
+    # user essentials
+    "contacts", "campaigns", "templates", "verification", "api",
 }
 
 # The guided first-run path (Verify Domain → Add SMTP → Import → Campaign → Send).

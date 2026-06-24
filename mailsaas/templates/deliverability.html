@@ -1,42 +1,31 @@
 {% extends "base.html" %}
-{% block title %}Deliverability{% endblock %}
+{% block title %}Deliverability Center{% endblock %}
 {% block content %}
-<h1>📬 Deliverability Center</h1>
-<p class="muted">Inbox placement, provider scores, blacklist monitoring &amp; a pre-send spam test.</p>
+<h1>📈 Deliverability Center</h1>
+<p class="muted">Your inbox-placement health, plus every deliverability tool in one place.</p>
 
 <div class="grid g4" style="margin-top:14px">
-  <div class="stat"><div class="k">Inbox</div><div class="v" style="color:var(--good)">{{ placement.inbox }}<span class="unit">%</span></div></div>
-  <div class="stat"><div class="k">Spam folder</div><div class="v" style="color:var(--bad)">{{ placement.spam }}<span class="unit">%</span></div></div>
-  <div class="stat"><div class="k">Missing</div><div class="v" style="color:var(--warn)">{{ placement.missing }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Predicted inbox</div><div class="v" style="color:{{ 'var(--good)' if pred.score>=75 else ('var(--warn)' if pred.score>=55 else 'var(--bad)') }}">{{ pred.score }}</div><div class="trend">{{ pred.band }}</div></div>
   <div class="stat"><div class="k">Domain reputation</div><div class="v">{{ reputation }}<span class="unit">/100</span></div></div>
+  <div class="stat"><div class="k">Inbox / Spam</div><div class="v" style="font-size:1.2rem">{{ placement.inbox }}% / {{ placement.spam }}%</div></div>
+  <div class="stat"><div class="k">Blacklist</div><div class="v" style="font-size:1.2rem;color:{{ 'var(--good)' if blacklist.clean else 'var(--bad)' }}">{{ 'Clean' if blacklist.clean else 'Listed' }}</div></div>
 </div>
 
-<div class="grid g2">
-  <div class="card">
-    <h2>Provider inbox scores</h2>
-    {% for prov, score in providers.items() %}
-      <div class="kv"><span>{{ prov }}</span><span>{{ score }}/100</span></div>
-      <div class="meter" style="margin-bottom:8px"><i style="width:{{ score }}%"></i></div>
+<div class="card">
+  <h2>Deliverability tools</h2>
+  <div class="feature-grid">
+    {% for title, desc, href in tools %}
+      <a class="feature" href="{{ href }}" style="text-decoration:none">
+        <h4 style="margin:0 0 4px">{{ title }}</h4>
+        <p style="margin:0">{{ desc }}</p>
+      </a>
     {% endfor %}
-  </div>
-  <div class="card">
-    <h2>Blacklist monitor — <span class="faint">{{ domain }}</span></h2>
-    {% if blacklist.clean %}
-      <div class="flash success" style="margin-top:6px">✔ Not listed on any monitored blacklist.</div>
-    {% else %}
-      <div class="flash error" style="margin-top:6px">⚠ Listed on: {{ blacklist.listed_on|join(', ') }}</div>
-    {% endif %}
-    <div style="margin-top:6px">
-      {% for rbl in blacklist.checked %}
-        <span class="tag">{{ '✗ ' if rbl in blacklist.listed_on else '✔ ' }}{{ rbl }}</span>
-      {% endfor %}
-    </div>
   </div>
 </div>
 
 <div class="card">
-  <h2>🧪 Spam test</h2>
-  <p class="muted small">Analyse your content before you send — same engine as the AI spam score.</p>
+  <h2>🧪 Quick spam test</h2>
+  <p class="muted small">Check your content before sending.</p>
   <form method="post">
     <label>Subject</label><input name="subject" placeholder="Your subject line">
     <label>Body</label><textarea name="body" placeholder="Paste your email body…"></textarea>
@@ -49,20 +38,5 @@
       {% for i in spam.issues %}<div class="kv"><span class="small">• {{ i }}</span></div>{% endfor %}
     </div>
   {% endif %}
-</div>
-
-<div class="card">
-  <h2>Seed list test</h2>
-  <p class="muted small">Send to our seed mailboxes across providers to measure true placement.</p>
-  <table>
-    <thead><tr><th>Provider</th><th>Placement</th><th class="num">Score</th></tr></thead>
-    <tbody>
-    {% for prov, score in providers.items() %}
-      <tr><td>{{ prov }}</td>
-        <td><span class="badge {{ 'b-valid' if score>=80 else ('b-risky' if score>=55 else 'b-invalid') }}">{{ 'Inbox' if score>=80 else ('Promotions' if score>=55 else 'Spam') }}</span></td>
-        <td class="num">{{ score }}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
 </div>
 {% endblock %}

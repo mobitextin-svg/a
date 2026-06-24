@@ -1376,7 +1376,7 @@ def register_modules(app):
                            f"Used AI tool: {tool}")
         return render_template("ai.html", out=out)
 
-    # ---- Deliverability Center ------------------------------------------ #
+    # ---- Deliverability Center (hub for all deliverability tools) -------- #
     @app.route("/deliverability", methods=["GET", "POST"])
     @login_required
     def deliverability():
@@ -1388,12 +1388,31 @@ def register_modules(app):
         dom = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY reputation DESC"
                       " LIMIT 1", (aid,), one=True)
         rep = dom["reputation"] if dom else 85
-        domain_name = dom["domain"] if dom else "yourdomain.com"
-        return render_template(
-            "deliverability.html", spam=spam,
-            providers=DELIV.provider_scores(rep), placement=DELIV.inbox_placement(rep),
-            blacklist=DELIV.blacklist_status(domain_name), reputation=rep,
-            domain=domain_name)
+        # Snapshot tiles
+        pred = DAI.predict_deliverability(_account_signals(aid))
+        bl = DELIV.blacklist_status(dom["domain"] if dom else "example.com")
+        tools = [
+            ("🧠 AI Recommendations", "Predictive score & prioritised fixes",
+             url_for("deliverability_ai")),
+            ("📮 Gmail Postmaster", "Google reputation & spam rate",
+             url_for("postmaster_gmail")),
+            ("🪟 Microsoft SNDS", "Outlook/Hotmail IP status",
+             url_for("postmaster_snds")),
+            ("🚫 Blacklist Center", "RBL checks for domains & IPs",
+             url_for("blacklist_center")),
+            ("📥 Inbox Placement", "Where your mail lands by provider",
+             url_for("inbox_testing")),
+            ("📊 DMARC & BIMI", "Authentication & brand logo",
+             url_for("dmarc")),
+            ("↩️ Bounce Center", "Bounce rates & list hygiene",
+             url_for("bounce")),
+            ("🚨 Complaint Center", "Spam complaints & unsubscribes",
+             url_for("complaints_center")),
+        ]
+        return render_template("deliverability.html", spam=spam, tools=tools,
+                               pred=pred, reputation=rep, blacklist=bl,
+                               placement=DELIV.inbox_placement(rep),
+                               domain=dom["domain"] if dom else "—")
 
     # ---- Bounce Center (role-aware) -------------------------------------- #
     @app.route("/bounce", methods=["GET", "POST"])
