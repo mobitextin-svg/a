@@ -65,18 +65,84 @@
 
       <div class="pay-pane" data-pane="india" style="display:none">
         <div class="kv"><span>Amount</span><b style="font-size:1.2rem">₹{{ inr }}</b></div>
-        <label>Payment method</label>
-        {% for m, lbl in methods.india %}
-        <label style="display:flex;align-items:center;gap:8px;font-weight:500">
-          <input type="radio" name="method" value="{{ m }}" style="width:auto"> {{ lbl }}</label>
-        {% endfor %}
+        <p class="muted small">Razorpay covers UPI · UPI-QR · Cards · Net Banking · Wallets in one window.</p>
+        <button class="btn" style="width:100%">
+          {{ '💳 Pay with Razorpay (UPI · QR · Card · Net Banking)' if rzp_live else '💳 Pay with Razorpay (test mode)' }}</button>
+        {% if not rzp_live %}<p class="faint small" style="margin-top:6px">Test mode — set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET to open the real Razorpay window.</p>{% endif %}
       </div>
 
-      <div style="margin-top:14px"><button class="btn" style="width:100%">🔒 Pay now &amp; add quota</button></div>
-      <p class="faint small" style="margin-top:8px">Simulated checkout — no real charge. Plug Stripe/PayPal or Razorpay keys into the payment hook to go live.</p>
+      <div class="pay-pane intl-only" data-pane="intl">
+        <div style="margin-top:14px"><button class="btn" style="width:100%">🔒 Pay now &amp; add quota</button></div>
+        <p class="faint small" style="margin-top:8px">International is simulated — add Stripe/PayPal keys to go live.</p>
+      </div>
     </form>
+
+    <!-- Direct UPI QR + bank transfer (works with any UPI app) -->
+    <div class="pay-pane" data-pane="india" style="display:none">
+      <hr style="border-color:var(--line);margin:14px 0">
+      <div class="grid g2">
+        <div style="text-align:center">
+          <b class="small">Or scan to pay by UPI</b>
+          <div style="background:#fff;padding:10px;border-radius:10px;display:inline-block;margin-top:8px">
+            <img width="150" height="150" alt="UPI QR"
+                 src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ upi_link(inr, 'Burst ' ~ emails)|urlencode }}">
+          </div>
+          <div class="faint small" style="margin-top:6px">UPI ID: <b>{{ upi.vpa }}</b></div>
+        </div>
+        <div>
+          <b class="small">Or bank transfer (NEFT/IMPS)</b>
+          <div class="kv"><span>Account name</span><b>{{ bank.name }}</b></div>
+          <div class="kv"><span>Bank</span><span>{{ bank.bank }}</span></div>
+          <div class="kv"><span>A/C no.</span><b>{{ bank.account }}</b></div>
+          <div class="kv"><span>IFSC</span><b>{{ bank.ifsc }}</b></div>
+          <div class="kv"><span>Amount</span><b>₹{{ inr }}</b></div>
+        </div>
+      </div>
+      <form method="post" style="margin-top:10px">
+        <input type="hidden" name="action" value="manual_paid">
+        <input type="hidden" name="emails" value="{{ emails }}">
+        <input type="hidden" name="inr" value="{{ inr }}">
+        <input type="hidden" name="method" value="upi_qr">
+        <button class="btn ghost sm" style="width:100%">I've paid by UPI / bank — add quota</button>
+      </form>
+      <p class="faint small" style="margin-top:6px">Manual payments are marked <b>pending-verify</b> until confirmed.</p>
+    </div>
   </div>
 </div>
+
+{% if rzp_order %}
+<!-- Razorpay Checkout auto-opens when an order was created -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<form id="rzpVerify" method="post" style="display:none">
+  <input type="hidden" name="action" value="rzp_verify">
+  <input type="hidden" name="emails" value="{{ rzp_order.emails }}">
+  <input type="hidden" name="inr" value="{{ rzp_order.inr }}">
+  <input type="hidden" name="razorpay_payment_id" id="rzp_pid">
+  <input type="hidden" name="razorpay_order_id" id="rzp_oid">
+  <input type="hidden" name="razorpay_signature" id="rzp_sig">
+</form>
+<script>
+(function(){
+  var opts={
+    key: "{{ rzp_order.key }}",
+    amount: {{ rzp_order.amount }},
+    currency: "INR",
+    name: "MailSaaS",
+    description: "Burst pack — {{ rzp_order.emails }} emails",
+    order_id: "{{ rzp_order.order_id }}",
+    prefill: { name: "{{ rzp_order.name }}", email: "{{ rzp_order.email }}" },
+    theme: { color: "#5b8cff" },
+    handler: function(resp){
+      document.getElementById('rzp_pid').value = resp.razorpay_payment_id;
+      document.getElementById('rzp_oid').value = resp.razorpay_order_id;
+      document.getElementById('rzp_sig').value = resp.razorpay_signature;
+      document.getElementById('rzpVerify').submit();
+    }
+  };
+  new Razorpay(opts).open();
+})();
+</script>
+{% endif %}
 
 <script>
 (function(){

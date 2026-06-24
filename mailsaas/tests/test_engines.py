@@ -83,6 +83,19 @@ def test_ai_subject_optimizer():
     assert bad["score"] < good["score"] and bad["tips"]
 
 
+# --------------------------- payments (Razorpay) -------------------------- #
+
+def test_razorpay_signature_and_upi(monkeypatch):
+    from mailsaas import payments as PAY
+    import hmac as _h
+    import hashlib as _hh
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "shh")
+    sig = _h.new(b"shh", b"order_9|pay_9", _hh.sha256).hexdigest()
+    assert PAY.verify_signature("order_9", "pay_9", sig)
+    assert not PAY.verify_signature("order_9", "pay_9", "nope")
+    assert PAY.upi_link(99, "pack").startswith("upi://pay?pa=")
+
+
 # ------------------------------ TOTP -------------------------------------- #
 
 def test_totp_roundtrip():

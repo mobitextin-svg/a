@@ -20,6 +20,15 @@ modules.
 - DB indexes on every tenant-scoped table · guided **onboarding checklist** on the dashboard
 - **Rate limiting**: login 10/min per IP · API 60/min per key (HTTP 429)
 
+### Payments (Burst packs — India)
+Razorpay test checkout (UPI · UPI-QR · cards · net banking) goes live when you
+set test-mode keys; otherwise it runs in a safe test/simulated mode.
+```
+RAZORPAY_KEY_ID=rzp_test_xxxx   RAZORPAY_KEY_SECRET=xxxx
+UPI_VPA=you@okhdfcbank  UPI_NAME="Your Business"
+BANK_NAME=... BANK_ACC=... BANK_IFSC=...     # for the bank-transfer option
+```
+
 ### Security & Authentication
 - **Email verification** on signup · **password reset** (tokenised, 1h expiry)
 - **Real TOTP 2FA** (RFC 6238, stdlib-only — works with Google Authenticator/Authy/1Password)

@@ -115,12 +115,12 @@ def test_burst_quota_purchase_and_launch(user, query):
     # over-limit quote shows both payment regions
     r = user.post("/burst-campaign", data={"action": "quote", "size": "1000000"})
     assert b"Daily limit exceeded" in r.data and b"India" in r.data
-    # India / UPI payment
+    # India payment (test mode — no Razorpay keys set)
     user.post("/burst-campaign", data={"action": "pay", "emails": "100000",
-                                       "usd": "69", "inr": "4999", "region": "india",
-                                       "method": "upi"}, follow_redirects=True)
+                                       "usd": "69", "inr": "4999", "region": "india"},
+              follow_redirects=True)
     p = query("SELECT * FROM burst_purchases WHERE account_id=?", aid)[0]
-    assert p["gateway"] == "Razorpay" and p["currency"] == "INR"
+    assert p["gateway"].startswith("Razorpay") and p["currency"] == "INR"
     assert query("SELECT burst_quota FROM accounts WHERE id=?", aid)[0]["burst_quota"] == 100000
     # launch consumes quota and records a completed burst job
     user.post("/burst-campaign", data={"action": "launch"}, follow_redirects=True)

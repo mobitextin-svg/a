@@ -37,6 +37,7 @@ from . import totp
 from . import tasks
 from . import rotation as ROT
 from . import sending as SEND
+from . import payments as PAY
 from . import deliverability as DELIV
 from . import deliver_ai as DAI
 from .nav import (NAV, NAV_BY_KEY, USER_GROUPS, ADMIN_GROUPS, ADMIN_ONLY,
@@ -1849,6 +1850,25 @@ def register_modules(app):
         aid = acct["id"]
         plan_limit = PLAN_DAILY_LIMITS.get(acct["plan"], 1000)
         quote = None
+        rzp_order = None
+
+        def _grant_burst(emails, amount, currency, gateway, method, status="paid"):
+            sym = "₹" if currency == "INR" else "$"
+            D.execute("INSERT INTO burst_purchases (account_id, emails, amount, currency,"
+                      " gateway, method, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                      (aid, emails, amount, currency, gateway, method, status, D.now()))
+            D.execute("INSERT INTO invoices (account_id, number, amount, status,"
+                      " created_at) VALUES (?,?,?,?,?)",
+                      (aid, "BURST-" + secrets.token_hex(3).upper(), amount, "Paid",
+                       D.now()))
+            D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
+                      (emails, aid))
+            D.log_activity(aid, current_user()["email"],
+                           f"Purchased {emails:,} burst emails ({sym}{amount:g} via "
+                           f"{gateway})")
+            flash(f"Payment successful via {gateway} — {emails:,} burst emails added. "
+                  "Launch your burst below.", "success")
+
         if request.method == "POST":
             action = request.form.get("action")
             if action == "quote":
@@ -1859,7 +1879,6 @@ def register_modules(app):
                           "Send it as a normal campaign.", "success")
                 else:
                     need = size - allowance
-                    # smallest pack(s) covering the shortfall
                     pack = next((p for p in BURST_PACKS if p[0] >= need), BURST_PACKS[-1])
                     quote = {"size": size, "need": need, "pack": pack}
             elif action == "pay":
@@ -1867,30 +1886,48 @@ def register_modules(app):
                 usd = float(request.form.get("usd") or 0)
                 inr = float(request.form.get("inr") or 0)
                 region = request.form.get("region", "international")
-                method = request.form.get("method", "")
-                valid = {m for ms in PAY_METHODS.values() for m, _ in ms}
-                if emails <= 0 or method not in valid:
-                    flash("Pick a pack and a payment method.", "error")
+                if emails <= 0:
+                    flash("Pick a pack first.", "error")
                     return redirect(url_for("burst_campaign"))
                 currency, amount = ("INR", inr) if region == "india" else ("USD", usd)
-                # --- Simulated payment success. Plug a real gateway in here. ---
-                D.execute("INSERT INTO burst_purchases (account_id, emails, amount,"
-                          " currency, gateway, method, status, created_at)"
-                          " VALUES (?,?,?,?,?,?,?,?)",
-                          (aid, emails, amount, currency, GATEWAY[method], method,
-                           "paid", D.now()))
-                sym = "₹" if currency == "INR" else "$"
-                D.execute("INSERT INTO invoices (account_id, number, amount, status,"
-                          " created_at) VALUES (?,?,?,?,?)",
-                          (aid, "BURST-" + secrets.token_hex(3).upper(), amount,
-                           "Paid", D.now()))
-                D.execute("UPDATE accounts SET burst_quota=burst_quota+? WHERE id=?",
-                          (emails, aid))
-                D.log_activity(aid, current_user()["email"],
-                               f"Purchased {emails:,} burst emails ({sym}{amount:g} via "
-                               f"{GATEWAY[method]})")
-                flash(f"Payment successful via {GATEWAY[method]} — {emails:,} burst "
-                      f"emails added. Launch your burst below.", "success")
+                # India + Razorpay configured → create a REAL order and open Checkout.
+                if region == "india" and PAY.razorpay_configured():
+                    try:
+                        order = PAY.create_order(amount, "burst-" + secrets.token_hex(4))
+                        rzp_order = {"key": PAY.key_id(), "order_id": order["id"],
+                                     "amount": order["amount"], "emails": emails,
+                                     "inr": inr, "name": current_user()["name"],
+                                     "email": current_user()["email"]}
+                    except Exception:  # noqa: BLE001
+                        flash("Couldn't reach Razorpay — check your keys. Using test "
+                              "confirmation.", "error")
+                        _grant_burst(emails, inr, "INR", "Razorpay (test)", "test")
+                        return redirect(url_for("burst_campaign"))
+                else:
+                    # International (simulated) or India without keys (test mode).
+                    gw = "Razorpay (test)" if region == "india" else "Stripe (test)"
+                    _grant_burst(emails, amount, currency, gw, "test")
+                    return redirect(url_for("burst_campaign"))
+            elif action == "rzp_verify":
+                # Razorpay Checkout success callback — verify the signature.
+                ok = PAY.verify_signature(request.form.get("razorpay_order_id"),
+                                          request.form.get("razorpay_payment_id"),
+                                          request.form.get("razorpay_signature"))
+                emails = int(request.form.get("emails") or 0)
+                inr = float(request.form.get("inr") or 0)
+                if ok and emails > 0:
+                    _grant_burst(emails, inr, "INR", "Razorpay", "razorpay")
+                else:
+                    flash("Payment verification failed — not charged.", "error")
+                return redirect(url_for("burst_campaign"))
+            elif action == "manual_paid":
+                # UPI-QR or bank-transfer: user confirms they've paid (verify offline).
+                emails = int(request.form.get("emails") or 0)
+                inr = float(request.form.get("inr") or 0)
+                method = request.form.get("method", "upi_qr")
+                if emails > 0:
+                    _grant_burst(emails, inr, "INR", "UPI/Bank", method,
+                                 status="pending-verify")
                 return redirect(url_for("burst_campaign"))
             elif action == "launch":
                 acct = current_account()
@@ -1918,7 +1955,10 @@ def register_modules(app):
                             " DESC LIMIT 8", (aid,))
         return render_template("burst_campaign.html", plan_limit=plan_limit, acct=acct,
                                quote=quote, packs=BURST_PACKS, methods=PAY_METHODS,
-                               purchases=purchases)
+                               purchases=purchases, rzp_order=rzp_order,
+                               rzp_live=PAY.razorpay_configured(),
+                               upi=PAY.upi_details(), upi_link=PAY.upi_link,
+                               bank=PAY.bank_details())
 
     @app.route("/ip-health")
     @login_required
