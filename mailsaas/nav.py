@@ -418,6 +418,16 @@ NAV = [
                ("AI recommendations", "Prioritised fixes"),
                ("Auto list cleaning", "One-click hygiene"),
                ("Factor breakdown", "What helps & hurts")]},
+    {"key": "gmail_pm", "label": "Gmail Postmaster", "icon": "📮", "built": True,
+     "items": [("Domain reputation", "Google's view"), ("IP reputation", "Per-IP"),
+               ("Spam rate", "User-reported"), ("Authentication", "SPF/DKIM/DMARC pass"),
+               ("Feedback loop", "Complaint signals")]},
+    {"key": "ms_snds", "label": "Microsoft SNDS", "icon": "🪟", "built": True,
+     "items": [("IP status", "Green/Yellow/Red"), ("Complaint rate", "Outlook/Hotmail"),
+               ("Trap hits", "Spam-trap exposure"), ("Filter result", "Inbox vs junk")]},
+    {"key": "blacklist", "label": "Blacklist Center", "icon": "🚫", "built": True,
+     "items": [("RBL/DNSBL checks", "Across major lists"), ("Domains", "Your domains"),
+               ("IPs", "Your sending IPs"), ("Delisting", "Request removal")]},
     # --- Admin-only platform modules ------------------------------------- #
     {"key": "plans", "label": "Plans", "icon": "💳", "built": True,
      "items": [("Tiers", "Free → Enterprise"), ("Credits", "Per-plan allowances"),
@@ -450,26 +460,29 @@ NAV_BY_KEY = {m["key"]: m for m in NAV}
 
 USER_GROUPS = [
     ("", ["dashboard"]),
-    ("📧 Workspace", ["sender", "verification", "contacts", "campaigns", "templates",
-                     "landing", "reports", "ai", "finder", "automation"]),
-    ("📬 Deliverability", ["deliverability", "deliverai", "bounce", "complaints",
-                          "inboxtest", "dmarc"]),
-    ("🌐 Sending", ["domains", "smtp"]),
-    ("👨‍💻 Developers", ["api", "webhooks"]),
-    ("💳 Account", ["billing"]),
-    ("👥 Team", ["team", "integrations", "notifications", "support", "settings"]),
+    ("📨 Email", ["contacts", "campaigns", "templates"]),
+    ("🛠 Infrastructure", ["smtp", "domains"]),
+    ("📈 Deliverability", ["gmail_pm", "ms_snds", "blacklist", "inboxtest",
+                          "deliverai"]),
+    ("📊 Insights", ["reports"]),
+    ("🔌 Developers", ["api"]),
+    ("⚙️ Account", ["billing", "settings"]),
+    ("🔧 More", ["sender", "verification", "finder", "landing", "automation", "ai",
+                "marketplace", "webhooks", "team", "integrations", "notifications",
+                "support", "deliverability", "bounce", "complaints", "dmarc"]),
 ]
 
 ADMIN_GROUPS = [
     ("", ["dashboard"]),
-    ("👥 Users & Plans", ["admin", "plans", "coupons"]),
-    ("🛠️ Sending Infrastructure", ["smtp", "pools", "warmup", "queue", "rotsend",
-                                   "rotverify", "burst", "iphealth", "domains",
-                                   "monitoring"]),
-    ("📬 Deliverability", ["deliverability", "deliverai", "bounce", "complaints",
-                          "inboxtest", "dmarc"]),
-    ("🏢 Platform", ["whitelabel", "enterprise", "integrations", "mktmgmt", "apimgmt",
-                    "logs", "backups", "settings"]),
+    ("🛠 Sending Infrastructure", ["smtp", "pools", "domains", "queue", "warmup",
+                                  "iphealth"]),
+    ("📈 Deliverability", ["gmail_pm", "ms_snds", "blacklist", "inboxtest",
+                          "deliverai"]),
+    ("👥 Platform", ["admin", "billing", "reports", "settings"]),
+    ("🔧 More", ["plans", "coupons", "monitoring", "rotsend", "rotverify", "burst",
+                "whitelabel", "enterprise", "integrations", "mktmgmt", "apimgmt",
+                "logs", "backups", "deliverability", "bounce", "complaints",
+                "dmarc"]),
 ]
 
 # Default menu used where role is unknown (e.g. before login context).
@@ -486,9 +499,13 @@ ADMIN_ONLY = {
 # "Essential" modules shown in Simple mode (progressive disclosure for new
 # users). Everything else is hidden until they switch to Advanced — this keeps
 # the first-run experience from feeling like 25+ menu items.
+# Simple mode shows exactly the recommended, focused menu; the "More" group
+# (everything else) appears only in Advanced.
 ESSENTIAL = {
-    "dashboard", "verification", "domains", "smtp", "contacts", "templates",
-    "campaigns", "reports", "billing", "settings",
+    "dashboard", "smtp", "pools", "domains", "queue", "warmup", "iphealth",
+    "gmail_pm", "ms_snds", "blacklist", "inboxtest", "deliverai",
+    "admin", "billing", "reports", "settings", "contacts", "campaigns",
+    "templates", "api",
 }
 
 # The guided first-run path (Verify Domain → Add SMTP → Import → Campaign → Send).

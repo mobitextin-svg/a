@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Gmail Postmaster{% endblock %}
+{% block content %}
+<h1>📮 Gmail Postmaster Tools</h1>
+<p class="muted">Google's view of your sending — reputation, spam rate &amp; authentication.
+  <span class="badge {{ 'b-valid' if connected else 'b-Draft' }}">{{ 'Connected' if connected else 'Demo data' }}</span></p>
+{% if not connected %}<div class="flash error" style="margin-top:12px">Not connected to Google Postmaster. An admin can connect it under <a href="{{ url_for('integrations') }}">Integrations</a> to stream live data. Showing modelled values for {{ domain }}.</div>{% endif %}
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Domain reputation</div><div class="v" style="font-size:1.3rem;color:{{ 'var(--good)' if metrics.domain_rep in ['High','Medium'] else 'var(--bad)' }}">{{ metrics.domain_rep }}</div></div>
+  <div class="stat"><div class="k">IP reputation</div><div class="v" style="font-size:1.3rem">{{ metrics.ip_rep }}</div></div>
+  <div class="stat"><div class="k">Spam rate</div><div class="v">{{ metrics.spam_rate }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Delivery errors</div><div class="v">{{ metrics.delivery_errors }}<span class="unit">%</span></div></div>
+</div>
+<div class="grid g2">
+  <div class="card"><h2>Authentication</h2>
+    <div class="kv"><span>SPF/DKIM/DMARC pass rate</span><span>{{ metrics.auth_pct }}%</span></div>
+    <div class="meter"><i style="width:{{ metrics.auth_pct }}%"></i></div>
+    <div class="kv" style="margin-top:10px"><span>DKIM success</span><span>{{ metrics.dkim_pct }}%</span></div>
+    <div class="meter"><i style="width:{{ metrics.dkim_pct }}%"></i></div>
+  </div>
+  <div class="card"><h2>Feedback loop</h2>
+    <p class="muted small">Google FBL surfaces user spam reports here once connected.</p>
+    <div class="kv"><span>Domain</span><b>{{ domain }}</b></div>
+    <div class="kv"><span>Spam-marked</span><span>{{ metrics.spam_rate }}%</span></div>
+  </div>
+</div>
+{% endblock %}

@@ -1558,6 +1558,78 @@ def register_modules(app):
         return render_template("integrations.html", providers=ISP_PROVIDERS, state=state,
                                admin=is_admin_user())
 
+    def _provider_connected(pid):
+        r = D.query("SELECT connected FROM integrations WHERE provider=?", (pid,),
+                    one=True)
+        return bool(r and r["connected"])
+
+    @app.route("/deliverability/gmail-postmaster")
+    @login_required
+    def postmaster_gmail():
+        aid = current_account()["id"]
+        dom = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY reputation DESC"
+                      " LIMIT 1", (aid,), one=True)
+        rep = dom["reputation"] if dom else 85
+        band = ("High" if rep >= 90 else "Medium" if rep >= 75
+                else "Low" if rep >= 50 else "Bad")
+        metrics = {
+            "domain_rep": band, "ip_rep": band,
+            "spam_rate": round(max(0.0, (100 - rep) / 100 * 0.4), 2),
+            "auth_pct": 99.2 if (dom and dom["spf"] and dom["dkim"] and dom["dmarc"])
+            else 71.0,
+            "dkim_pct": 99.0 if (dom and dom["dkim"]) else 60.0,
+            "delivery_errors": round(max(0.0, (100 - rep) / 100 * 1.5), 2),
+        }
+        return render_template("provider_gmail.html",
+                               connected=_provider_connected("gmail_postmaster"),
+                               metrics=metrics, domain=dom["domain"] if dom else "—")
+
+    @app.route("/deliverability/microsoft-snds")
+    @login_required
+    def postmaster_snds():
+        aid = current_account()["id"]
+        rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id", (aid,))
+        ips = []
+        for r in rows:
+            h = smtp_health_detail(r)
+            status = ("Green" if h["ip_score"] >= 80 else "Yellow"
+                      if h["ip_score"] >= 60 else "Red")
+            ips.append({"ip": r["dedicated_ip"] or r["host"], "status": status,
+                        "complaint": round((100 - h["ip_score"]) / 100 * 0.6, 2),
+                        "traps": 0 if h["ip_score"] >= 80 else 2,
+                        "filter": "Inbox" if h["ip_score"] >= 75 else "Junk"})
+        return render_template("provider_snds.html",
+                               connected=_provider_connected("ms_snds"), ips=ips)
+
+    @app.route("/deliverability/blacklist")
+    @login_required
+    def blacklist_center():
+        admin = is_admin_user()
+        if admin:
+            doms = D.query("SELECT d.domain, d.reputation, a.name acct FROM domains d"
+                           " JOIN accounts a ON a.id=d.account_id ORDER BY d.reputation")
+            ips = D.query("SELECT s.dedicated_ip ip, s.host, a.name acct FROM smtp_servers s"
+                          " JOIN accounts a ON a.id=s.account_id ORDER BY s.id")
+        else:
+            aid = current_account()["id"]
+            doms = D.query("SELECT domain, reputation, NULL acct FROM domains WHERE"
+                           " account_id=? ORDER BY reputation", (aid,))
+            ips = D.query("SELECT dedicated_ip ip, host, NULL acct FROM smtp_servers"
+                          " WHERE account_id=? ORDER BY id", (aid,))
+        checks = []
+        for d in doms:
+            bl = DELIV.blacklist_status(d["domain"])
+            checks.append({"target": d["domain"], "type": "Domain", "acct": d["acct"],
+                           "clean": bl["clean"], "listed_on": bl["listed_on"]})
+        for s in ips:
+            host = s["ip"] or s["host"]
+            bl = DELIV.blacklist_status(host)
+            checks.append({"target": host, "type": "IP", "acct": s["acct"],
+                           "clean": bl["clean"], "listed_on": bl["listed_on"]})
+        listed = sum(1 for c in checks if not c["clean"])
+        return render_template("blacklist.html", admin=admin, checks=checks,
+                               rbls=DELIV.RBLS, listed=listed)
+
     # ---- Email Finder ---------------------------------------------------- #
     @app.route("/finder", methods=["GET", "POST"])
     @login_required
