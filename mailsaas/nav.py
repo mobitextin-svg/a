@@ -528,12 +528,23 @@ ESSENTIAL = {
     "finder", "marketplace", "api",
 }
 
-# The guided first-run path (Verify Domain → Add SMTP → Import → Campaign → Send).
-ONBOARDING_STEPS = [
+# Guided first-run paths — role-aware. Users never see SMTP/infra steps
+# (SMTP is admin-only shared infrastructure).
+USER_ONBOARDING_STEPS = [
     ("domain", "Verify a domain", "domains", "🌐"),
-    ("smtp", "Add an SMTP server", "smtp", "🖧"),
     ("contacts", "Import contacts", "contacts", "👥"),
+    ("verify", "Verify your emails", "verification", "✅"),
     ("campaign", "Create a campaign", "campaigns", "🚀"),
-    ("send", "Send your first email", "sender", "📤"),
+    ("send", "Send your first email", "campaigns", "📤"),
 ]
+
+ADMIN_ONBOARDING_STEPS = [
+    ("smtp", "Add an SMTP server", "smtp", "🖧"),
+    ("domain", "Verify a domain", "domains", "🌐"),
+    ("warmup", "Start IP warm-up", "warmup", "🔥"),
+    ("queue", "Review the queue", "queue", "📬"),
+]
+
+# Backwards-compatible default.
+ONBOARDING_STEPS = USER_ONBOARDING_STEPS
 

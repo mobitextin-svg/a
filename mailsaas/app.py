@@ -41,7 +41,7 @@ from . import payments as PAY
 from . import deliverability as DELIV
 from . import deliver_ai as DAI
 from .nav import (NAV, NAV_BY_KEY, USER_GROUPS, ADMIN_GROUPS, ADMIN_ONLY,
-                  ESSENTIAL, ONBOARDING_STEPS)
+                  ESSENTIAL, USER_ONBOARDING_STEPS, ADMIN_ONBOARDING_STEPS)
 from .verify import verify_email, verify_bulk
 
 
@@ -491,12 +491,18 @@ def _onboarding_done_set():
     return set(filter(None, (acct["onboarding"] or "").split(",")))
 
 
+def _onboarding_steps_for_role():
+    """SMTP/infra steps for admins; marketing steps for users."""
+    return ADMIN_ONBOARDING_STEPS if is_admin_user() else USER_ONBOARDING_STEPS
+
+
 def _onboarding_incomplete():
     """True until the user has completed every guided first-run step."""
     if not current_user():
         return False
+    steps = _onboarding_steps_for_role()
     done = _onboarding_done_set()
-    return len(done) < len(ONBOARDING_STEPS)
+    return len([s for s in steps if s[0] in done]) < len(steps)
 
 
 def login_required(view):
@@ -764,11 +770,11 @@ def register_modules(app):
                                "campaign at the AI-predicted best time.")
         # 7-day sparkline (stable synthetic trend off real totals)
         spark = [max(2, int((sent or 1000) / 30 * (0.6 + 0.1 * i))) for i in range(7)]
-        # Guided 5-step onboarding (Verify Domain → SMTP → Import → Campaign → Send),
+        # Guided onboarding — role-aware (users never see SMTP/infra steps),
         # tracked by real user actions (see db.mark_onboarding).
         done_set = _onboarding_done_set()
         steps = [(label, key in done_set, url_for(endpoint), icon)
-                 for key, label, endpoint, icon in ONBOARDING_STEPS]
+                 for key, label, endpoint, icon in _onboarding_steps_for_role()]
         done = sum(1 for _, ok, _, _ in steps if ok)
         onboarding = {"steps": steps, "done": done, "total": len(steps),
                       "pct": round(100 * done / len(steps))}
@@ -795,6 +801,7 @@ def register_modules(app):
                     (acct["id"], result["email"], result["result"], result["score"],
                      result["reason"], json.dumps(result.get("checks", {})), "single",
                      D.now()))
+                D.mark_onboarding(acct["id"], "verify")
                 D.log_activity(acct["id"], current_user()["email"],
                                f"Verified {result['email']} → {result['result']}")
             elif mode == "bulk":
@@ -825,6 +832,7 @@ def register_modules(app):
                         " detail, source, created_at) VALUES (?,?,?,?,?,?,?,?)",
                         (acct["id"], r["email"], r["result"], r["score"], r["reason"],
                          json.dumps(r.get("checks", {})), "bulk", D.now()))
+                D.mark_onboarding(acct["id"], "verify")
                 D.log_activity(acct["id"], current_user()["email"],
                                f"Bulk verified {len(bulk_results)} addresses")
         history = D.query(
