@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Campaigns{% endblock %}
+{% block content %}
+<h1>Campaigns</h1>
+<p class="muted">Draft, schedule, run and analyse your email campaigns.</p>
+
+<div class="tabs" style="margin-top:14px">
+  <a class="tab {{ 'active' if not status_filter }}" href="{{ url_for('campaigns') }}">All</a>
+  {% for s in ['Draft','Scheduled','Running','Paused','Completed','Failed'] %}
+  <a class="tab {{ 'active' if status_filter==s }}" href="{{ url_for('campaigns', status=s) }}">{{ s }} ({{ counts.get(s,0) }})</a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>New campaign</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="create">
+    <div class="row"><input name="name" placeholder="Campaign name" required>
+      <input name="subject" id="cmp_subject" placeholder="Subject line"></div>
+    <label>Select Template <span class="faint small">(⭐ System or 📁 My Templates — fills the email below)</span></label>
+    <div class="row" style="gap:8px;align-items:flex-end">
+      <select id="tplPick" style="flex:2">
+        <option value="">— Start from scratch —</option>
+        {% set groups = tpl_picker | groupby('group') %}
+        {% for g, items in groups %}
+        <optgroup label="{{ g }}">
+          {% for t in items %}<option value="{{ t.gid }}">{{ t.name }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+      <a class="btn ghost" href="{{ url_for('builder') }}" style="flex:0;white-space:nowrap">🎨 Visual Builder</a>
+    </div>
+    <label style="margin-top:10px">Body</label>
+    <textarea name="body" id="cmp_body" placeholder="Write your email… use {{ '{{name}}' }} for personalization"></textarea>
+    <div id="tplPrev" class="card tight" style="display:none;background:#fff;color:#111;margin-top:8px;max-height:200px;overflow:auto"></div>
+    <div style="margin-top:12px"><button class="btn">Save draft</button></div>
+  </form>
+</div>
+<script type="application/json" id="tplData">{{ tpl_picker | tojson }}</script>
+<script>
+(function(){
+  var data={}; try{ JSON.parse(document.getElementById('tplData').textContent).forEach(function(t){data[t.gid]=t;}); }catch(e){}
+  var pick=document.getElementById('tplPick');
+  pick && pick.addEventListener('change',function(){
+    var t=data[pick.value]; var prev=document.getElementById('tplPrev');
+    if(!t){prev.style.display='none';return;}
+    if(t.subject && !document.getElementById('cmp_subject').value) document.getElementById('cmp_subject').value=t.subject;
+    document.getElementById('cmp_body').value=t.content;
+    prev.innerHTML=t.content; prev.style.display='block';
+  });
+})();
+</script>
+
+<div class="card" style="border-left:4px solid {{ 'var(--good)' if acct_score>=85 else ('var(--warn)' if acct_score>=65 else 'var(--bad)') }}">
+  <div class="section-head"><h2>📋 Send Readiness</h2>
+    <span class="badge {{ 'b-valid' if acct_score>=85 else ('b-risky' if acct_score>=65 else 'b-invalid') }}">Account health {{ acct_score }}%</span></div>
+  <p class="muted small">Readiness = your <b>email content</b> (Inbox %) blended with your <b>account health</b>
+    (reputation, SPF/DKIM/DMARC, IP warm-up, list quality). Fix the email with ⚡ Optimize; improve account health below.</p>
+  {% if acct_recs %}<ul class="small" style="margin:6px 0 0 18px">
+    {% for r in acct_recs %}<li><b>{{ r.title }}</b> — {{ r.detail }}</li>{% endfor %}</ul>{% endif %}
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>{{ status_filter or 'All' }} campaigns</h2>
+    <span class="faint small">📥 Inbox % = email content · ✅ Ready % = content + account combined.</span></div>
+  <table>
+    <thead><tr><th>Name</th><th>📥 Inbox</th><th>✅ Ready</th><th>Status</th><th class="num">Recipients</th><th class="num">Sent</th>
+      <th class="num">Opens</th><th class="num">Clicks</th><th></th></tr></thead>
+    <tbody>
+    {% for c in campaigns %}
+      {% set sc = scores.get(c.id, 0) %}
+      {% set rd = readiness.get(c.id) %}
+      <tr>
+        <td><b>{{ c.name }}</b><div class="faint small">{{ c.subject or 'No subject' }}</div></td>
+        <td><span class="badge {{ 'b-valid' if sc>=90 else ('b-risky' if sc>=55 else 'b-invalid') }}" title="Predicted inbox placement (email content)">{{ sc }}%</span></td>
+        <td><span class="badge {{ 'b-valid' if rd.level=='good' else ('b-risky' if rd.level=='warn' else 'b-invalid') }}" title="{{ rd.verdict }} — content {{ rd.content }}% + account {{ rd.account }}%">{{ rd.overall }}%</span></td>
+        <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="num">{{ '{:,}'.format(c.recipients) }}</td>
+        <td class="num">{{ '{:,}'.format(c.sent) }}</td>
+        <td class="num">{{ '{:,}'.format(c.opens) }}</td>
+        <td class="num">{{ '{:,}'.format(c.clicks) }}</td>
+        <td class="num">
+          {% if c.status in ['Draft','Scheduled'] and sc < 100 %}
+          <form class="inline-form" method="post">
+            <input type="hidden" name="action" value="optimize"><input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn sm" title="Auto-fix unsubscribe, view-in-browser & spam triggers">⚡ Optimize 100%</button></form>
+          {% endif %}
+          {% if c.status in ['Draft','Scheduled'] %}
+          <form class="inline-form" method="post" onsubmit="return confirm('Send Readiness: {{ rd.overall }}% ({{ rd.verdict }}).\nSend to your active contacts now?')">
+            <input type="hidden" name="action" value="send"><input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn sm">📤 Send now</button></form>
+          {% endif %}
+          {% if c.sent > 0 %}<a class="btn ghost sm" href="{{ url_for('campaign_report', cid=c.id) }}">📊 Report</a>{% endif %}
+          {% if c.status in ['Draft','Scheduled','Running'] %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="advance">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn ghost sm">{{ {'Draft':'Schedule','Scheduled':'Start','Running':'Complete'}[c.status] }}</button></form>
+          {% endif %}
+          {% if c.status == 'Running' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="pause">
+            <input type="hidden" name="id" value="{{ c.id }}"><button class="btn ghost sm">⏸ Pause</button></form>
+          {% elif c.status == 'Paused' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="resume">
+            <input type="hidden" name="id" value="{{ c.id }}"><button class="btn sm">▶ Resume</button></form>
+          {% endif %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="clone">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn ghost sm">Clone</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="empty">No campaigns in this view.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

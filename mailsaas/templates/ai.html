@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}AI Center{% endblock %}
+{% block content %}
+<h1>🤖 AI Center</h1>
+<p class="muted">Generate copy, score deliverability and predict the best send time — built in.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>✍️ AI Email Writer</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="writer">
+      <label>What's the email about?</label>
+      <input name="topic" placeholder="our new analytics dashboard" required>
+      <div class="row">
+        <div><label>Tone</label><select name="tone">
+          <option>friendly</option><option>professional</option><option>urgent</option><option>casual</option></select></div>
+        <div><label>Audience</label><input name="audience" placeholder="customers"></div>
+        <div><label>Call to action</label><input name="cta" placeholder="Start free trial"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn">Generate email</button></div>
+    </form>
+    {% if out.tool=='writer' %}<div class="code" style="margin-top:14px">{{ out.email }}</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>🏷️ AI Subject Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="subjects">
+      <label>Topic</label><input name="topic" placeholder="summer sale" required>
+      <label>Tone</label><select name="tone"><option>friendly</option><option>urgent</option><option>professional</option></select>
+      <div style="margin-top:12px"><button class="btn">Generate subjects</button></div>
+    </form>
+    {% if out.tool=='subjects' %}
+      <div style="margin-top:12px">
+        {% for s in out.subjects %}<div class="kv"><span>{{ s }}</span><span class="faint small">{{ s|length }} chars</span></div>{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>🛡️ AI Spam Score</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="spam">
+      <label>Subject</label><input name="subject" placeholder="FREE!!! Act now">
+      <label>Body</label><textarea name="body" placeholder="Paste your email body…"></textarea>
+      <div style="margin-top:12px"><button class="btn">Analyze</button></div>
+    </form>
+    {% if out.tool=='spam' %}
+      {% set sp = out.spam %}
+      <div class="card tight" style="margin-top:14px;background:var(--panel2)">
+        <div class="section-head"><b>{{ sp.verdict }}</b>
+          <span class="score-ring" style="color:{{ 'var(--good)' if sp.score>=80 else ('var(--warn)' if sp.score>=55 else 'var(--bad)') }}">{{ sp.score }}</span></div>
+        {% for i in sp.issues %}<div class="kv"><span class="small">⚠ {{ i }}</span></div>{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>💬 AI Reply Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="reply">
+      <label>Incoming message</label>
+      <textarea name="incoming" placeholder="Paste the message you're replying to…"></textarea>
+      <label>Tone</label><select name="tone"><option>professional</option><option>friendly</option></select>
+      <div style="margin-top:12px"><button class="btn">Draft reply</button></div>
+    </form>
+    {% if out.tool=='reply' %}<div class="code" style="margin-top:14px">{{ out.reply }}</div>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>⏰ AI Send Time Prediction</h2>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="tool" value="sendtime">
+    <div><label>Audience type</label><select name="audience">
+      <option value="general">General</option><option value="b2b">B2B</option>
+      <option value="b2c">B2C</option><option value="ecommerce">E-commerce</option>
+      <option value="newsletter">Newsletter</option></select></div>
+    <div style="flex:0"><button class="btn">Predict</button></div>
+  </form>
+  {% if out.tool=='sendtime' %}
+    {% set st = out.sendtime %}
+    <div class="grid g3" style="margin-top:14px">
+      <div class="stat"><div class="k">Best day</div><div class="v">{{ st.best_day }}</div></div>
+      <div class="stat"><div class="k">Best time</div><div class="v">{{ st.best_time }}</div></div>
+      <div class="stat"><div class="k">Expected open rate</div><div class="v">{{ st.expected_open_rate }}<span class="unit">%</span></div></div>
+    </div>
+    <p class="muted small" style="margin-top:10px">Runner-up: {{ st.runner_up }} · {{ st.note }}</p>
+  {% endif %}
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>🔀 A/B Subject Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="ab">
+      <label>Topic</label><input name="topic" placeholder="product launch" required>
+      <div style="margin-top:12px"><button class="btn">Generate A/B</button></div>
+    </form>
+    {% if out.tool=='ab' %}
+      <div class="kv"><span><b>A</b> · {{ out.ab.A }}</span></div>
+      <div class="kv"><span><b>B</b> · {{ out.ab.B }}</span></div>
+      <p class="faint small" style="margin-top:6px">{{ out.ab.tip }}</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>🎯 CTA Generator</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="cta">
+      <label>What should readers do?</label><input name="context" placeholder="book a demo">
+      <div style="margin-top:12px"><button class="btn">Generate CTAs</button></div>
+    </form>
+    {% if out.tool=='cta' %}{% for c in out.ctas %}<span class="tag" style="display:inline-block;margin:3px">{{ c }}</span>{% endfor %}{% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>✏️ Rewrite</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="rewrite">
+      <label>Text</label><textarea name="text" placeholder="Paste copy to rewrite…"></textarea>
+      <label>Goal</label><select name="goal"><option>shorter</option><option>formal</option>
+        <option>friendly</option><option>urgent</option><option>persuasive</option></select>
+      <div style="margin-top:12px"><button class="btn">Rewrite</button></div>
+    </form>
+    {% if out.tool=='rewrite' %}<div class="code" style="margin-top:12px">{{ out.rewrite }}</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>🌍 Translate &amp; 🧩 Personalize</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="translate">
+      <label>Text</label><input name="text" placeholder="Hi {{ '{{name}}' }}, Thanks — The Team">
+      <label>Language</label><select name="language"><option>Spanish</option><option>French</option>
+        <option>German</option><option>Hindi</option></select>
+      <div style="margin-top:10px"><button class="btn sm">Translate</button></div>
+    </form>
+    {% if out.tool=='translate' %}<div class="code" style="margin-top:10px">{{ out.translate.text }}</div>
+      <p class="faint small">{{ out.translate.note }}</p>{% endif %}
+    <form method="post" style="margin-top:10px">
+      <input type="hidden" name="tool" value="personalize">
+      <input type="hidden" name="text" value="Hi {{ '{{name}}' }}, we noticed {{ '{{company}}' }} is in {{ '{{city}}' }}.">
+      <button class="btn ghost sm">Preview personalization</button>
+    </form>
+    {% if out.tool=='personalize' %}<div class="code" style="margin-top:8px">{{ out.personalize.resolved }}</div>
+      <p class="faint small">Tags: {{ out.personalize.tags_used|join(', ') }} · preview for {{ out.personalize.preview_for }}</p>{% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>🎭 AI Tone Analyzer</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="tone">
+      <label>Text</label><textarea name="text" placeholder="Paste copy to analyze its tone…"></textarea>
+      <div style="margin-top:12px"><button class="btn">Analyze tone</button></div>
+    </form>
+    {% if out.tool=='tone' %}
+      <div class="kv"><span>Dominant tone</span><span class="badge b-Running">{{ out.tone.tone }}</span></div>
+      <div class="kv"><span>Readability</span><span>{{ out.tone.readability }}</span></div>
+      <div class="kv"><span>Exclamations</span><span>{{ out.tone.exclaims }}</span></div>
+      <p class="faint small" style="margin-top:6px">{{ out.tone.tip }}</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>📥 AI Reply Detection</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="intent">
+      <label>Inbound reply</label><textarea name="text" placeholder="Paste a reply to classify its intent…"></textarea>
+      <div style="margin-top:12px"><button class="btn">Detect intent</button></div>
+    </form>
+    {% if out.tool=='intent' %}
+      <div class="kv"><span>Intent</span><span class="badge b-valid">{{ out.intent.intent }}</span></div>
+      <div class="kv"><span>Suggested action</span><span>{{ out.intent.action }}</span></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>📉 Bounce Prediction</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="bounce">
+      <label>Email address</label>
+      <div class="row"><input name="email" placeholder="someone@company.com" required style="flex:3">
+        <button class="btn" style="flex:1">Predict</button></div>
+    </form>
+    {% if out.tool=='bounce' %}
+      <div class="card tight" style="margin-top:12px;background:var(--panel2)">
+        <div class="section-head"><b>{{ out.bounce.email }}</b>
+          <span class="badge {{ 'b-invalid' if out.bounce.band=='High' else ('b-risky' if out.bounce.band=='Medium' else 'b-valid') }}">{{ out.bounce.band }} risk · {{ out.bounce.bounce_risk }}</span></div>
+        <p class="muted small" style="margin:.2em 0">{{ out.bounce.recommend }}</p>
+        {% for r in out.bounce.reasons %}<span class="tag">{{ r }}</span>{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>✨ Subject Optimization</h2>
+    <form method="post">
+      <input type="hidden" name="tool" value="subjectopt">
+      <label>Subject line</label>
+      <textarea name="subject" placeholder="Your subject line…"></textarea>
+      <div style="margin-top:10px"><button class="btn">Optimize</button></div>
+    </form>
+    {% if out.tool=='subjectopt' %}
+      <div class="section-head" style="margin-top:12px"><b>Grade {{ out.subjectopt.grade }}</b>
+        <span class="score-ring" style="color:{{ 'var(--good)' if out.subjectopt.score>=70 else 'var(--warn)' }}">{{ out.subjectopt.score }}</span></div>
+      {% for t in out.subjectopt.tips %}<div class="kv"><span class="small">• {{ t }}</span></div>{% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+<p class="faint small">⚙️ These tools run on a built-in generator so they work offline and free. Plug in a real LLM by implementing <code>ai._llm_complete()</code> and setting <code>USE_LLM=True</code>.</p>
+{% endblock %}

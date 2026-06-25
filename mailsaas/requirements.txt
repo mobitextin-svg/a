@@ -1,0 +1,5 @@
+Flask>=3.0
+bcrypt>=4.0
+# Optional: enables real MX record lookups in the verification engine.
+# Falls back to heuristics automatically if not installed.
+dnspython>=2.4

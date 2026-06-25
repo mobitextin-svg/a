@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel{% endblock %}
+{% block content %}
+<h1>🛡️ Admin Panel</h1>
+<p class="muted">Platform-wide user management across all tenants.
+  {% if can_super %}<span class="badge b-risky">super-admin</span>{% else %}<span class="badge b-Running">admin</span>{% endif %}</p>
+
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Tenants</div><div class="v">{{ totals.tenants }}</div></div>
+  <div class="stat"><div class="k">Users</div><div class="v">{{ totals.users }}</div></div>
+  <div class="stat"><div class="k">Active users</div><div class="v" style="color:var(--good)">{{ totals.active }}</div></div>
+  <div class="stat"><div class="k">Platform revenue</div><div class="v">${{ '{:,.0f}'.format(totals.revenue) }}</div></div>
+</div>
+
+<div class="card">
+  <h2>➕ Create user</h2>
+  <p class="muted small">Provisions an isolated workspace, assigns a plan &amp; role, and sends a welcome email.</p>
+  <form method="post">
+    <input type="hidden" name="action" value="create_user">
+    <div class="row">
+      <div><label>Name</label><input name="name" placeholder="Jane Doe" required></div>
+      <div><label>Email</label><input type="email" name="email" placeholder="jane@company.com" required></div>
+      <div><label>Password</label><input name="password" placeholder="6+ characters" required></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Plan</label><select name="plan">{% for p in plans %}<option>{{ p }}</option>{% endfor %}</select></div>
+      <div><label>Role</label><select name="role">
+        {% for r in roles %}{% if r != 'Super Admin' or can_super %}<option {{ 'selected' if r=='User' }}>{{ r }}</option>{% endif %}{% endfor %}</select></div>
+      <div><label>Status</label><select name="status"><option>active</option><option>suspended</option></select></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn" style="width:100%">Create user</button></div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Users</h2>
+  <table>
+    <thead><tr><th>User</th><th>Workspace</th><th>Role</th><th>Plan</th><th>Status</th><th>Manage</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><b>{{ u.name }}</b><div class="faint small">{{ u.email }}</div></td>
+        <td class="small">#{{ u.account_id }} · {{ u.acct_name }}</td>
+        <td>
+          <form class="inline-form" method="post">
+            <input type="hidden" name="action" value="set_role"><input type="hidden" name="id" value="{{ u.id }}">
+            <select name="role" onchange="this.form.submit()" class="small" style="padding:4px 6px">
+              {% for r in roles %}<option {{ 'selected' if u.role==r }}>{{ r }}</option>{% endfor %}
+              {% if u.role not in roles %}<option selected>{{ u.role }}</option>{% endif %}
+            </select></form>
+        </td>
+        <td>
+          <form class="inline-form" method="post">
+            <input type="hidden" name="action" value="set_plan"><input type="hidden" name="id" value="{{ u.id }}">
+            <select name="plan" onchange="this.form.submit()" class="small" style="padding:4px 6px">
+              {% for p in plans %}<option {{ 'selected' if u.plan==p }}>{{ p }}</option>{% endfor %}
+            </select></form>
+        </td>
+        <td><span class="badge {{ 'b-valid' if u.status=='active' else 'b-invalid' }}">{{ u.status }}</span></td>
+        <td class="num">
+          {% if u.status=='active' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="suspend">
+            <input type="hidden" name="id" value="{{ u.id }}"><button class="btn danger sm">Suspend</button></form>
+          {% else %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="activate">
+            <input type="hidden" name="id" value="{{ u.id }}"><button class="btn sm">Activate</button></form>
+          {% endif %}
+          {% if can_super and u.role not in ('Admin','Super Admin') %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="make_admin">
+            <input type="hidden" name="id" value="{{ u.id }}"><button class="btn ghost sm">Make Admin</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="faint small" style="margin-top:8px">Each user owns an isolated workspace (multi-tenant by <code>account_id</code>). Suspending a user also revokes their active sessions.</p>
+</div>
+
+<div class="card">
+  <h2>Recent logins (all tenants)</h2>
+  <table>
+    <thead><tr><th>User</th><th>Tenant</th><th>IP</th><th>Result</th><th>When</th></tr></thead>
+    <tbody>
+    {% for l in logins %}
+      <tr><td class="small">{{ l.user_email }}</td><td>#{{ l.account_id }}</td>
+        <td class="faint small">{{ l.ip }}</td>
+        <td><span class="badge {{ 'b-valid' if l.ok else 'b-invalid' }}">{{ 'success' if l.ok else 'failed' }}</span></td>
+        <td class="faint small">{{ l.created_at }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No logins recorded.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

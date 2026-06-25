@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}API{% endblock %}
+{% block content %}
+<h1>API &amp; Webhooks</h1>
+<p class="muted">Programmatic access to verification &amp; sending. Authenticate with a Bearer token.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>Create API key</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="create">
+      <div class="row"><input name="label" placeholder="e.g. Production server" required>
+        <button class="btn">Generate</button></div>
+    </form>
+    <table style="margin-top:14px">
+      <thead><tr><th>Label</th><th>Token</th><th>Last used</th><th></th></tr></thead>
+      <tbody>
+      {% for k in keys %}
+        <tr><td>{{ k.label }}</td>
+          <td class="small"><code>{{ k.token[:16] }}…{{ k.token[-4:] }}</code></td>
+          <td class="faint small">{{ k.last_used or 'never' }}</td>
+          <td class="num">
+            <form class="inline-form" method="post"><input type="hidden" name="action" value="rotate">
+              <input type="hidden" name="id" value="{{ k.id }}"><button class="btn ghost sm">Rotate</button></form>
+            <form class="inline-form" method="post"><input type="hidden" name="action" value="revoke">
+              <input type="hidden" name="id" value="{{ k.id }}"><button class="btn danger sm">Revoke</button></form></td></tr>
+      {% else %}
+        <tr><td colspan="4" class="empty">No API keys yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Quick start</h2>
+    <p class="muted small">Verify an address from the command line:</p>
+    <div class="code">curl "{{ request.host_url }}api/v1/verify?email=test@gmail.com" \
+  -H "Authorization: Bearer YOUR_API_KEY"</div>
+    <p class="muted small" style="margin-top:14px">Response:</p>
+    <div class="code">{
+  "email": "test@gmail.com",
+  "result": "valid",
+  "score": 100,
+  "reason": "Deliverable",
+  "checks": { "syntax": true, "mx": true, ... }
+}</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Endpoints</h2>
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge b-Running">GET</span></td><td><code>/api/v1/verify?email=</code></td><td>Verify a single address</td></tr>
+      <tr><td><span class="badge b-Running">GET</span></td><td><code>/api/v1/health</code></td><td>Service health check</td></tr>
+      <tr><td><span class="badge b-valid">POST</span></td><td><code>/api/v1/campaigns</code></td><td>Create a campaign <span class="faint">(SDK)</span></td></tr>
+      <tr><td><span class="badge b-valid">POST</span></td><td><code>/api/v1/contacts</code></td><td>Upsert contacts <span class="faint">(SDK)</span></td></tr>
+    </tbody>
+  </table>
+  <p class="muted small" style="margin-top:12px">Official SDKs: Python · Node.js · PHP · Ruby · Go · Java</p>
+</div>
+{% endblock %}
