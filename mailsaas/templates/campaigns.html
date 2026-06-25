@@ -51,18 +51,29 @@
 })();
 </script>
 
+<div class="card" style="border-left:4px solid {{ 'var(--good)' if acct_score>=85 else ('var(--warn)' if acct_score>=65 else 'var(--bad)') }}">
+  <div class="section-head"><h2>📋 Send Readiness</h2>
+    <span class="badge {{ 'b-valid' if acct_score>=85 else ('b-risky' if acct_score>=65 else 'b-invalid') }}">Account health {{ acct_score }}%</span></div>
+  <p class="muted small">Readiness = your <b>email content</b> (Inbox %) blended with your <b>account health</b>
+    (reputation, SPF/DKIM/DMARC, IP warm-up, list quality). Fix the email with ⚡ Optimize; improve account health below.</p>
+  {% if acct_recs %}<ul class="small" style="margin:6px 0 0 18px">
+    {% for r in acct_recs %}<li><b>{{ r.title }}</b> — {{ r.detail }}</li>{% endfor %}</ul>{% endif %}
+</div>
+
 <div class="card">
   <div class="section-head"><h2>{{ status_filter or 'All' }} campaigns</h2>
-    <span class="faint small">📥 Inbox % predicts inbox vs spam placement — click <b>⚡ Optimize 100%</b> to auto-fix.</span></div>
+    <span class="faint small">📥 Inbox % = email content · ✅ Ready % = content + account combined.</span></div>
   <table>
-    <thead><tr><th>Name</th><th>📥 Inbox</th><th>Status</th><th class="num">Recipients</th><th class="num">Sent</th>
+    <thead><tr><th>Name</th><th>📥 Inbox</th><th>✅ Ready</th><th>Status</th><th class="num">Recipients</th><th class="num">Sent</th>
       <th class="num">Opens</th><th class="num">Clicks</th><th></th></tr></thead>
     <tbody>
     {% for c in campaigns %}
       {% set sc = scores.get(c.id, 0) %}
+      {% set rd = readiness.get(c.id) %}
       <tr>
         <td><b>{{ c.name }}</b><div class="faint small">{{ c.subject or 'No subject' }}</div></td>
-        <td><span class="badge {{ 'b-valid' if sc>=90 else ('b-risky' if sc>=55 else 'b-invalid') }}" title="Predicted inbox placement">{{ sc }}%</span></td>
+        <td><span class="badge {{ 'b-valid' if sc>=90 else ('b-risky' if sc>=55 else 'b-invalid') }}" title="Predicted inbox placement (email content)">{{ sc }}%</span></td>
+        <td><span class="badge {{ 'b-valid' if rd.level=='good' else ('b-risky' if rd.level=='warn' else 'b-invalid') }}" title="{{ rd.verdict }} — content {{ rd.content }}% + account {{ rd.account }}%">{{ rd.overall }}%</span></td>
         <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
         <td class="num">{{ '{:,}'.format(c.recipients) }}</td>
         <td class="num">{{ '{:,}'.format(c.sent) }}</td>
@@ -75,7 +86,7 @@
             <button class="btn sm" title="Auto-fix unsubscribe, view-in-browser & spam triggers">⚡ Optimize 100%</button></form>
           {% endif %}
           {% if c.status in ['Draft','Scheduled'] %}
-          <form class="inline-form" method="post" onsubmit="return confirm('Send this campaign to your active contacts now?')">
+          <form class="inline-form" method="post" onsubmit="return confirm('Send Readiness: {{ rd.overall }}% ({{ rd.verdict }}).\nSend to your active contacts now?')">
             <input type="hidden" name="action" value="send"><input type="hidden" name="id" value="{{ c.id }}">
             <button class="btn sm">📤 Send now</button></form>
           {% endif %}
@@ -98,7 +109,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="empty">No campaigns in this view.</td></tr>
+      <tr><td colspan="9" class="empty">No campaigns in this view.</td></tr>
     {% endfor %}
     </tbody>
   </table>

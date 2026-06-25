@@ -152,6 +152,16 @@ def test_send_resolves_compliance_tokens_and_view_in_browser(user, query):
     assert b"{{view_in_browser_url}}" not in r.data
 
 
+def test_send_readiness_blends_content_and_account(user):
+    from mailsaas import deliver_ai as DAI
+    r = DAI.send_readiness(100, 60)
+    assert r["overall"] == round(0.45 * 100 + 0.55 * 60) and r["content"] == 100
+    assert r["level"] in ("good", "warn", "bad")
+    # campaigns page shows the Send Readiness card + combined Ready column
+    d = user.get("/campaigns").data
+    assert b"Send Readiness" in d and b"Ready" in d and b"Account health" in d
+
+
 # ----------------------- sending + tracking ------------------------------- #
 
 def test_send_creates_messages_and_tracks(user, query):

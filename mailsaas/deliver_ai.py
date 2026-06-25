@@ -186,6 +186,27 @@ def inbox_score(subject, body):
     return {"score": score, "band": band, "factors": factors, "issues": issues}
 
 
+def send_readiness(content_score, account_score):
+    """Merge the email-content inbox score with the account-level
+    deliverability score into a single 'ready to send' number (0–100).
+
+    Content (subject/body/footer) is what one click can fix; account signals
+    (reputation, auth, warm-up, list quality) need ongoing work — so the blend
+    leans slightly toward account health.
+    """
+    content_score = max(0, min(100, content_score))
+    account_score = max(0, min(100, account_score))
+    overall = round(0.45 * content_score + 0.55 * account_score)
+    if overall >= 85:
+        verdict, level = "Ready to send", "good"
+    elif overall >= 65:
+        verdict, level = "Send with caution", "warn"
+    else:
+        verdict, level = "Not ready", "bad"
+    return {"overall": overall, "content": round(content_score),
+            "account": round(account_score), "verdict": verdict, "level": level}
+
+
 def optimize_email(subject, body):
     """Auto-correct an email to maximise inbox placement. Returns
     (new_subject, new_body) — re-scoring the result should approach 100%."""

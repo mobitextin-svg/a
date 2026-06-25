@@ -1093,9 +1093,17 @@ def register_modules(app):
         # Inbox-placement score per campaign (content-level prediction).
         scores = {c["id"]: DAI.inbox_score(c["subject"], c["body"])["score"]
                   for c in rows}
+        # Account-level deliverability (computed once) + combined Send Readiness.
+        sig = _account_signals(aid)
+        acct_pred = DAI.predict_deliverability(sig)
+        acct_score = acct_pred["score"]
+        readiness = {c["id"]: DAI.send_readiness(scores[c["id"]], acct_score)
+                     for c in rows}
+        acct_recs = DAI.recommendations(sig)[:3]
         return render_template("campaigns.html", campaigns=rows, counts=counts,
                                status_filter=status_filter, tpl_picker=tpl_picker,
-                               scores=scores)
+                               scores=scores, readiness=readiness,
+                               acct_score=round(acct_score), acct_recs=acct_recs)
 
     # The "Bulk Email Sender" module reuses the campaign composer.
     @app.route("/sender")
