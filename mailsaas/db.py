@@ -196,6 +196,23 @@ CREATE TABLE IF NOT EXISTS templates (
     created_at   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS template_folders (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    name         TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS system_templates (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    category     TEXT NOT NULL,                   -- Education / Healthcare / ...
+    name         TEXT NOT NULL,
+    subject      TEXT,
+    content      TEXT,
+    published    INTEGER NOT NULL DEFAULT 1,      -- visible to all users when 1
+    created_at   TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS automations (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id   INTEGER NOT NULL,
@@ -370,6 +387,11 @@ _MIGRATIONS = [
     ("burst_purchases", "duration_days", "INTEGER NOT NULL DEFAULT 1"),
     ("burst_purchases", "reason", "TEXT"),
     ("burst_purchases", "used", "INTEGER NOT NULL DEFAULT 0"),  # emails consumed
+    # Personal template organisation (folders, favorites, trash, provenance).
+    ("templates", "folder", "TEXT NOT NULL DEFAULT 'General'"),
+    ("templates", "favorite", "INTEGER NOT NULL DEFAULT 0"),
+    ("templates", "trashed", "INTEGER NOT NULL DEFAULT 0"),
+    ("templates", "source_id", "INTEGER"),   # system_templates.id this was copied from
 ]
 
 
@@ -413,6 +435,50 @@ def init_db():
     # Burst pool defaults to auto-approve on payment.
     if get_setting("burst_auto_approve") is None:
         set_setting("burst_auto_approve", "1")
+    # Seed the admin-owned system template library once.
+    seed_system_templates()
+
+
+SYSTEM_TEMPLATE_SEED = [
+    ("Education", "Admission Open", "Admissions are now open at {{org}}!",
+     "<h1>Admissions Open for 2027</h1><p>Hi {{name}},</p><p>We're excited to "
+     "announce that admissions at <b>{{org}}</b> are now open. Limited seats — "
+     "apply early.</p><p><a href=\"{{link}}\">Apply Now</a></p>"),
+    ("Education", "Fee Reminder", "Reminder: fee payment due on {{date}}",
+     "<h1>Fee Payment Reminder</h1><p>Dear {{name}},</p><p>This is a gentle "
+     "reminder that the fee for {{org}} is due on <b>{{date}}</b>. Please pay "
+     "to avoid a late charge.</p><p><a href=\"{{link}}\">Pay Fees</a></p>"),
+    ("Education", "Result Announcement", "{{org}} results are out",
+     "<h1>Results Announced</h1><p>Hi {{name}},</p><p>The results for the latest "
+     "term are now available. Log in to view your scorecard.</p>"
+     "<p><a href=\"{{link}}\">View Result</a></p>"),
+    ("Healthcare", "Appointment Reminder", "Your appointment on {{date}}",
+     "<h1>Appointment Reminder</h1><p>Hi {{name}},</p><p>This is a reminder of "
+     "your appointment with {{org}} on <b>{{date}}</b>. Reply to reschedule.</p>"),
+    ("Restaurant", "Weekend Offer", "🍔 This weekend only — {{offer}}",
+     "<h1>Weekend Special!</h1><p>Hi {{name}},</p><p>Enjoy <b>{{offer}}</b> at "
+     "{{org}} this weekend. Show this email to redeem.</p>"
+     "<p><a href=\"{{link}}\">Book a Table</a></p>"),
+    ("Finance", "Invoice", "Invoice {{number}} from {{org}}",
+     "<h1>Invoice {{number}}</h1><p>Hi {{name}},</p><p>Please find your invoice "
+     "for <b>{{amount}}</b>, due {{date}}.</p><p><a href=\"{{link}}\">View &amp; "
+     "Pay</a></p>"),
+    ("Marketing", "Newsletter", "{{org}} Newsletter — {{month}}",
+     "<h1>{{org}} Monthly Newsletter</h1><p>Hi {{name}},</p><p>Here's what's new "
+     "this {{month}}. Thanks for being with us!</p><p><a href=\"{{link}}\">Read "
+     "More</a></p>"),
+]
+
+
+def seed_system_templates():
+    """Install the starter system template library if it's empty (idempotent)."""
+    if query("SELECT 1 FROM system_templates LIMIT 1", (), one=True):
+        return
+    n = now()
+    for category, name, subject, content in SYSTEM_TEMPLATE_SEED:
+        execute("INSERT INTO system_templates (category, name, subject, content,"
+                " published, created_at) VALUES (?,?,?,?,?,?)",
+                (category, name, subject, content, 1, n))
 
 
 def seed_demo(account_id, user_email):

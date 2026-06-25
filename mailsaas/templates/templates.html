@@ -1,47 +1,161 @@
 {% extends "base.html" %}
-{% block title %}Template Builder{% endblock %}
+{% block title %}Templates{% endblock %}
 {% block content %}
-<h1>🧱 Template Builder</h1>
-<p class="muted">Drag-and-drop, HTML &amp; MJML editors, saved blocks and brand templates.</p>
+<h1>🧱 Templates</h1>
+<p class="muted">Use the admin <b>System Templates</b> or build your own in <b>My Templates</b> — organised in folders.</p>
 
 <div class="tabs" style="margin-top:14px">
-  <span class="tab active">🎨 Drag &amp; Drop</span>
-  <span class="tab">&lt;/&gt; HTML</span>
-  <span class="tab">📐 MJML</span>
-  <span class="tab">🧩 Saved Blocks</span>
-  <span class="tab">⭐ Brand Templates</span>
+  <a class="tab {{ 'active' if tab=='system' }}" href="{{ url_for('templates', tab='system') }}">⭐ System Templates</a>
+  <a class="tab {{ 'active' if tab=='mine' }}" href="{{ url_for('templates', tab='mine') }}">📁 My Templates{% if mine_count %} ({{ mine_count }}){% endif %}</a>
+  <a class="tab {{ 'active' if tab=='favorites' }}" href="{{ url_for('templates', tab='favorites') }}">⭐ Favorites{% if favorites %} ({{ favorites|length }}){% endif %}</a>
+  <a class="tab {{ 'active' if tab=='trash' }}" href="{{ url_for('templates', tab='trash') }}">🗑 Trash{% if trash %} ({{ trash|length }}){% endif %}</a>
 </div>
 
+{# ============================ SYSTEM TEMPLATES ============================ #}
+{% if tab=='system' %}
+<p class="faint small">These are managed by the admin. You can <b>Preview</b> and <b>Use</b> (copy into My Templates) — you can't edit the originals.</p>
+{% for category, items in system.items() %}
 <div class="card">
-  <h2>New template</h2>
-  <form method="post">
-    <input type="hidden" name="action" value="create">
-    <div class="row">
-      <input name="name" placeholder="Template name" required>
-      <select name="kind" style="max-width:160px"><option>Email</option><option>Landing</option><option>Block</option></select>
-      <input name="subject" placeholder="Default subject (optional)">
+  <h2>📂 {{ category }}</h2>
+  <div class="feature-grid">
+    {% for t in items %}
+    <div class="card tight" style="margin:0">
+      <b>{{ t.name }}</b>
+      <div class="faint small" style="margin:4px 0">{{ t.subject or '—' }}</div>
+      <details style="margin:6px 0"><summary class="small" style="cursor:pointer">👁 Preview</summary>
+        <div style="background:#fff;color:#111;border-radius:8px;padding:10px;margin-top:6px;max-height:240px;overflow:auto">{{ t.content|safe }}</div>
+      </details>
+      <form method="post" class="row" style="gap:6px;align-items:flex-end">
+        <input type="hidden" name="action" value="use">
+        <input type="hidden" name="id" value="{{ t.id }}">
+        <input type="hidden" name="tab" value="mine">
+        <div style="flex:2"><label class="small">Save to folder</label>
+          <select name="folder">{% for f in folders %}<option {{ 'selected' if f==category }}>{{ f }}</option>{% endfor %}</select></div>
+        <div style="flex:0"><button class="btn sm">Use</button></div>
+      </form>
     </div>
-    <label>Content (HTML / MJML — use {{ '{{name}}' }} merge tags)</label>
-    <textarea name="content" placeholder="<h1>Hi {{ '{{name}}' }}</h1>&#10;<p>...</p>" style="font-family:ui-monospace,monospace;min-height:120px"></textarea>
-    <div style="margin-top:12px"><button class="btn">Save template</button></div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card"><p class="empty">No system templates published yet.</p></div>
+{% endfor %}
+{% endif %}
+
+{# ============================ MY TEMPLATES ============================ #}
+{% if tab=='mine' %}
+{# ---- Folder management ---- #}
+<div class="card">
+  <div class="section-head"><h2>📁 Folders</h2></div>
+  <form method="post" class="row" style="gap:8px;align-items:flex-end">
+    <input type="hidden" name="action" value="new_folder"><input type="hidden" name="tab" value="mine">
+    <div style="flex:2"><label class="small">New folder</label><input name="folder_name" placeholder="e.g. ABC School" required></div>
+    <div style="flex:0"><button class="btn sm">+ Create folder</button></div>
+  </form>
+  <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">
+    {% for f in folders %}<span class="badge b-Running">📁 {{ f }} ({{ (by_folder.get(f) or [])|length }})</span>{% endfor %}
+  </div>
+</div>
+
+{# ---- Editor (create / edit) — one builder ---- #}
+<div class="card" style="border-color:var(--brand)">
+  <h2>{{ '✏️ Edit template' if edit else '➕ New template' }}</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="{{ 'update' if edit else 'create' }}">
+    <input type="hidden" name="tab" value="mine">
+    {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+    <div class="row">
+      <div style="flex:2"><label>Template name</label><input name="name" value="{{ edit.name if edit else '' }}" placeholder="Admission 2027" required></div>
+      <div style="flex:1"><label>Folder</label>
+        <select name="folder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
+      <div style="flex:1"><label>Type</label>
+        <select name="kind"><option {{ 'selected' if edit and edit.kind=='Email' }}>Email</option><option {{ 'selected' if edit and edit.kind=='Landing' }}>Landing</option><option {{ 'selected' if edit and edit.kind=='Block' }}>Block</option></select></div>
+    </div>
+    <label>Subject</label><input name="subject" value="{{ edit.subject if edit else '' }}" placeholder="Admissions are now open!">
+    <label>Content (HTML — use {{ '{{name}}' }} merge tags)</label>
+    <textarea name="content" style="font-family:ui-monospace,monospace;min-height:140px" placeholder="<h1>Hi {{ '{{name}}' }}</h1>">{{ edit.content if edit else '' }}</textarea>
+    {% if not edit %}
+    <div class="card tight" style="background:var(--panel2);margin-top:10px">
+      <label class="small">🤖 Or generate with AI (leave Content empty)</label>
+      <input name="ai_topic" placeholder="Create an Admission Open email for a school">
+    </div>
+    {% endif %}
+    <div class="row" style="margin-top:12px">
+      <button class="btn">{{ '💾 Update' if edit else '💾 Save to My Templates' }}</button>
+      {% if edit %}<a class="btn ghost" href="{{ url_for('templates', tab='mine') }}">Cancel</a>{% endif %}
+    </div>
   </form>
 </div>
 
+{# ---- Templates by folder ---- #}
+{% for folder in folders %}
+{% set items = by_folder.get(folder) or [] %}
+{% if items %}
 <div class="card">
-  <h2>Your templates</h2>
+  <div class="section-head"><h2>📁 {{ folder }} <span class="faint small">({{ items|length }})</span></h2>
+    <div class="row" style="gap:6px">
+      <form class="inline-form" method="post" onsubmit="this.folder_name.value=prompt('Rename folder to:', '{{ folder }}')||'';return this.folder_name.value!=''">
+        <input type="hidden" name="action" value="rename_folder"><input type="hidden" name="tab" value="mine">
+        <input type="hidden" name="old" value="{{ folder }}"><input type="hidden" name="folder_name">
+        <button class="btn ghost sm">Rename</button></form>
+      {% if folder != 'General' %}<form class="inline-form" method="post" onsubmit="return confirm('Delete folder {{ folder }}? Templates move to General.')">
+        <input type="hidden" name="action" value="delete_folder"><input type="hidden" name="tab" value="mine">
+        <input type="hidden" name="folder_name" value="{{ folder }}"><button class="btn danger sm">Delete folder</button></form>{% endif %}
+    </div>
+  </div>
   <table>
-    <thead><tr><th>Name</th><th>Type</th><th>Subject</th><th>Created</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Subject</th><th>Source</th><th></th></tr></thead>
     <tbody>
-    {% for t in templates %}
-      <tr><td><b>{{ t.name }}</b></td><td><span class="badge b-Running">{{ t.kind }}</span></td>
-        <td class="muted small">{{ t.subject or '—' }}</td><td class="faint small">{{ t.created_at }}</td>
-        <td class="num"><form class="inline-form" method="post">
-          <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ t.id }}">
-          <button class="btn danger sm">Delete</button></form></td></tr>
-    {% else %}
-      <tr><td colspan="5" class="empty">No templates yet — create one above.</td></tr>
+    {% for t in items %}
+      <tr>
+        <td>{% if t.favorite %}⭐ {% endif %}<b>{{ t.name }}</b></td>
+        <td class="muted small">{{ t.subject or '—' }}</td>
+        <td class="faint small">{{ 'copied from system' if t.source_id else 'original' }}</td>
+        <td class="num" style="white-space:nowrap">
+          <a class="btn ghost sm" href="{{ url_for('templates', tab='mine', edit=t.id) }}">Edit</a>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="duplicate"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">Duplicate</button></form>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="favorite"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">{{ '★' if t.favorite else '☆' }}</button></form>
+          <a class="btn ghost sm" href="{{ url_for('template_export', tid=t.id) }}">⬇ HTML</a>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="trash"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn danger sm">🗑</button></form>
+        </td>
+      </tr>
     {% endfor %}
     </tbody>
   </table>
 </div>
+{% endif %}
+{% else %}{% endfor %}
+{% if not by_folder %}<div class="card"><p class="empty">No personal templates yet — create one above, or copy a System Template.</p></div>{% endif %}
+{% endif %}
+
+{# ============================ FAVORITES ============================ #}
+{% if tab=='favorites' %}
+<div class="card"><h2>⭐ Favorites</h2>
+  <table><thead><tr><th>Name</th><th>Folder</th><th>Subject</th><th></th></tr></thead><tbody>
+  {% for t in favorites %}
+    <tr><td><b>{{ t.name }}</b></td><td class="faint small">📁 {{ t.folder }}</td><td class="muted small">{{ t.subject or '—' }}</td>
+      <td class="num">
+        <a class="btn ghost sm" href="{{ url_for('templates', tab='mine', edit=t.id) }}">Edit</a>
+        <form class="inline-form" method="post"><input type="hidden" name="action" value="favorite"><input type="hidden" name="tab" value="favorites"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">★ Unfavorite</button></form>
+      </td></tr>
+  {% else %}<tr><td colspan="4" class="empty">No favorites yet — star a template in My Templates.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+
+{# ============================ TRASH ============================ #}
+{% if tab=='trash' %}
+<div class="card"><h2>🗑 Trash</h2>
+  <p class="faint small">Restore a template or delete it permanently.</p>
+  <table><thead><tr><th>Name</th><th>Folder</th><th></th></tr></thead><tbody>
+  {% for t in trash %}
+    <tr><td><b>{{ t.name }}</b></td><td class="faint small">📁 {{ t.folder }}</td>
+      <td class="num">
+        <form class="inline-form" method="post"><input type="hidden" name="action" value="restore"><input type="hidden" name="tab" value="trash"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">Restore</button></form>
+        <form class="inline-form" method="post" onsubmit="return confirm('Delete permanently?')"><input type="hidden" name="action" value="delete"><input type="hidden" name="tab" value="trash"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn danger sm">Delete forever</button></form>
+      </td></tr>
+  {% else %}<tr><td colspan="3" class="empty">Trash is empty.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
 {% endblock %}

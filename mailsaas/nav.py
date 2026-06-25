@@ -434,6 +434,12 @@ NAV = [
                ("International & India pay", "Stripe/PayPal · UPI/Razorpay"),
                ("Reserved IP burst", "5,000/IP, auto-released")]},
     # --- Admin-only platform modules ------------------------------------- #
+    {"key": "systpl", "label": "Template Library", "icon": "🧱", "built": True,
+     "items": [("Categories", "Industry groupings (Education, Healthcare…)"),
+               ("System Templates", "The master, shared library"),
+               ("Template Builder", "One builder, saved as system"),
+               ("Publish / Unpublish", "Control what users can use"),
+               ("Template Analytics", "How many users copied each")]},
     {"key": "plans", "label": "Plans", "icon": "💳", "built": True,
      "items": [("Tiers", "Free → Enterprise"), ("Credits", "Per-plan allowances"),
                ("Distribution", "Plan mix across tenants")]},
@@ -482,6 +488,7 @@ USER_GROUPS = [
 ADMIN_GROUPS = [
     ("", ["dashboard"]),
     ("👥 User Management", ["admin"]),
+    ("🧱 Template Library", ["systpl"]),
     ("📧 SMTP Infrastructure", ["smtp", "pools", "iphealth", "logs"]),
     ("🔄 Smart Rotation", ["rotsend", "rotverify"]),
     ("🔥 IP Warm-up", ["warmup"]),
@@ -506,7 +513,7 @@ NAV_GROUPS = USER_GROUPS
 ADMIN_ONLY = {
     "admin", "plans", "coupons", "mktmgmt", "apimgmt", "logs", "backups",
     "smtp", "pools", "warmup", "queue", "rotsend", "rotverify", "burst",
-    "iphealth", "monitoring", "whitelabel", "enterprise",
+    "iphealth", "monitoring", "whitelabel", "enterprise", "systpl",
 }
 
 # "Essential" modules shown in Simple mode (progressive disclosure for new

@@ -46,6 +46,50 @@ def test_user_smtp_admin_only_domains_ok(user):
     assert user.get("/domains").status_code == 200
 
 
+# --------------------------- templates ------------------------------------ #
+
+def test_system_template_library_is_admin_only(admin, user):
+    assert b"System Template Library" in admin.get("/admin/templates").data
+    assert user.get("/admin/templates").status_code == 403
+
+
+def test_user_uses_system_template_creates_safe_copy(user, query):
+    sid = query("SELECT id FROM system_templates WHERE name='Admission Open'")[0]["id"]
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    user.post("/templates", data={"action": "use", "id": sid, "folder": "ABC School"},
+              follow_redirects=True)
+    copy = query("SELECT * FROM templates WHERE account_id=? AND source_id=?", aid, sid)
+    assert len(copy) == 1 and copy[0]["folder"] == "ABC School"
+    # editing the copy never touches the system original
+    user.post("/templates", data={"action": "update", "id": copy[0]["id"], "name": "Mine",
+                                   "content": "<p>changed</p>", "folder": "ABC School"},
+              follow_redirects=True)
+    assert query("SELECT name FROM system_templates WHERE id=?", sid)[0]["name"] == "Admission Open"
+
+
+def test_user_cannot_edit_system_template(user, query):
+    # Users have no route to mutate the master library.
+    assert user.post("/admin/templates", data={"action": "delete", "id": 1}).status_code == 403
+
+
+def test_template_folder_and_trash_lifecycle(user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    user.post("/templates", data={"action": "new_folder", "folder_name": "Festival"},
+              follow_redirects=True)
+    user.post("/templates", data={"action": "create", "name": "Diwali", "content": "<p>hi</p>",
+                                   "folder": "Festival"}, follow_redirects=True)
+    t = query("SELECT * FROM templates WHERE account_id=? AND name='Diwali'", aid)[0]
+    # trash then restore
+    user.post("/templates", data={"action": "trash", "id": t["id"]}, follow_redirects=True)
+    assert query("SELECT trashed FROM templates WHERE id=?", t["id"])[0]["trashed"] == 1
+    user.post("/templates", data={"action": "restore", "id": t["id"]}, follow_redirects=True)
+    assert query("SELECT trashed FROM templates WHERE id=?", t["id"])[0]["trashed"] == 0
+    # deleting the folder relocates templates to General, destroys nothing
+    user.post("/templates", data={"action": "delete_folder", "folder_name": "Festival"},
+              follow_redirects=True)
+    assert query("SELECT folder FROM templates WHERE id=?", t["id"])[0]["folder"] == "General"
+
+
 # ----------------------- sending + tracking ------------------------------- #
 
 def test_send_creates_messages_and_tracks(user, query):

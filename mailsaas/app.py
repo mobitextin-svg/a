@@ -16,6 +16,7 @@ navigable end to end.
 """
 import os
 import io
+import re
 import csv
 import json
 import hmac
@@ -1773,23 +1774,208 @@ def register_modules(app):
     @login_required
     def templates():
         aid = current_account()["id"]
+
+        def _back(default="mine"):
+            return redirect(url_for("templates", tab=request.form.get("tab", default)))
+
         if request.method == "POST":
             action = request.form.get("action")
-            if action == "create":
-                D.execute(
-                    "INSERT INTO templates (account_id, name, kind, subject, content,"
-                    " created_at) VALUES (?,?,?,?,?,?)",
-                    (aid, request.form.get("name", "Untitled").strip(),
-                     request.form.get("kind", "Email"),
-                     request.form.get("subject", "").strip(),
-                     request.form.get("content", "").strip(), D.now()))
-                flash("Template saved.", "success")
+            if action in ("create", "update"):
+                folder = (request.form.get("folder") or "General").strip() or "General"
+                content = request.form.get("content", "").strip()
+                topic = (request.form.get("ai_topic") or "").strip()
+                if topic and not content:          # AI generator path
+                    content = ai.write_email(topic, request.form.get("tone", "friendly"),
+                                             "Learn more", "customers")
+                name = request.form.get("name", "Untitled").strip() or "Untitled"
+                subject = request.form.get("subject", "").strip()
+                kind = request.form.get("kind", "Email")
+                if action == "update" and request.form.get("id"):
+                    D.execute("UPDATE templates SET name=?, subject=?, content=?, kind=?,"
+                              " folder=? WHERE id=? AND account_id=?",
+                              (name, subject, content, kind, folder,
+                               request.form.get("id"), aid))
+                    flash("Template updated.", "success")
+                else:
+                    D.execute("INSERT INTO templates (account_id, name, kind, subject,"
+                              " content, folder, created_at) VALUES (?,?,?,?,?,?,?)",
+                              (aid, name, kind, subject, content, folder, D.now()))
+                    D.mark_onboarding(aid, "template")
+                    flash("Template saved to My Templates.", "success")
+                return _back()
+            elif action == "use":
+                # Copy a published system template into My Templates (safe copy).
+                st = D.query("SELECT * FROM system_templates WHERE id=? AND published=1",
+                             (request.form.get("id"),), one=True)
+                if st:
+                    folder = (request.form.get("folder") or st["category"]).strip() \
+                        or "General"
+                    D.execute("INSERT INTO templates (account_id, name, kind, subject,"
+                              " content, folder, source_id, created_at)"
+                              " VALUES (?,?,?,?,?,?,?,?)",
+                              (aid, st["name"], "Email", st["subject"], st["content"],
+                               folder, st["id"], D.now()))
+                    D.mark_onboarding(aid, "template")
+                    flash(f"'{st['name']}' copied to My Templates › {folder}. "
+                          "Edit it freely — the original stays untouched.", "success")
+                return _back()
+            elif action == "favorite":
+                D.execute("UPDATE templates SET favorite=1-favorite WHERE id=? AND"
+                          " account_id=?", (request.form.get("id"), aid))
+                return _back(request.form.get("tab", "mine"))
+            elif action == "trash":
+                D.execute("UPDATE templates SET trashed=1 WHERE id=? AND account_id=?",
+                          (request.form.get("id"), aid))
+                flash("Moved to Trash.", "success")
+                return _back()
+            elif action == "restore":
+                D.execute("UPDATE templates SET trashed=0 WHERE id=? AND account_id=?",
+                          (request.form.get("id"), aid))
+                flash("Template restored.", "success")
+                return _back("trash")
             elif action == "delete":
                 D.execute("DELETE FROM templates WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
-            return redirect(url_for("templates"))
-        rows = D.query("SELECT * FROM templates WHERE account_id=? ORDER BY id DESC", (aid,))
-        return render_template("templates.html", templates=rows)
+                flash("Template permanently deleted.", "success")
+                return _back("trash")
+            elif action == "duplicate":
+                t = D.query("SELECT * FROM templates WHERE id=? AND account_id=?",
+                            (request.form.get("id"), aid), one=True)
+                if t:
+                    D.execute("INSERT INTO templates (account_id, name, kind, subject,"
+                              " content, folder, source_id, created_at)"
+                              " VALUES (?,?,?,?,?,?,?,?)",
+                              (aid, t["name"] + " (copy)", t["kind"], t["subject"],
+                               t["content"], t["folder"], t["source_id"], D.now()))
+                    flash("Template duplicated.", "success")
+                return _back()
+            elif action == "new_folder":
+                name = (request.form.get("folder_name") or "").strip()[:40]
+                if name and not D.query("SELECT 1 FROM template_folders WHERE account_id=?"
+                                        " AND name=?", (aid, name), one=True):
+                    D.execute("INSERT INTO template_folders (account_id, name, created_at)"
+                              " VALUES (?,?,?)", (aid, name, D.now()))
+                    flash(f"Folder '{name}' created.", "success")
+                return _back()
+            elif action == "rename_folder":
+                old = (request.form.get("old") or "").strip()
+                new = (request.form.get("folder_name") or "").strip()[:40]
+                if old and new:
+                    D.execute("UPDATE template_folders SET name=? WHERE account_id=? AND"
+                              " name=?", (new, aid, old))
+                    D.execute("UPDATE templates SET folder=? WHERE account_id=? AND"
+                              " folder=?", (new, aid, old))
+                    flash(f"Folder renamed to '{new}'.", "success")
+                return _back()
+            elif action == "delete_folder":
+                name = (request.form.get("folder_name") or "").strip()
+                # Templates inside fall back to General; nothing is destroyed.
+                D.execute("UPDATE templates SET folder='General' WHERE account_id=? AND"
+                          " folder=?", (aid, name))
+                D.execute("DELETE FROM template_folders WHERE account_id=? AND name=?",
+                          (aid, name))
+                flash(f"Folder '{name}' deleted — its templates moved to General.",
+                      "success")
+                return _back()
+            return _back()
+
+        tab = request.args.get("tab", "system")
+        # System library, grouped by category (published only).
+        sys_rows = D.query("SELECT * FROM system_templates WHERE published=1 ORDER BY"
+                           " category, name")
+        system = {}
+        for r in sys_rows:
+            system.setdefault(r["category"], []).append(r)
+        # Personal templates.
+        mine = D.query("SELECT * FROM templates WHERE account_id=? AND trashed=0 ORDER BY"
+                       " folder, id DESC", (aid,))
+        by_folder = {}
+        for t in mine:
+            by_folder.setdefault(t["folder"] or "General", []).append(t)
+        favorites = [t for t in mine if t["favorite"]]
+        trash = D.query("SELECT * FROM templates WHERE account_id=? AND trashed=1 ORDER BY"
+                        " id DESC", (aid,))
+        # Folder list = explicit folders ∪ folders in use.
+        folders = set(r["name"] for r in D.query(
+            "SELECT name FROM template_folders WHERE account_id=?", (aid,)))
+        folders |= set(by_folder.keys())
+        folders = sorted(folders) or ["General"]
+        edit = None
+        if request.args.get("edit"):
+            edit = D.query("SELECT * FROM templates WHERE id=? AND account_id=?",
+                           (request.args.get("edit"), aid), one=True)
+        return render_template("templates.html", tab=tab, system=system,
+                               by_folder=by_folder, favorites=favorites, trash=trash,
+                               folders=folders, mine_count=len(mine), edit=edit)
+
+    @app.route("/templates/<int:tid>/export")
+    @login_required
+    def template_export(tid):
+        aid = current_account()["id"]
+        t = D.query("SELECT * FROM templates WHERE id=? AND account_id=?", (tid, aid),
+                    one=True)
+        if not t:
+            abort(404)
+        safe = re.sub(r"[^\w.-]+", "_", t["name"]) or "template"
+        return Response(t["content"] or "", mimetype="text/html",
+                        headers={"Content-Disposition":
+                                 f'attachment; filename="{safe}.html"'})
+
+    # ---- Admin: System Template Library (master, shared with all users) --- #
+    @app.route("/admin/templates", methods=["GET", "POST"])
+    @login_required
+    def admin_templates():
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action in ("create", "update"):
+                category = (request.form.get("category") or "General").strip() or "General"
+                name = (request.form.get("name") or "Untitled").strip() or "Untitled"
+                subject = (request.form.get("subject") or "").strip()
+                content = (request.form.get("content") or "").strip()
+                topic = (request.form.get("ai_topic") or "").strip()
+                if topic and not content:
+                    content = ai.write_email(topic, "professional", "Learn more",
+                                             "customers")
+                published = 1 if request.form.get("published") else 0
+                if action == "update" and request.form.get("id"):
+                    D.execute("UPDATE system_templates SET category=?, name=?, subject=?,"
+                              " content=?, published=? WHERE id=?",
+                              (category, name, subject, content, published,
+                               request.form.get("id")))
+                    flash("System template updated.", "success")
+                else:
+                    D.execute("INSERT INTO system_templates (category, name, subject,"
+                              " content, published, created_at) VALUES (?,?,?,?,?,?)",
+                              (category, name, subject, content, published, D.now()))
+                    flash("System template published to all users.", "success")
+            elif action == "publish":
+                D.execute("UPDATE system_templates SET published=1-published WHERE id=?",
+                          (request.form.get("id"),))
+            elif action == "delete":
+                D.execute("DELETE FROM system_templates WHERE id=?",
+                          (request.form.get("id"),))
+                flash("System template deleted.", "success")
+            elif action == "rename_category":
+                old = (request.form.get("old") or "").strip()
+                new = (request.form.get("category") or "").strip()
+                if old and new:
+                    D.execute("UPDATE system_templates SET category=? WHERE category=?",
+                              (new, old))
+                    flash(f"Category renamed to '{new}'.", "success")
+            return redirect(url_for("admin_templates"))
+        rows = D.query("SELECT * FROM system_templates ORDER BY category, name")
+        library = {}
+        for r in rows:
+            library.setdefault(r["category"], []).append(r)
+        edit = None
+        if request.args.get("edit"):
+            edit = D.query("SELECT * FROM system_templates WHERE id=?",
+                           (request.args.get("edit"),), one=True)
+        copies = {r["source_id"]: r["c"] for r in D.query(
+            "SELECT source_id, COUNT(*) c FROM templates WHERE source_id IS NOT NULL"
+            " GROUP BY source_id")}
+        return render_template("admin_templates.html", library=library, edit=edit,
+                               copies=copies, total=len(rows))
 
     # ---- Smart-rotation engines ------------------------------------------ #
     def _nodes(aid):
