@@ -467,18 +467,62 @@ SYSTEM_TEMPLATE_SEED = [
      "<h1>{{org}} Monthly Newsletter</h1><p>Hi {{name}},</p><p>Here's what's new "
      "this {{month}}. Thanks for being with us!</p><p><a href=\"{{link}}\">Read "
      "More</a></p>"),
+    # Polished, real-world starters (header → body → bullets → CTA → footer with
+    # the compliance tokens already in place).
+    ("Marketing", "Announcement (clean)", "An important update from {{org}}",
+     '<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'
+     '<table width="600" cellpadding="0" cellspacing="0" style="font-family:Arial,'
+     'sans-serif;border:1px solid #e5e5e5">'
+     '<tr><td style="background:#0b2a6b;padding:18px 24px;color:#fff;font-size:18px;'
+     'font-weight:bold">{{org}}</td></tr>'
+     '<tr><td style="padding:24px;color:#222;font-size:14px;line-height:1.6">'
+     '<p>Dear {{name}},</p>'
+     '<p>We have an important update to share with you about our services.</p>'
+     '<p>Here is what it means for you:</p>'
+     '<ul><li>Improved experience and faster service</li>'
+     '<li>Greater transparency</li><li>Simpler processes</li></ul>'
+     '<p style="text-align:center;margin:28px 0">'
+     '<a href="{{link}}" style="background:#0b2a6b;color:#fff;padding:12px 28px;'
+     'border-radius:4px;text-decoration:none">View Details</a></p>'
+     '<p>Regards,<br>Team {{org}}</p></td></tr>'
+     '<tr><td style="background:#0b2a6b;padding:14px 24px;color:#cdd7ee;font-size:11px;'
+     'text-align:center">For any queries: helpdesk@{{org}}.com<br>'
+     '<a href="{{view_in_browser_url}}" style="color:#cdd7ee">View in browser</a> &middot; '
+     '<a href="{{unsubscribe_url}}" style="color:#cdd7ee">Unsubscribe</a></td></tr>'
+     '</table></td></tr></table>'),
+    ("Marketing", "Promo Offer (clean)", "{{name}}, your offer is waiting",
+     '<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'
+     '<table width="560" cellpadding="0" cellspacing="0" style="font-family:Arial,'
+     'sans-serif;border:1px solid #e5e5e5">'
+     '<tr><td style="background:#4f46e5;padding:22px;color:#fff;text-align:center;'
+     'font-size:20px;font-weight:bold">Special Offer Inside</td></tr>'
+     '<tr><td style="padding:24px;color:#222;font-size:14px;line-height:1.6">'
+     '<p>Hi {{name}},</p><p>Here is what you get:</p>'
+     '<ul><li>Exclusive member benefits</li><li>Priority support</li>'
+     '<li>Great value pricing</li></ul>'
+     '<p style="text-align:center;margin:26px 0">'
+     '<a href="{{link}}" style="background:#4f46e5;color:#fff;padding:12px 30px;'
+     'border-radius:6px;text-decoration:none">View Offer</a></p>'
+     '<p>Regards,<br>Team {{org}}</p></td></tr>'
+     '<tr><td style="padding:14px;color:#888;font-size:11px;text-align:center">'
+     'This is an auto-generated email.<br>'
+     '<a href="{{view_in_browser_url}}">View in browser</a> &middot; '
+     '<a href="{{unsubscribe_url}}">Unsubscribe</a></td></tr>'
+     '</table></td></tr></table>'),
 ]
 
 
 def seed_system_templates():
-    """Install the starter system template library if it's empty (idempotent)."""
-    if query("SELECT 1 FROM system_templates LIMIT 1", (), one=True):
-        return
+    """Install/refresh the starter library (idempotent — inserts any missing
+    template by category+name, so new starters appear without duplicating)."""
     n = now()
     for category, name, subject, content in SYSTEM_TEMPLATE_SEED:
-        execute("INSERT INTO system_templates (category, name, subject, content,"
-                " published, created_at) VALUES (?,?,?,?,?,?)",
-                (category, name, subject, content, 1, n))
+        exists = query("SELECT 1 FROM system_templates WHERE category=? AND name=?",
+                       (category, name), one=True)
+        if not exists:
+            execute("INSERT INTO system_templates (category, name, subject, content,"
+                    " published, created_at) VALUES (?,?,?,?,?,?)",
+                    (category, name, subject, content, 1, n))
 
 
 def seed_demo(account_id, user_email):

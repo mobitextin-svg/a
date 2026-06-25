@@ -18,6 +18,9 @@
   <span class="badge {{ 'b-risky' if target=='system' else 'b-Running' }}">{{ 'System (all users)' if target=='system' else 'My Templates' }}</span></h1>
 <p class="muted">Drag &amp; drop blocks, switch to code, preview on mobile, then save.
   Saved as {{ 'a System Template available to every user.' if target=='system' else 'one of your personal templates.' }}</p>
+<p class="faint small">Tip: drag the <b>📩 Footer</b> block in — it carries
+  <code>{{ '{{unsubscribe_url}}' }}</code> and <code>{{ '{{view_in_browser_url}}' }}</code>,
+  which the system fills with working links for each recipient at send time.</p>
 
 <form method="post" id="saveForm" action="{{ url_for('builder', target=target) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -84,6 +87,31 @@
     document.getElementById('fallbackArea').value=INIT;
   }
 
+  // A small, friendly block palette on top of the preset — keeps it simple.
+  function addSimpleBlocks(ed){
+    var bm=ed.BlockManager, C='⭐ Simple blocks';
+    function blk(id,label,content){ bm.add(id,{label:label,category:C,content:content}); }
+    blk('s-logo','🖼 Logo / Header',
+      '<table width="100%"><tr><td style="background:#0b2a6b;padding:18px 24px;color:#fff;font-family:Arial;font-size:18px;font-weight:bold">Your Company</td></tr></table>');
+    blk('s-text','📝 Text',
+      '<p style="font-family:Arial;font-size:14px;color:#222;line-height:1.6;padding:0 24px">Write your message here. Use {{name}} to personalise.</p>');
+    blk('s-button','🔘 Button (CTA)',
+      '<table width="100%"><tr><td align="center" style="padding:18px"><a href="#" style="background:#0b2a6b;color:#fff;padding:12px 28px;border-radius:4px;text-decoration:none;font-family:Arial">View Details</a></td></tr></table>');
+    blk('s-bullets','• Bullet list',
+      '<ul style="font-family:Arial;font-size:14px;color:#222;line-height:1.7;padding:0 40px"><li>First point</li><li>Second point</li><li>Third point</li></ul>');
+    blk('s-image','🖼 Image',
+      '<table width="100%"><tr><td align="center" style="padding:12px"><img src="https://via.placeholder.com/560x180?text=Image" style="max-width:100%"></td></tr></table>');
+    blk('s-divider','➖ Divider','<hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 24px">');
+    blk('s-2col','▤ 2 columns',
+      '<table width="100%" style="font-family:Arial"><tr><td width="50%" style="padding:12px;vertical-align:top">Left column</td><td width="50%" style="padding:12px;vertical-align:top">Right column</td></tr></table>');
+    // The important one — compliant footer with auto-filled tokens.
+    blk('s-footer','📩 Footer (Unsubscribe + View)',
+      '<table width="100%"><tr><td style="background:#0b2a6b;padding:14px 24px;color:#cdd7ee;font-size:11px;text-align:center;font-family:Arial">'
+      +'You received this email because you opted in.<br>'
+      +'<a href="{{view_in_browser_url}}" style="color:#cdd7ee">View in browser</a> &middot; '
+      +'<a href="{{unsubscribe_url}}" style="color:#cdd7ee">Unsubscribe</a></td></tr></table>');
+  }
+
   if(!window.grapesjs){ bootFallback(); }
   else {
     try{
@@ -92,6 +120,7 @@
         plugins:['grapesjs-preset-newsletter'],
         pluginsOpts:{'grapesjs-preset-newsletter':{modalTitleImport:'Import HTML template'}}});
       editor.setComponents(INIT);
+      addSimpleBlocks(editor);
     }catch(e){ bootFallback(); }
   }
 

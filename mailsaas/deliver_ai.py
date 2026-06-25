@@ -99,3 +99,133 @@ def recommendations(s):
     order = {"critical": 0, "warning": 1, "tip": 2}
     recs.sort(key=lambda r: order[r["severity"]])
     return recs
+
+
+# --------------------------------------------------------------------------- #
+#  Content-level inbox-placement score + one-click optimizer.
+#  These look at the *email itself* (subject + HTML body), independent of the
+#  account signals above. A perfect email scores 100%.
+# --------------------------------------------------------------------------- #
+import re as _re
+
+SPAM_WORDS = [
+    "free", "winner", "congratulations", "guaranteed", "risk-free", "click here",
+    "buy now", "limited time", "act now", "cash", "viagra", "lottery", "prize",
+    "urgent", "100% free", "no cost", "cheap", "earn money", "make money",
+    "double your", "miracle", "weight loss", "$$$", "best price",
+]
+# Softer replacements used by the optimizer.
+SPAM_FIX = {
+    "free": "complimentary", "winner": "selected", "congratulations": "good news",
+    "guaranteed": "assured", "risk-free": "no-obligation", "click here": "see details",
+    "buy now": "explore", "limited time": "for a short period", "act now": "learn more",
+    "cash": "savings", "100% free": "included", "no cost": "included",
+    "cheap": "affordable", "earn money": "grow income", "make money": "grow income",
+    "double your": "increase your", "miracle": "effective", "urgent": "important",
+    "best price": "great value", "$$$": "great value", "prize": "reward",
+    "lottery": "draw", "weight loss": "wellness", "viagra": "product",
+    "congratulations": "good news", "guaranteed": "assured", "no cost": "included",
+}
+
+
+def _text_of(html):
+    return _re.sub(r"\s+", " ", _re.sub(r"<[^>]+>", " ", html or "")).strip()
+
+
+def inbox_score(subject, body):
+    """Predict inbox vs spam placement for one email. Returns score 0–100,
+    a band, and a factor list (each with pass/fail + how to fix)."""
+    subject = subject or ""
+    body = body or ""
+    text = _text_of(body)
+    low = (subject + " " + body).lower()
+    factors = []
+
+    def check(label, ok, weight, fix):
+        factors.append({"label": label, "ok": bool(ok), "weight": weight,
+                        "fix": fix})
+
+    has_unsub = ("{{unsubscribe_url}}" in body or "/t/u/" in body
+                 or "unsubscribe" in low)
+    has_view = "{{view_in_browser_url}}" in body or "view in browser" in low
+    letters = [c for c in subject if c.isalpha()]
+    all_caps = len(letters) >= 6 and all(c.isupper() for c in letters)
+    bad_punct = bool(_re.search(r"[!]{2,}|[?]{2,}|\${2,}|%{2,}", subject)) \
+        or subject.count("!") > 1
+    spam_hits = [w for w in SPAM_WORDS if w in low]
+    link_count = len(_re.findall(r"href=", body, _re.IGNORECASE))
+
+    check("Unsubscribe link", has_unsub, 15,
+          "Add {{unsubscribe_url}} (required by law & ISPs).")
+    check("View-in-browser link", has_view, 8,
+          "Add {{view_in_browser_url}} so the email always renders.")
+    check("Personalised ({{name}})", "{{name}}" in body, 7,
+          "Use {{name}} so it doesn't look like bulk mail.")
+    check("Subject present", bool(subject.strip()), 6, "Add a subject line.")
+    check("Subject not ALL CAPS", not all_caps, 8,
+          "Avoid all-capitals subjects — a classic spam trigger.")
+    check("Clean subject punctuation", not bad_punct, 8,
+          "Remove repeated !!! / $$$ from the subject.")
+    check("No spam-trigger words", not spam_hits, 16,
+          "Replace words like " + (", ".join(spam_hits[:3]) or "free/winner/…") + ".")
+    check("Has real text content", len(text) >= 80, 10,
+          "Add text — image-only emails get filtered.")
+    check("Has a footer/address", ("©" in body or "rights reserved" in low
+          or "unsubscribe" in low), 6, "Add a footer with your company details.")
+    check("Reasonable link count", link_count <= 12, 6,
+          "Too many links looks spammy — trim them.")
+    check("No generic 'click here'", "click here" not in low, 5,
+          "Use descriptive link text instead of 'click here'.")
+    check("Good body length", 80 <= len(text) <= 6000, 5,
+          "Keep the email a sensible length.")
+
+    score = sum(f["weight"] for f in factors if f["ok"])
+    band = ("Inbox" if score >= 90 else "Mostly inbox" if score >= 75
+            else "At risk" if score >= 55 else "Likely spam")
+    issues = [f for f in factors if not f["ok"]]
+    return {"score": score, "band": band, "factors": factors, "issues": issues}
+
+
+def optimize_email(subject, body):
+    """Auto-correct an email to maximise inbox placement. Returns
+    (new_subject, new_body) — re-scoring the result should approach 100%."""
+    subject = subject or ""
+    body = body or ""
+
+    # 1) Subject: kill ALL-CAPS and shouting punctuation.
+    letters = [c for c in subject if c.isalpha()]
+    if letters and all(c.isupper() for c in letters):
+        subject = subject.title()
+    subject = _re.sub(r"[!]{2,}", "!", subject)
+    subject = _re.sub(r"[?]{2,}", "?", subject)
+    subject = _re.sub(r"\${2,}|%{2,}", "", subject).strip()
+    if subject.count("!") > 1:
+        subject = subject.replace("!", "", subject.count("!") - 1)
+
+    # 2) Soften spam-trigger words in both subject and body (case-insensitive).
+    def soften(s):
+        for bad, good in SPAM_FIX.items():
+            s = _re.sub(_re.escape(bad), good, s, flags=_re.IGNORECASE)
+        return s
+    subject, body = soften(subject), soften(body)
+
+    # 3) Ensure personalisation.
+    if "{{name}}" not in body:
+        if "<" in body:
+            body = "<p>Hi {{name}},</p>\n" + body
+        else:
+            body = "Hi {{name}},\n\n" + body
+
+    # 4) Ensure a compliant footer with unsubscribe + view-in-browser.
+    low = body.lower()
+    if "{{unsubscribe_url}}" not in body and "/t/u/" not in body \
+            and "unsubscribe" not in low:
+        body += (
+            '\n<hr><p style="font-size:11px;color:#888;text-align:center">'
+            'You received this email because you opted in.<br>'
+            '<a href="{{view_in_browser_url}}">View in browser</a> &middot; '
+            '<a href="{{unsubscribe_url}}">Unsubscribe</a></p>')
+    elif "{{view_in_browser_url}}" not in body and "view in browser" not in low:
+        body += ('\n<p style="font-size:11px;color:#888;text-align:center">'
+                 '<a href="{{view_in_browser_url}}">View in browser</a></p>')
+    return subject.strip(), body

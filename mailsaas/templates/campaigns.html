@@ -52,20 +52,28 @@
 </script>
 
 <div class="card">
-  <div class="section-head"><h2>{{ status_filter or 'All' }} campaigns</h2></div>
+  <div class="section-head"><h2>{{ status_filter or 'All' }} campaigns</h2>
+    <span class="faint small">📥 Inbox % predicts inbox vs spam placement — click <b>⚡ Optimize 100%</b> to auto-fix.</span></div>
   <table>
-    <thead><tr><th>Name</th><th>Status</th><th class="num">Recipients</th><th class="num">Sent</th>
+    <thead><tr><th>Name</th><th>📥 Inbox</th><th>Status</th><th class="num">Recipients</th><th class="num">Sent</th>
       <th class="num">Opens</th><th class="num">Clicks</th><th></th></tr></thead>
     <tbody>
     {% for c in campaigns %}
+      {% set sc = scores.get(c.id, 0) %}
       <tr>
         <td><b>{{ c.name }}</b><div class="faint small">{{ c.subject or 'No subject' }}</div></td>
+        <td><span class="badge {{ 'b-valid' if sc>=90 else ('b-risky' if sc>=55 else 'b-invalid') }}" title="Predicted inbox placement">{{ sc }}%</span></td>
         <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
         <td class="num">{{ '{:,}'.format(c.recipients) }}</td>
         <td class="num">{{ '{:,}'.format(c.sent) }}</td>
         <td class="num">{{ '{:,}'.format(c.opens) }}</td>
         <td class="num">{{ '{:,}'.format(c.clicks) }}</td>
         <td class="num">
+          {% if c.status in ['Draft','Scheduled'] and sc < 100 %}
+          <form class="inline-form" method="post">
+            <input type="hidden" name="action" value="optimize"><input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn sm" title="Auto-fix unsubscribe, view-in-browser & spam triggers">⚡ Optimize 100%</button></form>
+          {% endif %}
           {% if c.status in ['Draft','Scheduled'] %}
           <form class="inline-form" method="post" onsubmit="return confirm('Send this campaign to your active contacts now?')">
             <input type="hidden" name="action" value="send"><input type="hidden" name="id" value="{{ c.id }}">
@@ -90,7 +98,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="empty">No campaigns in this view.</td></tr>
+      <tr><td colspan="8" class="empty">No campaigns in this view.</td></tr>
     {% endfor %}
     </tbody>
   </table>

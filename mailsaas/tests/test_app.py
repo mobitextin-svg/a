@@ -115,6 +115,43 @@ def test_campaign_composer_lists_templates(user):
     assert b"Select Template" in d and b"Admission Open" in d and b"Visual Builder" in d
 
 
+# ----------------------- inbox score + optimize --------------------------- #
+
+def test_inbox_score_and_one_click_optimize(user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    # a deliberately spammy draft scores low
+    user.post("/campaigns", data={"action": "create", "name": "Spammy",
+                                  "subject": "FREE!!! WINNER ACT NOW",
+                                  "body": "<p>Click here to claim your free cash prize</p>"},
+              follow_redirects=True)
+    cid = query("SELECT id FROM campaigns WHERE name='Spammy'")[0]["id"]
+    from mailsaas import deliver_ai as DAI
+    c = query("SELECT subject, body FROM campaigns WHERE id=?", cid)[0]
+    low = DAI.inbox_score(c["subject"], c["body"])["score"]
+    assert low < 70
+    # one-click optimize lifts it and injects the compliance tokens
+    user.post("/campaigns", data={"action": "optimize", "id": cid}, follow_redirects=True)
+    c2 = query("SELECT subject, body FROM campaigns WHERE id=?", cid)[0]
+    assert "{{unsubscribe_url}}" in c2["body"] and "{{view_in_browser_url}}" in c2["body"]
+    assert DAI.inbox_score(c2["subject"], c2["body"])["score"] > low
+    assert "FREE!!!" not in c2["subject"]
+
+
+def test_send_resolves_compliance_tokens_and_view_in_browser(user, query):
+    user.post("/campaigns", data={"action": "create", "name": "Tok", "subject": "Hi",
+                                  "body": '<p>Hi {{name}}</p><a href="{{unsubscribe_url}}">x</a>'
+                                          '<a href="{{view_in_browser_url}}">v</a>'},
+              follow_redirects=True)
+    cid = query("SELECT id FROM campaigns WHERE name='Tok'")[0]["id"]
+    user.post("/campaigns", data={"action": "send", "id": cid}, follow_redirects=True)
+    tok = query("SELECT token FROM messages WHERE campaign_id=?", cid)[0]["token"]
+    # the public view-in-browser page renders with tokens resolved (no raw {{ }})
+    r = user.get(f"/v/{tok}")
+    assert r.status_code == 200
+    assert b"{{unsubscribe_url}}" not in r.data and b"/t/u/" in r.data
+    assert b"{{view_in_browser_url}}" not in r.data
+
+
 # ----------------------- sending + tracking ------------------------------- #
 
 def test_send_creates_messages_and_tracks(user, query):

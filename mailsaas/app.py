@@ -1050,6 +1050,19 @@ def register_modules(app):
                     # Starting a campaign counts as "sending your first email".
                     if flow[cur["status"]] == "Running":
                         D.mark_onboarding(aid, "send")
+            elif action == "optimize":
+                # One-click "Optimize to 100%" — auto-correct the draft for inbox.
+                c = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                            (request.form.get("id"), aid), one=True)
+                if c:
+                    before = DAI.inbox_score(c["subject"], c["body"])["score"]
+                    subj, body = DAI.optimize_email(c["subject"], c["body"])
+                    after = DAI.inbox_score(subj, body)["score"]
+                    D.execute("UPDATE campaigns SET subject=?, body=? WHERE id=? AND"
+                              " account_id=?", (subj, body, c["id"], aid))
+                    flash(f"Inbox score optimised: {before}% → {after}%. "
+                          "Unsubscribe & view-in-browser added, spam triggers fixed.",
+                          "success")
             elif action == "pause":
                 D.execute("UPDATE campaigns SET status='Paused' WHERE id=? AND account_id=?"
                           " AND status='Running'", (request.form.get("id"), aid))
@@ -1077,8 +1090,12 @@ def register_modules(app):
             + [{"gid": "my-%d" % t["id"], "group": "📁 " + (t["folder"] or "General"),
                 "name": t["name"], "subject": t["subject"] or "",
                 "content": t["content"] or ""} for t in my_tpl])
+        # Inbox-placement score per campaign (content-level prediction).
+        scores = {c["id"]: DAI.inbox_score(c["subject"], c["body"])["score"]
+                  for c in rows}
         return render_template("campaigns.html", campaigns=rows, counts=counts,
-                               status_filter=status_filter, tpl_picker=tpl_picker)
+                               status_filter=status_filter, tpl_picker=tpl_picker,
+                               scores=scores)
 
     # The "Bulk Email Sender" module reuses the campaign composer.
     @app.route("/sender")
@@ -2955,6 +2972,23 @@ def register_modules(app):
         if url.startswith("http://") or url.startswith("https://"):
             return redirect(url)
         return redirect(url_for("dashboard"))
+
+    @app.route("/v/<token>")
+    def view_in_browser(token):
+        """Public hosted copy of a sent email (the 'View in browser' link)."""
+        m = D.query("SELECT * FROM messages WHERE token=?", (token,), one=True)
+        if not m:
+            abort(404)
+        camp = D.query("SELECT * FROM campaigns WHERE id=?", (m["campaign_id"],),
+                       one=True)
+        if not camp:
+            abort(404)
+        contact = D.query("SELECT name, email FROM contacts WHERE account_id=? AND"
+                          " email=?", (m["account_id"], m["email"]), one=True) \
+            or {"name": "", "email": m["email"]}
+        base = request.host_url.rstrip("/")
+        html = SEND.render_html(camp["body"], dict(contact), base, token)
+        return Response(html, mimetype="text/html")
 
     @app.route("/t/u/<token>")
     def track_unsubscribe(token):

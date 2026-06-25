@@ -39,17 +39,27 @@ def wrap_links(html, base_url, token):
 def render_html(body, contact, base_url, token):
     """Resolve merge tags, wrap links, and append the open-tracking pixel."""
     name = (contact.get("name") or contact["email"].split("@")[0]).strip()
+    unsub_url = "%s/t/u/%s" % (base_url, token)
+    view_url = "%s/v/%s" % (base_url, token)
     html = (body or "").replace("{{name}}", name).replace("{{email}}", contact["email"])
+    # Compliance tokens the builder/optimizer insert — resolved per recipient.
+    html = (html.replace("{{unsubscribe_url}}", unsub_url)
+                .replace("{{view_in_browser_url}}", view_url))
     # Treat plain-text bodies as text → wrap into simple HTML.
     if "<" not in html:
         html = "<p>" + html.replace("\n", "<br>") + "</p>"
     html = wrap_links(html, base_url, token)
     pixel = ('<img src="%s/t/o/%s.gif" width="1" height="1" alt="" '
              'style="display:none">' % (base_url, token))
-    # CAN-SPAM/GDPR-friendly unsubscribe footer (also improves spam score).
-    footer = ('<hr><p style="font-size:11px;color:#888">'
-              'You received this because you subscribed. '
-              '<a href="%s/t/u/%s">Unsubscribe</a></p>' % (base_url, token))
+    # Only add the default footer when the email doesn't already carry an
+    # unsubscribe link (the builder's Footer block / optimizer add their own).
+    if "/t/u/" in html or "unsubscribe" in html.lower():
+        footer = ""
+    else:
+        footer = ('<hr><p style="font-size:11px;color:#888;text-align:center">'
+                  'You received this because you subscribed. '
+                  '<a href="%s">View in browser</a> &middot; '
+                  '<a href="%s">Unsubscribe</a></p>' % (view_url, unsub_url))
     return html + footer + pixel
 
 
