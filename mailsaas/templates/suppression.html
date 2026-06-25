@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Suppression List{% endblock %}
+{% block content %}
+<h1>🚫 Suppression List</h1>
+<p class="muted">Addresses (or whole domains) here are <b>never</b> emailed — across every campaign, list and segment.</p>
+
+<div class="card" style="border-left:4px solid {{ 'var(--good)' if auto_hygiene else 'var(--line2)' }}">
+  <div class="section-head"><h2>🧹 List Hygiene Automation</h2>
+    <form class="inline-form" method="post"><input type="hidden" name="action" value="hygiene_toggle">
+      <button class="btn {{ 'ghost' if auto_hygiene else '' }} sm">{{ 'Turn off' if auto_hygiene else 'Turn on' }}</button></form></div>
+  <p class="muted small">When on, your list is automatically cleaned before every send — bounced &amp;
+    unsubscribed contacts removed, and invalid / disposable / role addresses suppressed.
+    Status: <b style="color:{{ 'var(--good)' if auto_hygiene else 'var(--warn)' }}">{{ 'ENABLED' if auto_hygiene else 'OFF' }}</b></p>
+</div>
+
+<div class="card" style="border-color:var(--brand)">
+  <h2>Add to suppression</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="add">
+    <label>Emails or domains <span class="faint small">(one per line or comma-separated; <code>spam.com</code> blocks the whole domain)</span></label>
+    <textarea name="values" placeholder="joe@example.com&#10;competitor.com" style="min-height:90px"></textarea>
+    <div class="row" style="gap:8px;align-items:flex-end">
+      <div style="flex:1"><label>Reason (optional)</label><input name="reason" placeholder="complaint / bounce / manual"></div>
+      <div style="flex:0"><button class="btn">Add</button></div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Suppressed ({{ entries|length }})</h2>
+    <a class="btn ghost sm" href="{{ url_for('suppression_export') }}">⬇ Export CSV</a></div>
+  <table><thead><tr><th>Value</th><th>Type</th><th>Reason</th><th>Added</th><th></th></tr></thead><tbody>
+  {% for e in entries %}
+    <tr><td><b>{{ e.value }}</b></td><td><span class="badge {{ 'b-invalid' if e.kind=='domain' else 'b-Running' }}">{{ e.kind }}</span></td>
+      <td class="faint small">{{ e.reason or '—' }}</td><td class="faint small">{{ e.created_at[:10] }}</td>
+      <td class="num"><form class="inline-form" method="post">
+        <input type="hidden" name="action" value="remove"><input type="hidden" name="id" value="{{ e.id }}">
+        <button class="btn ghost sm">Remove</button></form></td></tr>
+  {% else %}<tr><td colspan="5" class="empty">No suppressed addresses.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

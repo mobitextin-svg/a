@@ -37,6 +37,23 @@
 </div>
 
 <div class="card">
+  <div class="section-head"><h2>🏷 Custom Fields</h2>
+    <a class="btn ghost sm" href="{{ url_for('segments') }}">🎯 Build a segment →</a></div>
+  <p class="muted small">Define extra fields, then use them as <code>{{ '{{key}}' }}</code> merge tags in emails and as segment rules.</p>
+  <form method="post" class="row" style="gap:6px;align-items:flex-end">
+    <input type="hidden" name="action" value="add_field">
+    <div style="flex:1"><label class="small">Key (merge tag)</label><input name="key" placeholder="company" required></div>
+    <div style="flex:1"><label class="small">Label</label><input name="label" placeholder="Company"></div>
+    <div style="flex:1"><label class="small">Type</label><select name="ftype"><option>text</option><option>number</option><option>date</option></select></div>
+    <div style="flex:0"><button class="btn sm">+ Add field</button></div>
+  </form>
+  {% if fields %}<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">
+    {% for f in fields %}<span class="tag">{{ '{{' }}{{ f.key }}{{ '}}' }} · {{ f.label }}
+      <form class="inline-form" method="post" style="display:inline"><input type="hidden" name="action" value="del_field"><input type="hidden" name="id" value="{{ f.id }}"><button class="btn ghost" style="padding:0 4px" title="Remove">×</button></form></span>{% endfor %}
+  </div>{% endif %}
+</div>
+
+<div class="card">
   <div class="section-head"><h2>{{ (status_filter or 'All')|capitalize }} contacts
       <span class="faint small">({{ '{:,}'.format(total) }})</span></h2>
     <div class="row" style="flex:0;gap:8px">
@@ -68,6 +85,18 @@
           <form class="inline-form" method="post" onsubmit="return confirm('GDPR erase {{ c.email }}? This cannot be undone.')">
             <input type="hidden" name="action" value="gdpr"><input type="hidden" name="id" value="{{ c.id }}">
             <button class="btn danger sm" title="GDPR erasure">⌦ GDPR</button></form>
+          <details style="display:inline-block"><summary class="btn ghost sm" style="list-style:none">Edit</summary>
+            <form method="post" class="card tight" style="text-align:left;min-width:240px;margin-top:6px;position:absolute;z-index:5;background:var(--panel)">
+              <input type="hidden" name="action" value="edit"><input type="hidden" name="id" value="{{ c.id }}">
+              <label class="small">Name</label><input name="name" value="{{ c.name or '' }}">
+              <label class="small">Tags</label><input name="tags" value="{{ c.tags or '' }}">
+              {% set cv = c.custom|from_json %}
+              {% for f in fields %}
+              <label class="small">{{ f.label }}</label>
+              <input name="cf_{{ f.key }}" value="{{ cv.get(f.key, '') }}">
+              {% endfor %}
+              <div style="margin-top:8px"><button class="btn sm">Save</button></div>
+            </form></details>
         </td>
       </tr>
     {% else %}

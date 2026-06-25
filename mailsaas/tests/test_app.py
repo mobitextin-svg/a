@@ -152,6 +152,55 @@ def test_send_resolves_compliance_tokens_and_view_in_browser(user, query):
     assert b"{{view_in_browser_url}}" not in r.data
 
 
+def test_custom_fields_segments_suppression(user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    # custom field + set a value on a contact
+    user.post("/contacts", data={"action": "add_field", "key": "company",
+                                 "label": "Company", "ftype": "text"},
+              follow_redirects=True)
+    assert query("SELECT 1 FROM custom_fields WHERE account_id=? AND key='company'", aid)
+    cid = query("SELECT id FROM contacts WHERE account_id=? AND status='active' LIMIT 1",
+                aid)[0]["id"]
+    user.post("/contacts", data={"action": "edit", "id": cid, "name": "Sarah",
+                                 "tags": "vip", "cf_company": "Acme"}, follow_redirects=True)
+    import json as _j
+    cust = _j.loads(query("SELECT custom FROM contacts WHERE id=?", cid)[0]["custom"])
+    assert cust["company"] == "Acme"
+    # segment by custom field — preview shows a count, then save
+    r = user.post("/segments", data={"action": "preview", "name": "Acme",
+                                     "field": "cf:company", "op": "is", "value": "Acme"})
+    assert b"matches" in r.data
+    user.post("/segments", data={"action": "create", "name": "Acme co",
+                                 "field": "cf:company", "op": "is", "value": "Acme"},
+              follow_redirects=True)
+    assert query("SELECT 1 FROM segments WHERE account_id=? AND name='Acme co'", aid)
+    # suppression: add a domain, confirm it blocks a send
+    user.post("/suppression", data={"action": "add", "values": "blocked.com",
+                                    "reason": "test"}, follow_redirects=True)
+    assert query("SELECT 1 FROM suppression WHERE account_id=? AND value='blocked.com'", aid)
+
+
+def test_suppression_excludes_recipients_on_send(user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    # suppress one existing active contact's exact address
+    victim = query("SELECT email FROM contacts WHERE account_id=? AND status='active'"
+                   " LIMIT 1", aid)[0]["email"]
+    user.post("/suppression", data={"action": "add", "values": victim},
+              follow_redirects=True)
+    user.post("/campaigns", data={"action": "create", "name": "Supp", "subject": "Hi",
+                                  "body": "<p>hi</p>"}, follow_redirects=True)
+    cid = query("SELECT id FROM campaigns WHERE name='Supp'")[0]["id"]
+    user.post("/campaigns", data={"action": "send", "id": cid}, follow_redirects=True)
+    assert query("SELECT COUNT(*) c FROM messages WHERE campaign_id=? AND email=?",
+                 cid, victim)[0]["c"] == 0
+
+
+def test_list_hygiene_toggle(user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    user.post("/suppression", data={"action": "hygiene_toggle"}, follow_redirects=True)
+    assert query("SELECT auto_hygiene FROM accounts WHERE id=?", aid)[0]["auto_hygiene"] == 1
+
+
 def test_send_readiness_blends_content_and_account(user):
     from mailsaas import deliver_ai as DAI
     r = DAI.send_readiness(100, 60)

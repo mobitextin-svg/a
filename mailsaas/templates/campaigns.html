@@ -17,6 +17,11 @@
     <input type="hidden" name="action" value="create">
     <div class="row"><input name="name" placeholder="Campaign name" required>
       <input name="subject" id="cmp_subject" placeholder="Subject line"></div>
+    <label>Audience <span class="faint small">(<a href="{{ url_for('segments') }}">manage segments</a>)</span></label>
+    <select name="segment_id">
+      <option value="">All active contacts</option>
+      {% for s in seg_list %}<option value="{{ s.id }}">🎯 {{ s.name }}</option>{% endfor %}
+    </select>
     <label>Select Template <span class="faint small">(⭐ System or 📁 My Templates — fills the email below)</span></label>
     <div class="row" style="gap:8px;align-items:flex-end">
       <select id="tplPick" style="flex:2">

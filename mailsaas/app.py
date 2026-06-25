@@ -249,11 +249,29 @@ def execute_campaign_send(account_id, campaign_id, base_url):
     if not camp:
         return {"error": "Campaign not found."}
     acct = D.query("SELECT * FROM accounts WHERE id=?", (account_id,), one=True)
+    # List Hygiene Automation: optionally clean before every send.
+    if "auto_hygiene" in acct.keys() and acct["auto_hygiene"]:
+        execute_list_clean(account_id)
+    # Audience: a segment narrows the target; otherwise all active contacts.
+    seg_frag, seg_args = "1", []
+    if "segment_id" in camp.keys() and camp["segment_id"]:
+        seg = D.query("SELECT * FROM segments WHERE id=? AND account_id=?",
+                      (camp["segment_id"], account_id), one=True)
+        if seg:
+            try:
+                seg_frag, seg_args = build_segment_where(json.loads(seg["rules"]),
+                                                         seg["match"])
+            except (ValueError, TypeError):
+                seg_frag, seg_args = "1", []
     recipients = D.query(
-        "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
-        " ORDER BY id LIMIT ?", (account_id, SEND_CAP + 1))
+        f"SELECT * FROM contacts c WHERE c.account_id=? AND c.status='active' AND"
+        f" {seg_frag} ORDER BY c.id", [account_id] + seg_args)
+    # Suppression list: never send to these, regardless of list/segment.
+    sup_emails, sup_domains = suppressed_sets(account_id)
+    recipients = [r for r in recipients
+                  if not is_suppressed(r["email"], sup_emails, sup_domains)]
     if not recipients:
-        return {"error": "No active contacts to send to."}
+        return {"error": "No active contacts to send to (after segment & suppression)."}
     overflow = len(recipients) > SEND_CAP
     recipients = recipients[:SEND_CAP]
 
@@ -275,7 +293,10 @@ def execute_campaign_send(account_id, campaign_id, base_url):
     for i, contact in enumerate(recipients):
         sid = assigned_ids[i % len(assigned_ids)]
         token = SEND.make_token()
-        html = SEND.render_html(camp["body"], dict(contact), base_url, token)
+        body = camp["body"]
+        if "custom" in contact.keys():
+            body = apply_custom_tags(body, contact["custom"])
+        html = SEND.render_html(body, dict(contact), base_url, token)
         cfg = SEND.server_transport(rows_by_id[sid]) or env_cfg
         status, err = "dry-run", None
         if cfg:
@@ -328,6 +349,90 @@ def execute_list_clean(account_id):
 
 
 # --------------------------------------------------------------------------- #
+#  Audience & data layer: segments, suppression, custom fields.
+# --------------------------------------------------------------------------- #
+
+def build_segment_where(rules, match="all"):
+    """Compile a segment's rules into an SQL fragment + args over `contacts c`.
+    Fields: status, email, name, tag, engaged, cf:<key>. Ops: is, is_not,
+    contains, gt, lt. Returns ("(...)", [args]) or ("1", []) when empty."""
+    clauses, args = [], []
+    for r in rules or []:
+        field = (r.get("field") or "").strip()
+        op = (r.get("op") or "is").strip()
+        val = (r.get("value") or "").strip()
+        if field == "tag":
+            clauses.append("c.tags LIKE ?")
+            args.append(f"%{val}%")
+        elif field == "engaged":
+            sub = ("SELECT 1 FROM messages m WHERE m.account_id=c.account_id AND"
+                   " m.email=c.email AND m.{col}=1")
+            col = "clicked" if val == "clicked" else "opened"
+            if val == "not_opened":
+                clauses.append("NOT EXISTS (" + sub.format(col="opened") + ")")
+            else:
+                clauses.append("EXISTS (" + sub.format(col=col) + ")")
+        elif field.startswith("cf:"):
+            key = field[3:]
+            expr = "json_extract(c.custom, '$.' || ?)"
+            if op == "contains":
+                clauses.append(f"{expr} LIKE ?")
+                args += [key, f"%{val}%"]
+            elif op in ("gt", "lt"):
+                clauses.append(f"CAST({expr} AS REAL) {'>' if op=='gt' else '<'} ?")
+                args += [key, val]
+            else:
+                clauses.append(f"{expr} {'!=' if op=='is_not' else '='} ?")
+                args += [key, val]
+        else:  # status / email / name
+            col = "c." + (field if field in ("status", "email", "name") else "status")
+            if op == "contains":
+                clauses.append(f"{col} LIKE ?")
+                args.append(f"%{val}%")
+            else:
+                clauses.append(f"{col} {'!=' if op=='is_not' else '='} ?")
+                args.append(val)
+    if not clauses:
+        return "1", []
+    glue = " AND " if match == "all" else " OR "
+    return "(" + glue.join(clauses) + ")", args
+
+
+def segment_count(account_id, rules, match="all"):
+    frag, args = build_segment_where(rules, match)
+    return D.query(f"SELECT COUNT(*) c FROM contacts c WHERE c.account_id=? AND {frag}",
+                   [account_id] + args, one=True)["c"]
+
+
+def suppressed_sets(account_id):
+    """Return (emails, domains) currently on the account's suppression list."""
+    rows = D.query("SELECT value, kind FROM suppression WHERE account_id=?",
+                   (account_id,))
+    emails = {r["value"] for r in rows if r["kind"] == "email"}
+    domains = {r["value"] for r in rows if r["kind"] == "domain"}
+    return emails, domains
+
+
+def is_suppressed(email, emails, domains):
+    email = (email or "").lower()
+    dom = email.split("@")[-1] if "@" in email else ""
+    return email in emails or dom in domains
+
+
+def apply_custom_tags(body, custom_json):
+    """Resolve {{key}} custom-field merge tags from a contact's JSON values."""
+    if not custom_json:
+        return body
+    try:
+        data = json.loads(custom_json)
+    except (ValueError, TypeError):
+        return body
+    for k, v in (data or {}).items():
+        body = body.replace("{{%s}}" % k, str(v))
+    return body
+
+
+# --------------------------------------------------------------------------- #
 #  App factory
 # --------------------------------------------------------------------------- #
 
@@ -348,6 +453,13 @@ def create_app():
         SESSION_COOKIE_SAMESITE="Lax",
     )
     app.teardown_appcontext(D.close_db)
+
+    @app.template_filter("from_json")
+    def _from_json(s):
+        try:
+            return json.loads(s) if s else {}
+        except (ValueError, TypeError):
+            return {}
 
     with app.app_context():
         D.init_db()
@@ -961,6 +1073,31 @@ def register_modules(app):
                                    "GDPR erasure for a contact")
                     flash("Contact erased (GDPR) and added to the suppression list.",
                           "success")
+            elif action == "add_field":
+                key = re.sub(r"[^a-z0-9_]", "", (request.form.get("key") or "")
+                             .strip().lower())[:30]
+                label = (request.form.get("label") or key).strip()[:40]
+                if key and not D.query("SELECT 1 FROM custom_fields WHERE account_id=?"
+                                       " AND key=?", (aid, key), one=True):
+                    D.execute("INSERT INTO custom_fields (account_id, key, label, ftype,"
+                              " created_at) VALUES (?,?,?,?,?)",
+                              (aid, key, label, request.form.get("ftype", "text"), D.now()))
+                    flash(f"Custom field '{label}' added. Use {{{{{key}}}}} in emails.",
+                          "success")
+            elif action == "del_field":
+                D.execute("DELETE FROM custom_fields WHERE id=? AND account_id=?",
+                          (request.form.get("id"), aid))
+            elif action == "edit":
+                cid = request.form.get("id")
+                fields = D.query("SELECT key FROM custom_fields WHERE account_id=?", (aid,))
+                custom = {f["key"]: request.form.get("cf_" + f["key"], "").strip()
+                          for f in fields if request.form.get("cf_" + f["key"], "").strip()}
+                D.execute("UPDATE contacts SET name=?, tags=?, custom=? WHERE id=? AND"
+                          " account_id=?",
+                          (request.form.get("name", "").strip(),
+                           request.form.get("tags", "").strip(),
+                           json.dumps(custom), cid, aid))
+                flash("Contact updated.", "success")
             return redirect(url_for("contacts"))
         status_filter = request.args.get("status")
         q = request.args.get("q", "").strip()
@@ -988,9 +1125,13 @@ def register_modules(app):
             "SELECT status, COUNT(*) c FROM contacts WHERE account_id=? GROUP BY status", (aid,))
         counts = {r["status"]: r["c"] for r in counts}
         lists = D.query("SELECT * FROM contact_lists WHERE account_id=?", (aid,))
+        fields = D.query("SELECT * FROM custom_fields WHERE account_id=? ORDER BY id", (aid,))
+        auto_hygiene = bool(current_account()["auto_hygiene"]) \
+            if "auto_hygiene" in current_account().keys() else False
         return render_template("contacts.html", contacts=rows, counts=counts,
                                lists=lists, status_filter=status_filter, q=q,
-                               page=page, pages=pages, total=total)
+                               page=page, pages=pages, total=total, fields=fields,
+                               auto_hygiene=auto_hygiene)
 
     @app.route("/contacts/export")
     @login_required
@@ -1006,6 +1147,102 @@ def register_modules(app):
         return Response(buf.getvalue(), mimetype="text/csv",
                         headers={"Content-Disposition": "attachment; filename=contacts.csv"})
 
+    # ---- Audience Segmentation ------------------------------------------ #
+    @app.route("/segments", methods=["GET", "POST"])
+    @login_required
+    def segments():
+        aid = current_account()["id"]
+        preview = None
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action in ("create", "preview"):
+                # Rules come as parallel arrays field[]/op[]/value[].
+                fields = request.form.getlist("field")
+                ops = request.form.getlist("op")
+                vals = request.form.getlist("value")
+                rules = [{"field": f, "op": o, "value": v}
+                         for f, o, v in zip(fields, ops, vals) if f]
+                match = request.form.get("match", "all")
+                if action == "preview":
+                    preview = {"count": segment_count(aid, rules, match), "rules": rules,
+                               "match": match, "name": request.form.get("name", "")}
+                else:
+                    name = (request.form.get("name") or "Segment").strip() or "Segment"
+                    D.execute("INSERT INTO segments (account_id, name, rules, match,"
+                              " created_at) VALUES (?,?,?,?,?)",
+                              (aid, name, json.dumps(rules), match, D.now()))
+                    flash(f"Segment '{name}' saved.", "success")
+                    return redirect(url_for("segments"))
+            elif action == "delete":
+                D.execute("DELETE FROM segments WHERE id=? AND account_id=?",
+                          (request.form.get("id"), aid))
+                return redirect(url_for("segments"))
+        rows = D.query("SELECT * FROM segments WHERE account_id=? ORDER BY id DESC", (aid,))
+        segs = []
+        for s in rows:
+            try:
+                cnt = segment_count(aid, json.loads(s["rules"]), s["match"])
+            except (ValueError, TypeError):
+                cnt = 0
+            segs.append({**dict(s), "count": cnt})
+        fields = D.query("SELECT * FROM custom_fields WHERE account_id=? ORDER BY id", (aid,))
+        return render_template("segments.html", segments=segs, preview=preview,
+                               fields=fields)
+
+    # ---- Suppression List ----------------------------------------------- #
+    @app.route("/suppression", methods=["GET", "POST"])
+    @login_required
+    def suppression():
+        aid = current_account()["id"]
+        if request.method == "POST":
+            action = request.form.get("action")
+            if action == "add":
+                raw = (request.form.get("values") or "").replace(",", "\n")
+                reason = (request.form.get("reason") or "manual").strip()[:60]
+                added = 0
+                for line in raw.splitlines():
+                    v = line.strip().lower()
+                    if not v:
+                        continue
+                    kind = "email" if "@" in v else "domain"
+                    if not D.query("SELECT 1 FROM suppression WHERE account_id=? AND"
+                                   " value=?", (aid, v), one=True):
+                        D.execute("INSERT INTO suppression (account_id, value, kind,"
+                                  " reason, created_at) VALUES (?,?,?,?,?)",
+                                  (aid, v, kind, reason, D.now()))
+                        added += 1
+                flash(f"Added {added} entr{'y' if added==1 else 'ies'} to suppression.",
+                      "success")
+            elif action == "remove":
+                D.execute("DELETE FROM suppression WHERE id=? AND account_id=?",
+                          (request.form.get("id"), aid))
+            elif action == "hygiene_toggle":
+                cur = current_account()["auto_hygiene"]
+                D.execute("UPDATE accounts SET auto_hygiene=? WHERE id=?",
+                          (0 if cur else 1, aid))
+                flash("List hygiene automation " + ("disabled." if cur else
+                      "enabled — lists are auto-cleaned before each send."), "success")
+            return redirect(url_for("suppression"))
+        rows = D.query("SELECT * FROM suppression WHERE account_id=? ORDER BY id DESC",
+                       (aid,))
+        return render_template("suppression.html", entries=rows,
+                               auto_hygiene=bool(current_account()["auto_hygiene"]))
+
+    @app.route("/suppression/export")
+    @login_required
+    def suppression_export():
+        aid = current_account()["id"]
+        rows = D.query("SELECT value, kind, reason, created_at FROM suppression WHERE"
+                       " account_id=? ORDER BY id DESC", (aid,))
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["value", "kind", "reason", "added"])
+        for r in rows:
+            w.writerow([r["value"], r["kind"], r["reason"], r["created_at"]])
+        return Response(buf.getvalue(), mimetype="text/csv",
+                        headers={"Content-Disposition":
+                                 "attachment; filename=suppression.csv"})
+
     # ---- Campaigns / Sender --------------------------------------------- #
     @app.route("/campaigns", methods=["GET", "POST"])
     @login_required
@@ -1014,15 +1251,22 @@ def register_modules(app):
         if request.method == "POST":
             action = request.form.get("action")
             if action == "create":
-                rcpt = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
-                               " AND status='active'", (aid,), one=True)["c"]
+                seg_id = request.form.get("segment_id") or None
+                if seg_id:
+                    seg = D.query("SELECT rules, match FROM segments WHERE id=? AND"
+                                  " account_id=?", (seg_id, aid), one=True)
+                    rcpt = segment_count(aid, json.loads(seg["rules"]),
+                                         seg["match"]) if seg else 0
+                else:
+                    rcpt = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                                   " AND status='active'", (aid,), one=True)["c"]
                 D.execute(
                     "INSERT INTO campaigns (account_id, name, subject, body, from_email,"
-                    " status, recipients, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    " status, recipients, segment_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                     (aid, request.form.get("name", "Untitled").strip(),
                      request.form.get("subject", "").strip(),
                      request.form.get("body", "").strip(),
-                     current_user()["email"], "Draft", rcpt, D.now()))
+                     current_user()["email"], "Draft", rcpt, seg_id, D.now()))
                 D.mark_onboarding(aid, "campaign")
                 D.log_activity(aid, current_user()["email"], "Created a campaign draft")
                 flash("Campaign saved as draft.", "success")
@@ -1100,10 +1344,13 @@ def register_modules(app):
         readiness = {c["id"]: DAI.send_readiness(scores[c["id"]], acct_score)
                      for c in rows}
         acct_recs = DAI.recommendations(sig)[:3]
+        seg_list = D.query("SELECT id, name FROM segments WHERE account_id=? ORDER BY"
+                           " name", (aid,))
         return render_template("campaigns.html", campaigns=rows, counts=counts,
                                status_filter=status_filter, tpl_picker=tpl_picker,
                                scores=scores, readiness=readiness,
-                               acct_score=round(acct_score), acct_recs=acct_recs)
+                               acct_score=round(acct_score), acct_recs=acct_recs,
+                               seg_list=seg_list)
 
     # The "Bulk Email Sender" module reuses the campaign composer.
     @app.route("/sender")
@@ -2991,11 +3238,14 @@ def register_modules(app):
                        one=True)
         if not camp:
             abort(404)
-        contact = D.query("SELECT name, email FROM contacts WHERE account_id=? AND"
-                          " email=?", (m["account_id"], m["email"]), one=True) \
-            or {"name": "", "email": m["email"]}
+        contact = D.query("SELECT name, email, custom FROM contacts WHERE account_id=?"
+                          " AND email=?", (m["account_id"], m["email"]), one=True) \
+            or {"name": "", "email": m["email"], "custom": None}
         base = request.host_url.rstrip("/")
-        html = SEND.render_html(camp["body"], dict(contact), base, token)
+        body = camp["body"]
+        if "custom" in dict(contact):
+            body = apply_custom_tags(body, dict(contact).get("custom"))
+        html = SEND.render_html(body, dict(contact), base, token)
         return Response(html, mimetype="text/html")
 
     @app.route("/t/u/<token>")

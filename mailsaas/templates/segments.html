@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Segments{% endblock %}
+{% block content %}
+<h1>🎯 Audience Segments</h1>
+<p class="muted">Build rule-based audiences from status, tags, engagement and custom fields. Target them when sending a campaign.</p>
+
+<div class="card" style="border-color:var(--brand)">
+  <h2>Build a segment</h2>
+  <form method="post" id="segForm">
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:2"><label>Segment name</label><input name="name" value="{{ preview.name if preview else '' }}" placeholder="Engaged VIPs"></div>
+      <div style="flex:1"><label>Match</label>
+        <select name="match"><option value="all" {{ 'selected' if preview and preview.match=='all' }}>ALL rules</option>
+          <option value="any" {{ 'selected' if preview and preview.match=='any' }}>ANY rule</option></select></div>
+    </div>
+    <label style="margin-top:10px">Rules</label>
+    <div id="rules">
+      {% set rs = preview.rules if preview else [{'field':'status','op':'is','value':'active'}] %}
+      {% for r in rs %}
+      <div class="row rule" style="gap:6px;margin-bottom:6px">
+        <select name="field" style="flex:1">
+          <optgroup label="Contact">
+            <option value="status" {{ 'selected' if r.field=='status' }}>Status</option>
+            <option value="tag" {{ 'selected' if r.field=='tag' }}>Tag</option>
+            <option value="email" {{ 'selected' if r.field=='email' }}>Email</option>
+            <option value="name" {{ 'selected' if r.field=='name' }}>Name</option>
+            <option value="engaged" {{ 'selected' if r.field=='engaged' }}>Engagement</option>
+          </optgroup>
+          {% if fields %}<optgroup label="Custom fields">
+            {% for f in fields %}<option value="cf:{{ f.key }}" {{ 'selected' if r.field=='cf:'+f.key }}>{{ f.label }}</option>{% endfor %}
+          </optgroup>{% endif %}
+        </select>
+        <select name="op" style="flex:1">
+          {% for o,l in [('is','is'),('is_not','is not'),('contains','contains'),('gt','>'),('lt','<')] %}
+          <option value="{{ o }}" {{ 'selected' if r.op==o }}>{{ l }}</option>{% endfor %}
+        </select>
+        <input name="value" value="{{ r.value }}" placeholder="value (e.g. active / opened / clicked / not_opened)" style="flex:2">
+      </div>
+      {% endfor %}
+    </div>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <button class="btn ghost" type="button" id="addRule">+ Add rule</button>
+      <button class="btn ghost" name="action" value="preview">👁 Preview count</button>
+      <button class="btn" name="action" value="create">💾 Save segment</button>
+    </div>
+  </form>
+  {% if preview %}<div class="flash success" style="margin-top:10px">🎯 This segment matches <b>{{ '{:,}'.format(preview.count) }}</b> contact(s).</div>{% endif %}
+  <p class="faint small" style="margin-top:6px">Engagement values: <code>opened</code>, <code>clicked</code>, <code>not_opened</code>.</p>
+</div>
+
+<div class="card">
+  <h2>Saved segments</h2>
+  <table><thead><tr><th>Name</th><th>Match</th><th class="num">Contacts</th><th></th></tr></thead><tbody>
+  {% for s in segments %}
+    <tr><td><b>🎯 {{ s.name }}</b></td><td class="faint small">{{ s.match|upper }}</td>
+      <td class="num">{{ '{:,}'.format(s.count) }}</td>
+      <td class="num"><form class="inline-form" method="post" onsubmit="return confirm('Delete this segment?')">
+        <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ s.id }}">
+        <button class="btn danger sm">Delete</button></form></td></tr>
+  {% else %}<tr><td colspan="4" class="empty">No segments yet — build one above.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+
+<script>
+document.getElementById('addRule').addEventListener('click',function(){
+  var r=document.querySelector('.rule'); var c=r.cloneNode(true);
+  c.querySelectorAll('input').forEach(function(i){i.value='';});
+  document.getElementById('rules').appendChild(c);
+});
+</script>
+{% endblock %}

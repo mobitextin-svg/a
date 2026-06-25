@@ -203,6 +203,33 @@ CREATE TABLE IF NOT EXISTS template_folders (
     created_at   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS custom_fields (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    key          TEXT NOT NULL,                   -- merge-tag key e.g. company
+    label        TEXT NOT NULL,
+    ftype        TEXT NOT NULL DEFAULT 'text',     -- text / number / date
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS segments (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    name         TEXT NOT NULL,
+    rules        TEXT NOT NULL DEFAULT '[]',       -- JSON list of {field,op,value}
+    match        TEXT NOT NULL DEFAULT 'all',      -- all / any
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS suppression (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    value        TEXT NOT NULL,                    -- email or domain (lowercased)
+    kind         TEXT NOT NULL DEFAULT 'email',    -- email / domain
+    reason       TEXT,
+    created_at   TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS system_templates (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     category     TEXT NOT NULL,                   -- Education / Healthcare / ...
@@ -392,6 +419,10 @@ _MIGRATIONS = [
     ("templates", "favorite", "INTEGER NOT NULL DEFAULT 0"),
     ("templates", "trashed", "INTEGER NOT NULL DEFAULT 0"),
     ("templates", "source_id", "INTEGER"),   # system_templates.id this was copied from
+    # Audience & data layer.
+    ("contacts", "custom", "TEXT"),           # JSON of custom-field values
+    ("accounts", "auto_hygiene", "INTEGER NOT NULL DEFAULT 0"),  # clean list pre-send
+    ("campaigns", "segment_id", "INTEGER"),   # optional target segment
 ]
 
 
