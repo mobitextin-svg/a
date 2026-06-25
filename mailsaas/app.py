@@ -1682,6 +1682,78 @@ def register_modules(app):
         return render_template("deliverability_ai.html", admin=False, sig=sig,
                                pred=pred, recs=recs, cleaned=cleaned)
 
+    # ---- Inbox Analysis — single consolidated pre-send report ----------- #
+    @app.route("/inbox-analysis", methods=["GET", "POST"])
+    @login_required
+    def inbox_analysis():
+        """One report that combines the email's content score, the account's
+        deliverability signals, per-provider inbox probability, spam risk and
+        email-auth health — the recommended last step before sending."""
+        aid = current_account()["id"]
+        camps = D.query("SELECT id, name, subject, body, from_email, status FROM"
+                        " campaigns WHERE account_id=? ORDER BY id DESC", (aid,))
+
+        if request.method == "POST":
+            cid = request.form.get("cid")
+            if request.form.get("action") == "optimize" and cid:
+                c = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                            (cid, aid), one=True)
+                if c:
+                    before = DAI.inbox_score(c["subject"], c["body"])["score"]
+                    subj, body = DAI.optimize_email(c["subject"], c["body"])
+                    after = DAI.inbox_score(subj, body)["score"]
+                    D.execute("UPDATE campaigns SET subject=?, body=? WHERE id=? AND"
+                              " account_id=?", (subj, body, cid, aid))
+                    flash(f"⚡ Auto-Optimize applied: inbox score {before}% → {after}%. "
+                          "Spam triggers softened; unsubscribe, footer & "
+                          "personalisation added.", "success")
+            return redirect(url_for("inbox_analysis", cid=cid))
+
+        cid = request.args.get("cid")
+        selected = None
+        if cid:
+            selected = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                               (cid, aid), one=True)
+        if not selected and camps:
+            selected = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                               (camps[0]["id"], aid), one=True)
+
+        report = None
+        if selected:
+            subject = selected["subject"] or ""
+            body = selected["body"] or ""
+            sig = _account_signals(aid)
+            acct_pred = DAI.predict_deliverability(sig)
+            content = DAI.inbox_score(subject, body)
+            analysis = DAI.content_analysis(subject, body)
+            readiness = DAI.send_readiness(content["score"], acct_pred["score"])
+            providers = DAI.provider_inbox(
+                DELIV.provider_scores(sig["reputation"]), content["score"])
+            spam_risk = max(0, 100 - content["score"])
+            spam_level = ("Low" if spam_risk <= 20 else
+                          "Medium" if spam_risk <= 45 else "High")
+            dom = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY"
+                          " reputation DESC LIMIT 1", (aid,), one=True)
+            health = [
+                ("DKIM", bool(dom and dom["dkim"])),
+                ("SPF", bool(dom and dom["spf"])),
+                ("DMARC", bool(dom and dom["dmarc"])),
+                ("Reverse DNS", bool(dom)),
+                ("Blacklist", not sig["blacklisted"]),
+            ]
+            # Estimated open rate scales with overall send-readiness.
+            est_open = round(12 + readiness["overall"] * 0.32)
+            report = {
+                "overall": readiness["overall"], "verdict": readiness["verdict"],
+                "level": readiness["level"], "content": content,
+                "account": acct_pred, "analysis": analysis, "providers": providers,
+                "spam_risk": spam_risk, "spam_level": spam_level, "health": health,
+                "recs": DAI.recommendations(sig), "est_open": est_open,
+                "domain": dom["domain"] if dom else (selected["from_email"] or "—"),
+            }
+        return render_template("inbox_analysis.html", camps=camps,
+                               selected=selected, report=report)
+
     # ---- Integrations hub (ISP feedback loops & analytics) --------------- #
     ISP_PROVIDERS = [
         ("gmail_postmaster", "Gmail Postmaster Tools", "📮",

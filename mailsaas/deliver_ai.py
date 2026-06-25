@@ -186,6 +186,113 @@ def inbox_score(subject, body):
     return {"score": score, "band": band, "factors": factors, "issues": issues}
 
 
+# --------------------------------------------------------------------------- #
+#  Detailed content analysis — the granular metrics shown on the Inbox
+#  Analysis report (spam words, ALL-CAPS, emoji, image/text ratio, broken
+#  links, unsubscribe, physical address, HTML validity). Real checks over the
+#  actual subject + HTML body; no external calls.
+# --------------------------------------------------------------------------- #
+_EMOJI = _re.compile(
+    "[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0001F000-\U0001F0FF←-⇿⬀-⯿]")
+
+
+def content_analysis(subject, body):
+    """Return a granular breakdown of an email's content for the report.
+    Each entry is {label, value, ok, hint} so the template can render rows
+    with a green/red status and a short explanation."""
+    subject = subject or ""
+    body = body or ""
+    text = _text_of(body)
+    low = (subject + " " + body).lower()
+    rows = []
+
+    def add(label, value, ok, hint=""):
+        rows.append({"label": label, "value": value, "ok": bool(ok), "hint": hint})
+
+    # Spam words.
+    spam_hits = [w for w in SPAM_WORDS if w in low]
+    add("Spam words", (", ".join(spam_hits[:4]) + ("…" if len(spam_hits) > 4 else ""))
+        if spam_hits else "None found", not spam_hits,
+        "Replace trigger words with softer wording.")
+
+    # ALL CAPS subject.
+    letters = [c for c in subject if c.isalpha()]
+    all_caps = len(letters) >= 6 and all(c.isupper() for c in letters)
+    add("ALL CAPS subject", "Yes" if all_caps else "No", not all_caps,
+        "Avoid all-capital subject lines — a classic spam trigger.")
+
+    # Emoji count.
+    emojis = _EMOJI.findall(subject + " " + text)
+    add("Emoji count", str(len(emojis)), len(emojis) <= 3,
+        "Keep emojis to 3 or fewer; too many looks promotional.")
+
+    # Image / text ratio.
+    img_count = len(_re.findall(r"<img\b", body, _re.IGNORECASE))
+    text_len = len(text)
+    if img_count == 0:
+        ratio_ok, ratio_val = text_len >= 1, ("0 images" if text_len else "empty")
+    else:
+        per_img = text_len / img_count
+        ratio_ok = per_img >= 40
+        ratio_val = f"{img_count} image(s), {text_len} chars"
+    add("Image / text ratio", ratio_val, ratio_ok,
+        "Add more text — image-heavy emails get filtered.")
+
+    # Broken / empty links.
+    hrefs = _re.findall(r'href\s*=\s*["\']?([^"\'>\s]*)', body, _re.IGNORECASE)
+    broken = [h for h in hrefs if h.strip() in ("", "#") or h.strip().startswith("javascript:")]
+    add("Broken links", f"{len(broken)} of {len(hrefs)}" if hrefs else "No links",
+        not broken, "Fix empty (#) or javascript: links before sending.")
+
+    # Unsubscribe link.
+    has_unsub = ("{{unsubscribe_url}}" in body or "/t/u/" in body or "unsubscribe" in low)
+    add("Unsubscribe link", "Present" if has_unsub else "Missing", has_unsub,
+        "Add {{unsubscribe_url}} — required by law and ISPs.")
+
+    # Physical mailing address (CAN-SPAM). Heuristic.
+    has_addr = bool(_re.search(r"\b\d{1,5}\s+\w+(\s+\w+){0,3}\s+(st|street|ave|avenue|"
+                               r"rd|road|blvd|lane|ln|drive|dr|suite|ste|p\.?o\.?\s*box)\b",
+                               low) or _re.search(r"\b\d{5}(-\d{4})?\b", text)
+                    or "rights reserved" in low)
+    add("Physical address", "Found" if has_addr else "Missing", has_addr,
+        "Add your company's postal address in the footer (CAN-SPAM).")
+
+    # Basic HTML validity — tag balance heuristic for block tags.
+    html_ok, html_note = _html_balanced(body)
+    add("HTML validation", "Valid" if html_ok else html_note, html_ok,
+        "Close all open tags — broken HTML renders badly and looks spammy.")
+
+    issues = [r for r in rows if not r["ok"]]
+    return {"rows": rows, "issues": issues,
+            "spam_words": spam_hits, "emoji_count": len(emojis),
+            "image_count": img_count, "broken_links": len(broken)}
+
+
+def _html_balanced(html):
+    """Cheap well-formedness check: every opened block tag is closed."""
+    if not html or "<" not in html:
+        return True, "No HTML"
+    track = ("div", "table", "tr", "td", "p", "span", "a", "ul", "ol", "li",
+             "h1", "h2", "h3", "body", "html", "head", "section")
+    opens = _re.findall(r"<\s*([a-zA-Z0-9]+)", html)
+    closes = _re.findall(r"<\s*/\s*([a-zA-Z0-9]+)", html)
+    for tag in track:
+        o = sum(1 for t in opens if t.lower() == tag)
+        c = sum(1 for t in closes if t.lower() == tag)
+        if o > c:
+            return False, f"Unclosed <{tag}> ({o - c})"
+    return True, "Valid"
+
+
+def provider_inbox(account_provider_scores, content_score):
+    """Blend per-provider account reputation with the email's content score
+    into a per-provider inbox-probability the report shows (Gmail/Outlook/…)."""
+    blended = {}
+    for prov, base in account_provider_scores.items():
+        blended[prov] = max(0, min(100, round(0.6 * base + 0.4 * content_score)))
+    return blended
+
+
 def send_readiness(content_score, account_score):
     """Merge the email-content inbox score with the account-level
     deliverability score into a single 'ready to send' number (0–100).
