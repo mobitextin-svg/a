@@ -6,3 +6,4 @@ venv/
 .venv/
 backups/
 .pytest_cache/
+static/uploads/
