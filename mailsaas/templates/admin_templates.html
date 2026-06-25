@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Template Library{% endblock %}
 {% block content %}
-<h1>🧱 System Template Library</h1>
+<div class="section-head"><h1>🧱 System Template Library</h1>
+  <a class="btn" href="{{ url_for('builder', target='system') }}">🎨 Open Visual Builder</a></div>
 <p class="muted">The master library every user can copy from. {{ total }} template(s).
   Users can <b>Use</b> these but never edit the originals.</p>
 
@@ -56,6 +57,7 @@
         <td><span class="badge {{ 'b-valid' if t.published else 'b-invalid' }}">{{ 'Published' if t.published else 'Unpublished' }}</span></td>
         <td class="num" style="white-space:nowrap">
           <a class="btn ghost sm" href="{{ url_for('admin_templates', edit=t.id) }}">Edit</a>
+          <a class="btn ghost sm" href="{{ url_for('builder', target='system', edit=t.id) }}">🎨</a>
           <form class="inline-form" method="post"><input type="hidden" name="action" value="publish"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">{{ 'Unpublish' if t.published else 'Publish' }}</button></form>
           <form class="inline-form" method="post" onsubmit="return confirm('Delete this system template?')"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn danger sm">Delete</button></form>
         </td>

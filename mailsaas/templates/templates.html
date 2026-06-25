@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Templates{% endblock %}
 {% block content %}
-<h1>🧱 Templates</h1>
+<div class="section-head"><h1>🧱 Templates</h1>
+  <a class="btn" href="{{ url_for('builder') }}">🎨 Open Visual Builder</a></div>
 <p class="muted">Use the admin <b>System Templates</b> or build your own in <b>My Templates</b> — organised in folders.</p>
 
 <div class="tabs" style="margin-top:14px">
@@ -33,6 +34,7 @@
           <select name="folder">{% for f in folders %}<option {{ 'selected' if f==category }}>{{ f }}</option>{% endfor %}</select></div>
         <div style="flex:0"><button class="btn sm">Use</button></div>
       </form>
+      <a class="small" href="{{ url_for('builder', use=t.id) }}">🎨 Customize in Builder →</a>
     </div>
     {% endfor %}
   </div>
@@ -113,6 +115,7 @@
         <td class="faint small">{{ 'copied from system' if t.source_id else 'original' }}</td>
         <td class="num" style="white-space:nowrap">
           <a class="btn ghost sm" href="{{ url_for('templates', tab='mine', edit=t.id) }}">Edit</a>
+          <a class="btn ghost sm" href="{{ url_for('builder', edit=t.id) }}">🎨</a>
           <form class="inline-form" method="post"><input type="hidden" name="action" value="duplicate"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">Duplicate</button></form>
           <form class="inline-form" method="post"><input type="hidden" name="action" value="favorite"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">{{ '★' if t.favorite else '☆' }}</button></form>
           <a class="btn ghost sm" href="{{ url_for('template_export', tid=t.id) }}">⬇ HTML</a>

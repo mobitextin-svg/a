@@ -90,6 +90,31 @@ def test_template_folder_and_trash_lifecycle(user, query):
     assert query("SELECT folder FROM templates WHERE id=?", t["id"])[0]["folder"] == "General"
 
 
+def test_visual_builder_access_and_save(admin, user, query):
+    aid = query("SELECT account_id FROM users WHERE email='joe@co.com'")[0]["account_id"]
+    # user can open the personal builder, but not the system builder
+    assert b"Visual Template Builder" in user.get("/templates/builder").data
+    assert user.get("/templates/builder?target=system").status_code == 403
+    assert admin.get("/templates/builder?target=system").status_code == 200
+    # saving from the builder creates a personal template
+    user.post("/templates/builder", data={"name": "Built", "subject": "S",
+                                           "content": "<h1>hi</h1>", "folder": "General"},
+              follow_redirects=True)
+    assert query("SELECT content FROM templates WHERE account_id=? AND name='Built'",
+                 aid)[0]["content"] == "<h1>hi</h1>"
+    # admin builder saves to the system library
+    admin.post("/templates/builder?target=system",
+               data={"name": "Sys Built", "category": "Marketing",
+                     "content": "<p>x</p>", "published": "on"}, follow_redirects=True)
+    assert query("SELECT 1 FROM system_templates WHERE name='Sys Built'")
+
+
+def test_campaign_composer_lists_templates(user):
+    # The composer's Select Template picker includes the seeded system library.
+    d = user.get("/campaigns").data
+    assert b"Select Template" in d and b"Admission Open" in d and b"Visual Builder" in d
+
+
 # ----------------------- sending + tracking ------------------------------- #
 
 def test_send_creates_messages_and_tracks(user, query):

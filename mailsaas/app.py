@@ -1066,8 +1066,19 @@ def register_modules(app):
         counts = D.query("SELECT status, COUNT(*) c FROM campaigns WHERE account_id=?"
                          " GROUP BY status", (aid,))
         counts = {r["status"]: r["c"] for r in counts}
+        # Template picker for the composer: System Templates + My Templates.
+        sys_tpl = D.query("SELECT id, category, name, subject, content FROM"
+                          " system_templates WHERE published=1 ORDER BY category, name")
+        my_tpl = D.query("SELECT id, folder, name, subject, content FROM templates"
+                         " WHERE account_id=? AND trashed=0 ORDER BY folder, name", (aid,))
+        tpl_picker = (
+            [{"gid": "sys-%d" % t["id"], "group": "⭐ " + t["category"], "name": t["name"],
+              "subject": t["subject"] or "", "content": t["content"] or ""} for t in sys_tpl]
+            + [{"gid": "my-%d" % t["id"], "group": "📁 " + (t["folder"] or "General"),
+                "name": t["name"], "subject": t["subject"] or "",
+                "content": t["content"] or ""} for t in my_tpl])
         return render_template("campaigns.html", campaigns=rows, counts=counts,
-                               status_filter=status_filter)
+                               status_filter=status_filter, tpl_picker=tpl_picker)
 
     # The "Bulk Email Sender" module reuses the campaign composer.
     @app.route("/sender")
@@ -1920,6 +1931,72 @@ def register_modules(app):
         return Response(t["content"] or "", mimetype="text/html",
                         headers={"Content-Disposition":
                                  f'attachment; filename="{safe}.html"'})
+
+    @app.route("/templates/builder", methods=["GET", "POST"])
+    @login_required
+    def builder():
+        """Shared GrapesJS visual builder. Saves to the personal library, or to
+        the admin system library when target=system (admin only)."""
+        aid = current_account()["id"]
+        target = request.values.get("target", "personal")
+        if target == "system" and not is_admin_user():
+            abort(403)
+        if request.method == "POST":
+            name = (request.form.get("name") or "Untitled").strip() or "Untitled"
+            subject = (request.form.get("subject") or "").strip()
+            content = (request.form.get("content") or "").strip()
+            tid = request.form.get("id")
+            if target == "system":
+                category = (request.form.get("category") or "General").strip() or "General"
+                published = 1 if request.form.get("published") else 0
+                if tid:
+                    D.execute("UPDATE system_templates SET category=?, name=?, subject=?,"
+                              " content=?, published=? WHERE id=?",
+                              (category, name, subject, content, published, tid))
+                else:
+                    D.execute("INSERT INTO system_templates (category, name, subject,"
+                              " content, published, created_at) VALUES (?,?,?,?,?,?)",
+                              (category, name, subject, content, published, D.now()))
+                flash("Saved to the System Template Library.", "success")
+                return redirect(url_for("admin_templates"))
+            folder = (request.form.get("folder") or "General").strip() or "General"
+            if tid:
+                D.execute("UPDATE templates SET name=?, subject=?, content=?, folder=?"
+                          " WHERE id=? AND account_id=?",
+                          (name, subject, content, folder, tid, aid))
+            else:
+                D.execute("INSERT INTO templates (account_id, name, kind, subject, content,"
+                          " folder, created_at) VALUES (?,?,?,?,?,?,?)",
+                          (aid, name, "Email", subject, content, folder, D.now()))
+                D.mark_onboarding(aid, "template")
+            flash("Saved to My Templates.", "success")
+            return redirect(url_for("templates", tab="mine"))
+
+        # GET — figure out the starting document.
+        edit = None
+        if request.args.get("edit"):
+            if target == "system":
+                edit = D.query("SELECT * FROM system_templates WHERE id=?",
+                               (request.args.get("edit"),), one=True)
+            else:
+                edit = D.query("SELECT * FROM templates WHERE id=? AND account_id=?",
+                               (request.args.get("edit"), aid), one=True)
+        elif request.args.get("use"):
+            st = D.query("SELECT * FROM system_templates WHERE id=? AND published=1",
+                         (request.args.get("use"),), one=True)
+            if st:   # start FROM a system template, but save as a new personal copy
+                edit = {"id": None, "name": st["name"], "subject": st["subject"],
+                        "content": st["content"], "folder": st["category"]}
+        folders = sorted(set(r["name"] for r in D.query(
+            "SELECT name FROM template_folders WHERE account_id=?", (aid,)))
+            | set(r["folder"] for r in D.query(
+                "SELECT DISTINCT folder FROM templates WHERE account_id=?", (aid,)))) \
+            or ["General"]
+        categories = sorted(set(r["category"] for r in D.query(
+            "SELECT DISTINCT category FROM system_templates"))) \
+            or ["Education", "Healthcare", "Restaurant", "Finance", "Marketing"]
+        return render_template("builder.html", target=target, edit=edit,
+                               folders=folders, categories=categories)
 
     # ---- Admin: System Template Library (master, shared with all users) --- #
     @app.route("/admin/templates", methods=["GET", "POST"])

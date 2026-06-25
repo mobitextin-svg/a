@@ -16,12 +16,40 @@
   <form method="post">
     <input type="hidden" name="action" value="create">
     <div class="row"><input name="name" placeholder="Campaign name" required>
-      <input name="subject" placeholder="Subject line"></div>
-    <label>Body</label>
-    <textarea name="body" placeholder="Write your email… use {{ '{{name}}' }} for personalization"></textarea>
+      <input name="subject" id="cmp_subject" placeholder="Subject line"></div>
+    <label>Select Template <span class="faint small">(⭐ System or 📁 My Templates — fills the email below)</span></label>
+    <div class="row" style="gap:8px;align-items:flex-end">
+      <select id="tplPick" style="flex:2">
+        <option value="">— Start from scratch —</option>
+        {% set groups = tpl_picker | groupby('group') %}
+        {% for g, items in groups %}
+        <optgroup label="{{ g }}">
+          {% for t in items %}<option value="{{ t.gid }}">{{ t.name }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+      <a class="btn ghost" href="{{ url_for('builder') }}" style="flex:0;white-space:nowrap">🎨 Visual Builder</a>
+    </div>
+    <label style="margin-top:10px">Body</label>
+    <textarea name="body" id="cmp_body" placeholder="Write your email… use {{ '{{name}}' }} for personalization"></textarea>
+    <div id="tplPrev" class="card tight" style="display:none;background:#fff;color:#111;margin-top:8px;max-height:200px;overflow:auto"></div>
     <div style="margin-top:12px"><button class="btn">Save draft</button></div>
   </form>
 </div>
+<script type="application/json" id="tplData">{{ tpl_picker | tojson }}</script>
+<script>
+(function(){
+  var data={}; try{ JSON.parse(document.getElementById('tplData').textContent).forEach(function(t){data[t.gid]=t;}); }catch(e){}
+  var pick=document.getElementById('tplPick');
+  pick && pick.addEventListener('change',function(){
+    var t=data[pick.value]; var prev=document.getElementById('tplPrev');
+    if(!t){prev.style.display='none';return;}
+    if(t.subject && !document.getElementById('cmp_subject').value) document.getElementById('cmp_subject').value=t.subject;
+    document.getElementById('cmp_body').value=t.content;
+    prev.innerHTML=t.content; prev.style.display='block';
+  });
+})();
+</script>
 
 <div class="card">
   <div class="section-head"><h2>{{ status_filter or 'All' }} campaigns</h2></div>
