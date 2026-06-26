@@ -2385,7 +2385,7 @@ def register_modules(app):
                            " category, name")
         system = {}
         for r in sys_rows:
-            system.setdefault(r["category"], []).append(r)
+            system.setdefault(r["category"], []).append(dict(r))
         # Personal templates.
         mine = D.query("SELECT * FROM templates WHERE account_id=? AND trashed=0 ORDER BY"
                        " folder, id DESC", (aid,))

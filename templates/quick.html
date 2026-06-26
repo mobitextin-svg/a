@@ -28,11 +28,12 @@
   .cat-group-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
     opacity:.6;margin-bottom:8px}
   .cat-picker-grid{display:flex;flex-wrap:wrap;gap:8px}
-  .cat-pick-btn{padding:8px 14px;border:2px solid var(--line2,#ddd);border-radius:8px;
-    background:var(--panel2,transparent);cursor:pointer;font-size:.9rem;
+  .cat-pick-btn{padding:8px 14px;border:2px solid rgba(255,255,255,0.18);border-radius:8px;
+    background:rgba(255,255,255,0.06);color:#fff !important;cursor:pointer;font-size:.9rem;
     transition:border-color .15s,background .15s}
-  .cat-pick-btn:hover{border-color:var(--brand,#3b4edb)}
-  .cat-pick-btn.selected{border-color:var(--brand,#3b4edb);background:color-mix(in srgb,var(--brand,#3b4edb) 10%,transparent);font-weight:600}
+  .cat-pick-btn:hover{border-color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.1)}
+  .cat-pick-btn.selected{border-color:var(--brand,#3b4edb);background:var(--brand,#3b4edb);color:#fff !important;font-weight:600}
+  .cat-group-label{color:rgba(255,255,255,0.55) !important}
   .cat-manager summary{color:var(--muted,#888);font-size:.9rem}
   .cat-manager summary:hover{color:var(--ink)}
 </style>
