@@ -1436,9 +1436,19 @@ def register_modules(app):
                              " status='active'", (aid,), one=True)["c"]
         domains = D.query("SELECT domain FROM domains WHERE account_id=? ORDER BY"
                           " reputation DESC", (aid,))
+        # Category sidebars for template picker
+        sys_categories = sorted(set(
+            t["group"].replace("⭐ ", "") for t in tpl_picker if t["group"].startswith("⭐")))
+        my_folders = sorted(set(
+            r["name"] for r in D.query(
+                "SELECT name FROM template_folders WHERE account_id=?", (aid,))
+        ) | set(
+            t["folder"] or "General" for t in my_tpl))
+        folders = my_folders or ["General"]
         return render_template("campaign_wizard.html", tpl_picker=tpl_picker,
                                rcpt_lists=rcpt_lists, all_active=all_active,
-                               domains=domains, default_from=current_user()["email"])
+                               domains=domains, default_from=current_user()["email"],
+                               sys_categories=sys_categories, folders=folders)
 
     @app.route("/campaigns/analyze", methods=["POST"])
     @login_required
