@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Bulk Email Sender{% endblock %}
+{% block content %}
+<h1>Bulk Email Sender</h1>
+<p class="muted">Compose, personalize, A/B test and schedule — then watch the delivery queue.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>Compose</h2>
+    <form method="post" action="{{ url_for('campaigns') }}">
+      <input type="hidden" name="action" value="create">
+      <div class="row"><input name="name" placeholder="Campaign name" required>
+        <select name="template_hint"><option>Start from scratch</option>
+          {% for t in templates %}<option>{{ t }}</option>{% endfor %}</select></div>
+      <label>Subject line — <span class="faint">A/B variant A</span></label>
+      <input name="subject" placeholder="Your subject">
+      <label>Body</label>
+      <textarea name="body" placeholder="Hi {{ '{{name}}' }}, …" style="min-height:140px"></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn">Save &amp; review</button>
+        <a class="btn ghost" href="{{ url_for('campaigns') }}">Go to campaigns</a>
+      </div>
+    </form>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Templates</h2>
+      <div class="feature-grid">
+        {% for t in templates %}<div class="feature"><h4>{{ t }}</h4><p>Branded, responsive layout</p></div>{% endfor %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Sender toolkit</h2>
+      <div class="kv"><span>🧪 A/B Testing</span><span class="dot-ok">Ready</span></div>
+      <div class="kv"><span>🔀 Personalization merge tags</span><span class="dot-ok">Ready</span></div>
+      <div class="kv"><span>📎 Attachments</span><span class="dot-ok">Up to 25 MB</span></div>
+      <div class="kv"><span>📥 Inbox placement test</span><span class="dot-ok">Seed list</span></div>
+      <div class="kv"><span>🔥 Warm-up status</span><span class="dot-warn">2 pools warming</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Delivery queue</h2>
+  <table>
+    <thead><tr><th>Campaign</th><th>Status</th><th class="num">Queued</th><th class="num">Sent</th><th>Progress</th></tr></thead>
+    <tbody>
+    {% for c in queue %}
+      {% set pct = (100 * c.sent / c.recipients)|round(0,'floor')|int if c.recipients else 0 %}
+      <tr><td>{{ c.name }}</td><td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="num">{{ '{:,}'.format(c.recipients - c.sent) }}</td>
+        <td class="num">{{ '{:,}'.format(c.sent) }}</td>
+        <td style="width:160px"><div class="meter"><i style="width:{{ pct }}%"></i></div></td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">Nothing sending right now.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

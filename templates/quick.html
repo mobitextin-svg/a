@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Create Email Template{% endblock %}
+{% block content %}
+{% set fields = (edit.fields if edit else {}) or {} %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/quill/quill.snow.css') }}">
+<style>
+  .qe-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+  .qe-grid .f{display:flex;flex-direction:column;gap:3px}
+  .qe-grid .full{grid-column:1 / -1}
+  #qeEditor{background:#fff;color:#111;min-height:190px;border-radius:0 0 8px 8px}
+  .ql-toolbar.ql-snow{border-radius:8px 8px 0 0}
+  .qe-vars{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
+  .qe-preview{display:none;border:1px solid var(--line2);border-radius:10px;margin-top:12px;overflow:auto;max-height:560px}
+  .qe-fallback{display:none}
+  input[type=color]{height:38px;width:60px;padding:2px}
+  .mode-tabs{display:flex;gap:6px;margin:10px 0}
+  .mode-tabs button{flex:1;padding:12px;border:1px solid var(--line2);background:var(--panel);
+    color:var(--ink);border-radius:10px;cursor:pointer;font-weight:600}
+  .mode-tabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .imgrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .btnstyles{display:flex;gap:6px;flex-wrap:wrap}
+  .btnstyles label{display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--line2);
+    border-radius:8px;cursor:pointer;font-size:13px}
+  .chip{display:inline-block;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;
+    padding:2px 8px;font-size:12px;cursor:pointer}
+  .chip:hover{background:var(--brand);color:#fff}
+</style>
+
+<div class="section-head">
+  <h1>📧 Create Email Template
+    <span class="badge {{ 'b-risky' if target=='system' else 'b-Running' }}">{{ 'System (all users)' if target=='system' else 'My Templates' }}</span></h1>
+  <a class="btn ghost" href="{{ url_for('builder', target=target) }}">🎨 Advanced builder</a>
+</div>
+
+<!-- MODE SWITCH -->
+<div class="mode-tabs">
+  <button type="button" id="modeManual" class="on" onclick="setMode('manual')">✍️ Manual — I'll write it</button>
+  <button type="button" id="modeAuto" onclick="setMode('auto')">🤖 Auto — AI writes it for me</button>
+</div>
+
+<form method="post" id="qeForm" action="{{ url_for('quick_builder', target=target) }}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" id="qeAction" value="save">
+  <input type="hidden" name="body_html" id="qeBodyField">
+  <input type="hidden" name="btn_style" id="qeBtnStyle" value="{{ fields.btn_style or 'filled' }}">
+  {% if edit and edit.id %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+
+  <!-- AUTO PANEL (hidden in manual mode) -->
+  <div class="card" id="autoPanel" style="display:none;background:var(--panel2);border:1px dashed var(--brand)">
+    <label><b>🤖 Describe your email — one click writes everything</b></label>
+    <p class="faint small" style="margin:4px 0 8px">e.g. “BPCL SBI credit card offer, 2,000 bonus points, for Chennai customers”. AI fills the name, subject, body, button &amp; sign-off below — then you edit anything.</p>
+    <textarea name="ai_topic" id="aiTopic" style="min-height:60px" placeholder="Describe the offer or message…"></textarea>
+    <div class="row" style="gap:8px;align-items:flex-end;margin-top:8px">
+      <div style="flex:1"><label class="small">Tone</label>
+        <select name="tone"><option value="friendly">Friendly</option>
+          <option value="professional">Professional</option>
+          <option value="urgent">Urgent</option></select></div>
+      <button class="btn" type="button" id="qeAiBtn" style="flex:0 0 auto">✨ Generate everything</button>
+    </div>
+    <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+      <span class="faint small">Quick start:</span>
+      {% for p in ['Festival offer','Welcome email','Payment reminder','Site visit invite','Follow-up'] %}
+        <span class="chip" onclick="document.getElementById('aiTopic').value='{{ p }}';">{{ p }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <!-- BASICS -->
+  <div class="card">
+    <div class="qe-grid">
+      <div class="f"><label>Template name</label>
+        <input name="name" value="{{ edit.name if edit else '' }}" placeholder="BPCL SBI Card Offer" required></div>
+      {% if target=='system' %}
+      <div class="f"><label>Category</label>
+        <input name="category" list="cats" value="{{ edit.category if edit else '' }}" placeholder="Finance" required>
+        <datalist id="cats">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist></div>
+      {% else %}
+      <div class="f"><label>Folder</label>
+        <select name="folder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
+      {% endif %}
+
+      <div class="f full"><label>Email subject</label>
+        <input name="subject" id="subjField" value="{{ edit.subject if edit else '' }}" placeholder="2,000 bonus points on the BPCL SBI Card">
+        <div class="qe-vars"><span class="faint small">Insert:</span>
+          {% for key,lbl in subject_vars %}<span class="chip" onclick="insertField('subjField','{{ '{{' ~ key ~ '}}' }}')">{{ lbl }}</span>{% endfor %}</div></div>
+
+      <div class="f full"><label>Preview text <span class="faint small">— the grey line shown in the inbox next to the subject</span></label>
+        <input name="preheader" id="preField" value="{{ fields.preheader or '' }}" placeholder="Plus 13x rewards on fuel — apply before 27 Jun.">
+        <div class="qe-vars"><span class="faint small">Insert:</span>
+          {% for key,lbl in subject_vars %}<span class="chip" onclick="insertField('preField','{{ '{{' ~ key ~ '}}' }}')">{{ lbl }}</span>{% endfor %}</div></div>
+
+      {% if target=='system' %}
+      <div class="f"><label>Published</label>
+        <label style="display:flex;align-items:center;gap:6px;height:38px">
+          <input type="checkbox" name="published" {{ 'checked' if (not edit) }} style="width:auto"> Visible to all users</label></div>
+      {% endif %}
+      <div class="f full"><label>Colour theme</label>
+        <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap">
+          {% for lbl,hexc in themes %}
+          <span class="chip" style="background:{{ hexc }};color:#fff;border-color:{{ hexc }}" onclick="setTheme('{{ hexc }}')">{{ lbl }}</span>{% endfor %}
+          <span class="faint small">or custom →</span>
+          <input type="color" name="accent" id="accentField" value="{{ fields.accent or '#3b4edb' }}">
+        </div></div>
+    </div>
+  </div>
+
+  <input type="hidden" name="company" id="companyField" value="{{ company }}">
+
+  <!-- IMAGES -->
+  <div class="card">
+    <div class="qe-grid">
+      <div class="f full"><label>Header logo <span class="faint small">— top-left of the email</span></label>
+        <div class="btnstyles" id="logoModes">
+          {% set lm = fields.logo_mode or 'logo_name' %}
+          <label><input type="radio" name="logo_mode" value="logo_name" {{ 'checked' if lm=='logo_name' }}> Logo + company name</label>
+          <label><input type="radio" name="logo_mode" value="logo" {{ 'checked' if lm=='logo' }}> Logo only</label>
+          <label><input type="radio" name="logo_mode" value="name" {{ 'checked' if lm=='name' }}> Company name only</label>
+        </div>
+        <input id="companyVisible" value="{{ company }}" placeholder="Company name shown in header"
+               style="margin-top:6px" oninput="document.getElementById('companyField').value=this.value"></div>
+
+      <div class="f full"><label>Logo image <span class="faint small">(upload or generate — skipped if “Company name only”)</span></label>
+        <div class="imgrow">
+          <input name="logo" id="logoUrl" value="{{ fields.logo or '' }}" placeholder="Paste URL, upload, or generate →" style="flex:1;min-width:180px">
+          <button type="button" class="btn ghost sm" id="logoBtn">📤 Upload</button>
+          <button type="button" class="btn ghost sm" id="logoGen">🎨 Generate</button>
+          <input type="file" id="logoFile" accept="image/*" style="display:none">
+        </div><span class="faint small" id="logoStatus"></span></div>
+
+      <div class="f full"><label>Header image <span class="faint small">— shown first, full-width (optional)</span></label>
+        <div class="imgrow">
+          <input name="hero" id="heroUrl" value="{{ fields.hero or '' }}" placeholder="Paste URL, upload, or generate a banner →" style="flex:1;min-width:180px">
+          <button type="button" class="btn ghost sm" id="heroBtn">📤 Upload</button>
+          <button type="button" class="btn ghost sm" id="heroGen">🎨 Generate banner</button>
+          <input type="file" id="heroFile" accept="image/*" style="display:none">
+        </div><span class="faint small" id="heroStatus"></span>
+        <img id="heroThumb" src="{{ fields.hero or '' }}" style="max-height:90px;border-radius:6px;margin-top:6px;{{ '' if fields.hero else 'display:none' }}"></div>
+      <div class="f full"><label>Header image link <span class="faint small">— make the banner clickable (optional)</span></label>
+        <input name="hero_url" value="{{ fields.hero_url or '' }}" placeholder="https://example.com/landing"></div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="card">
+    <label>Message body</label>
+    <p class="faint small" style="margin:2px 0 8px">Greeting <b>“Hi {{ '{{name}}' }},”</b> is added for you. Write the rest below.</p>
+    <div class="qe-vars">
+      <span class="faint small">Insert variable:</span>
+      {% for key,lbl in variables %}
+        <span class="chip" onclick="insertVar('{{ '{{' ~ key ~ '}}' }}')">{{ lbl }}</span>
+      {% endfor %}
+      <span class="faint small">— tip: <code>{{ '{{city | your area}}' }}</code> shows a fallback if empty.</span>
+    </div>
+    {% set body0 = fields.body_html or '' %}
+    <div id="qeEditor">{{ body0|safe }}</div>
+    <div class="qe-fallback" id="qeFallback">
+      <textarea id="qeFallbackArea" style="font-family:ui-monospace,monospace;min-height:190px;width:100%">{{ body0 }}</textarea>
+    </div>
+  </div>
+
+  <!-- BUTTON -->
+  <div class="card">
+    <label>Button <span class="faint small">(leave text empty for no button)</span></label>
+    <div class="qe-grid">
+      <div class="f"><label class="small">Button text</label>
+        <div class="imgrow">
+          <input name="btn_text" id="btnText" value="{{ fields.btn_text or '' }}" placeholder="View Offer >>" style="flex:1">
+          <button type="button" class="btn ghost sm" id="btnSuggest">✨ Suggest</button>
+        </div></div>
+      <div class="f"><label class="small">Button link</label>
+        <input name="btn_url" value="{{ fields.btn_url or '' }}" placeholder="https://example.com/offer"></div>
+      <div class="f full"><label class="small">Button style</label>
+        <div class="btnstyles" id="btnStyles">
+          {% for v,lbl in [('filled','Filled'),('outline','Outline'),('pill','Pill'),('link','Text link')] %}
+          <label><input type="radio" name="btn_style_r" value="{{ v }}" {{ 'checked' if (fields.btn_style or 'filled')==v }}> {{ lbl }}</label>
+          {% endfor %}
+        </div></div>
+    </div>
+  </div>
+
+  <!-- SIGN-OFF + ADDRESS + SOCIAL -->
+  <div class="card">
+    <div class="qe-grid">
+      <div class="f full"><label>Sign-off</label>
+        <input name="signoff" value="{{ fields.signoff or '' }}" placeholder="Regards, Team BankBazaar"></div>
+      <div class="f full"><label>🔗 Social links <span class="faint small">— shown as icons in the footer (leave blank to hide)</span></label>
+        <div class="qe-grid" style="gap:8px">
+          <input name="soc_facebook"  value="{{ fields.soc_facebook or '' }}"  placeholder="📘 Facebook URL">
+          <input name="soc_instagram" value="{{ fields.soc_instagram or '' }}" placeholder="📸 Instagram URL">
+          <input name="soc_twitter"   value="{{ fields.soc_twitter or '' }}"   placeholder="🐦 X / Twitter URL">
+          <input name="soc_linkedin"  value="{{ fields.soc_linkedin or '' }}"  placeholder="💼 LinkedIn URL">
+          <input name="soc_youtube"   value="{{ fields.soc_youtube or '' }}"   placeholder="▶️ YouTube URL">
+          <input name="soc_whatsapp"  value="{{ fields.soc_whatsapp or '' }}"  placeholder="💬 WhatsApp URL">
+        </div></div>
+      <div class="f full">
+        <label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="addrToggle" style="width:auto" {{ 'checked' if fields.address }}>
+          Add business address in footer <span class="faint small">(builds trust + good for compliance)</span></label>
+        <textarea name="address" id="addrBox" placeholder="Zyvo Tools, Tambaram, Chennai 600045&#10;+91 92949 69697 · hello@zyvo.in"
+          style="margin-top:6px;min-height:64px;{{ '' if fields.address else 'display:none' }}">{{ fields.address or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="gap:8px;margin-top:4px">
+    <button class="btn" type="button" id="qeSaveBtn">💾 Save template</button>
+    <button class="btn ghost" type="button" id="qePreviewBtn">👁 Preview</button>
+    <a class="btn ghost" href="{{ url_for('admin_templates') if target=='system' else url_for('templates', tab='mine') }}">Cancel</a>
+  </div>
+</form>
+
+<div class="qe-preview card" id="qePreview"></div>
+
+<script src="{{ url_for('static', filename='vendor/quill/quill.min.js') }}"></script>
+<script>
+(function(){
+  var form=document.getElementById('qeForm');
+  var bodyField=document.getElementById('qeBodyField');
+  var quill=null;
+  var COMPANY={{ company|tojson }};
+  var csrf=form.csrf_token.value;
+
+  // ---- mode switch ----
+  window.setMode=function(m){
+    var auto=m==='auto';
+    document.getElementById('autoPanel').style.display=auto?'block':'none';
+    document.getElementById('modeAuto').classList.toggle('on',auto);
+    document.getElementById('modeManual').classList.toggle('on',!auto);
+  };
+
+  // ---- Quill rich text ----
+  function bootFallback(){
+    document.getElementById('qeEditor').style.display='none';
+    document.getElementById('qeFallback').style.display='block';
+  }
+  if(window.Quill){
+    try{ quill=new Quill('#qeEditor',{theme:'snow',modules:{toolbar:[
+      ['bold','italic'],[{list:'bullet'},{list:'ordered'}],['link'],['clean']]}}); }
+    catch(e){ bootFallback(); }
+  } else { bootFallback(); }
+
+  window.insertVar=function(tok){
+    if(quill){ var r=quill.getSelection(true); quill.insertText(r?r.index:quill.getLength(), tok, 'user'); }
+    else { var ta=document.getElementById('qeFallbackArea'); var p=ta.selectionStart||ta.value.length;
+      ta.value=ta.value.slice(0,p)+tok+ta.value.slice(p); }
+  };
+  // Insert a variable into a plain text input (subject / preview text).
+  window.insertField=function(id,tok){
+    var el=document.getElementById(id); var p=el.selectionStart!=null?el.selectionStart:el.value.length;
+    el.value=el.value.slice(0,p)+tok+el.value.slice(p); el.focus();
+  };
+  // One-click colour theme → set the accent everywhere.
+  window.setTheme=function(hex){ document.getElementById('accentField').value=hex; };
+  function bodyHtml(){ return quill?quill.root.innerHTML:document.getElementById('qeFallbackArea').value; }
+
+  // ---- button style radios → hidden field ----
+  document.getElementById('btnStyles').addEventListener('change',function(e){
+    if(e.target.name==='btn_style_r') document.getElementById('qeBtnStyle').value=e.target.value;
+  });
+
+  // ---- address toggle ----
+  document.getElementById('addrToggle').addEventListener('change',function(){
+    document.getElementById('addrBox').style.display=this.checked?'block':'none';
+    if(!this.checked) document.getElementById('addrBox').value='';
+  });
+
+  // ---- image upload ----
+  function uploadImage(fileEl,urlEl,statusEl,thumbEl){
+    var f=fileEl.files[0]; if(!f) return;
+    if(f.size>6*1024*1024){ statusEl.textContent='Too large (max 6 MB).'; return; }
+    statusEl.textContent='Uploading…';
+    var fd=new FormData(); fd.append('file',f);
+    fetch('{{ url_for("upload_image") }}',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+      .then(function(r){ return r.json().then(function(j){return{ok:r.ok,j:j};}); })
+      .then(function(res){ if(!res.ok){ statusEl.textContent=res.j.error||'Failed.'; return; }
+        urlEl.value=res.j.url; statusEl.textContent='✓ Uploaded';
+        if(thumbEl){ thumbEl.src=res.j.url; thumbEl.style.display='block'; } })
+      .catch(function(){ statusEl.textContent='Upload failed.'; });
+  }
+  function wireUpload(btn,file,url,status,thumb){
+    document.getElementById(btn).addEventListener('click',function(){ document.getElementById(file).click(); });
+    document.getElementById(file).addEventListener('change',function(){
+      uploadImage(this,document.getElementById(url),document.getElementById(status),thumb?document.getElementById(thumb):null); });
+  }
+  wireUpload('logoBtn','logoFile','logoUrl','logoStatus',null);
+  wireUpload('heroBtn','heroFile','heroUrl','heroStatus','heroThumb');
+
+  // ---- image generate (banner / logo) ----
+  function genImage(kind,urlEl,statusEl,thumbEl){
+    statusEl.textContent='Generating…';
+    var fd=new FormData();
+    fd.append('kind',kind);
+    fd.append('accent',document.getElementById('accentField').value);
+    fd.append('company',COMPANY||'Your Company');
+    fd.append('headline',document.getElementById('subjField').value||'');
+    fetch('{{ url_for("generate_image") }}',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j.url){ urlEl.value=j.url; statusEl.textContent='✓ Generated';
+        if(thumbEl){ thumbEl.src=j.url; thumbEl.style.display='block'; } } else statusEl.textContent='Failed.'; })
+      .catch(function(){ statusEl.textContent='Generate failed.'; });
+  }
+  document.getElementById('heroGen').addEventListener('click',function(){
+    genImage('banner',document.getElementById('heroUrl'),document.getElementById('heroStatus'),document.getElementById('heroThumb')); });
+  document.getElementById('logoGen').addEventListener('click',function(){
+    genImage('logo',document.getElementById('logoUrl'),document.getElementById('logoStatus'),null); });
+
+  // ---- AI suggest button text ----
+  document.getElementById('btnSuggest').addEventListener('click',function(){
+    var opts=['View Offer >>','Claim Now','Book Site Visit','Get Started','Apply Today','See Details'];
+    document.getElementById('btnText').value=opts[Math.floor(Math.random()*opts.length)]; });
+
+  // ---- submit actions ----
+  function sync(){ bodyField.value=bodyHtml(); }
+  document.getElementById('qeSaveBtn').addEventListener('click',function(){
+    if(!form.name.value.trim()){ alert('Please give the template a name.'); form.name.focus(); return; }
+    document.getElementById('qeAction').value='save'; sync(); form.submit(); });
+  document.getElementById('qeAiBtn').addEventListener('click',function(){
+    if(!document.getElementById('aiTopic').value.trim()){ alert('Describe the email first.'); return; }
+    document.getElementById('qeAction').value='ai'; sync(); form.submit(); });
+
+  // If we just came back from AI generation, keep Auto mode open.
+  {% if edit and fields.body_html %}{% endif %}
+
+  // ---- live preview ----
+  document.getElementById('qePreviewBtn').addEventListener('click',function(){
+    var box=document.getElementById('qePreview');
+    if(box.style.display==='block'){ box.style.display='none'; return; }
+    var accent=document.getElementById('accentField').value||'#3b4edb';
+    var logo=document.getElementById('logoUrl').value.trim();
+    var hero=document.getElementById('heroUrl').value.trim();
+    var bt=document.getElementById('btnText').value.trim(), bu=form.btn_url.value.trim()||'#';
+    var st=document.getElementById('qeBtnStyle').value;
+    var bcss=st==='outline'?('background:#fff;color:'+accent+';border:2px solid '+accent+';padding:12px 34px;border-radius:6px')
+      :st==='pill'?('background:'+accent+';color:#fff;padding:14px 40px;border-radius:999px')
+      :st==='link'?('color:'+accent+';text-decoration:underline')
+      :('background:'+accent+';color:#fff;padding:14px 36px;border-radius:6px');
+    var logoMode=(document.querySelector('input[name=logo_mode]:checked')||{}).value||'logo_name';
+    var comp=document.getElementById('companyField').value||COMPANY||'Your Company';
+    var nameSpan='<span style="font-size:18px;font-weight:bold;color:#222;vertical-align:middle">'+comp+'</span>';
+    var imgTag=logo?('<img src="'+logo+'" style="height:38px;vertical-align:middle">'):'';
+    var logoCell = (logoMode==='name'||(logoMode!=='logo'&&!logo)) ? nameSpan
+      : (logoMode==='logo'&&logo) ? imgTag
+      : (logo ? imgTag+'<span style="display:inline-block;width:10px"></span>'+nameSpan : nameSpan);
+    var heroUrl=(form.hero_url.value||'').trim();
+    var heroImg=hero?('<img src="'+hero+'" style="width:100%;display:block">'):'';
+    var heroRow=heroImg?(heroUrl?('<a href="'+heroUrl+'">'+heroImg+'</a>'):heroImg):'';
+    // Social icons row (matches the saved footer).
+    var socDefs=[['📘',form.soc_facebook.value],['📸',form.soc_instagram.value],['🐦',form.soc_twitter.value],['💼',form.soc_linkedin.value],['▶️',form.soc_youtube.value],['💬',form.soc_whatsapp.value]];
+    var socRow=socDefs.filter(function(s){return (s[1]||'').trim();})
+      .map(function(s){return '<a href="'+s[1].trim()+'" style="font-size:20px;margin:0 7px;text-decoration:none">'+s[0]+'</a>';}).join('');
+    socRow=socRow?('<div style="text-align:center;padding:16px 28px 4px">'+socRow+'</div>'):'';
+    var button=bt?('<div style="text-align:center;padding:26px"><a href="'+bu+'" style="'+bcss+';text-decoration:none;font-weight:bold;display:inline-block">'+bt+'</a></div>'):'';
+    var addr=document.getElementById('addrBox').value.trim();
+    var addrRow=addr?('<div style="padding:0 28px 18px;color:#777;font-size:12px">'+addr.replace(/\n/g,'<br>')+'</div>'):'';
+    var pre=document.getElementById('preField').value.trim();
+    var preLine=pre?('<div style="font-size:11px;color:#aaa;padding:2px 8px 6px">Inbox preview: '+pre+'</div>'):'';
+    box.innerHTML='<div style="background:#e7e7e7;padding:18px"><div style="max-width:600px;margin:0 auto">'+preLine+'<div style="background:#fff;border-radius:4px;font-family:Arial">'+
+      '<div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div>'+logoCell+'</div><div style="font-size:12px"><a href="#" style="color:#888;text-decoration:none">View in browser</a></div></div><div style="height:4px;background:'+accent+'"></div>'+heroRow+
+      '<div style="padding:24px 28px;color:#222;font-size:15px;line-height:1.6"><p>Hi Mariappan,</p>'+bodyHtml().replace(/\{\{name[^}]*\}\}/g,'Mariappan').replace(/\{\{company[^}]*\}\}/g,comp).replace(/\{\{city[^}]*\}\}/g,'Chennai').replace(/\{\{state[^}]*\}\}/g,'Tamil Nadu')+'</div>'+button+
+      '<div style="padding:8px 28px 18px;color:#222;font-size:14px">'+(form.signoff.value||'Regards')+'</div>'+socRow+addrRow+
+      '<div style="padding:18px 28px;border-top:1px solid #e5e5e5;color:#999;font-size:11px;text-align:center">This is an auto-generated email. Please do not reply.<br><a href="#" style="color:'+accent+'">Unsubscribe</a> | <a href="#" style="color:'+accent+'">Report Spam</a></div>'+
+      '</div></div></div>';
+    box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  });
+})();
+</script>
+{% endblock %}

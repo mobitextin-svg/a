@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Email Verification{% endblock %}
+{% block content %}
+<h1>Email Verification</h1>
+<p class="muted">Real-time syntax, MX, disposable, role &amp; catch-all checks with a deliverability score.</p>
+
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Valid</div><div class="v" style="color:var(--good)">{{ summary.get('valid',0) }}</div></div>
+  <div class="stat"><div class="k">Risky</div><div class="v" style="color:var(--warn)">{{ summary.get('risky',0) }}</div></div>
+  <div class="stat"><div class="k">Invalid</div><div class="v" style="color:var(--bad)">{{ summary.get('invalid',0) }}</div></div>
+  <div class="stat"><div class="k">Total checked</div><div class="v">{{ (summary.values()|sum) }}</div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Single verification</h2>
+    <form method="post">
+      <input type="hidden" name="mode" value="single">
+      <label>Email address</label>
+      <div class="row">
+        <input name="email" placeholder="someone@example.com" required style="flex:3">
+        <button class="btn" style="flex:1">Verify</button>
+      </div>
+    </form>
+    {% if result %}
+      <div class="card tight" style="margin-top:14px;background:var(--panel2)">
+        <div class="section-head">
+          <div><b>{{ result.email }}</b>
+            <span class="badge b-{{ result.result }}" style="margin-left:6px">{{ result.result|upper }}</span>
+          </div>
+          <div class="score-ring" style="color:{{ 'var(--good)' if result.score>=80 else ('var(--warn)' if result.score>=45 else 'var(--bad)') }}">{{ result.score }}</div>
+        </div>
+        <p class="muted small" style="margin:.2em 0 .6em">{{ result.reason }}
+          {% if result.suggestion %}· suggested: <b>{{ result.local }}@{{ result.suggestion }}</b>{% endif %}</p>
+        <div class="row" style="margin-bottom:8px">
+          <span class="pill">Deliverability <b>{{ result.score }}/100</b></span>
+          <span class="pill">Risk <b style="color:{{ 'var(--bad)' if result.risk_band=='high' else ('var(--warn)' if result.risk_band=='medium' else 'var(--good)') }}">{{ result.risk_score }} ({{ result.risk_band }})</b></span>
+          <span class="pill">Domain age <b>~{{ result.domain_age_days }}d</b></span>
+        </div>
+        {% for k, v in result.checks.items() %}
+          <span class="tag">{{ '✔' if v else '✗' }} {{ k.replace('_',' ') }}</span>
+        {% endfor %}
+        <div class="small faint" style="margin-top:8px">DNS lookup: {{ 'live' if result.live_dns else 'heuristic (no outbound network)' }}</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Bulk verification</h2>
+    <form method="post">
+      <input type="hidden" name="mode" value="bulk">
+      <label>Paste addresses (one per line, or comma separated)</label>
+      <textarea name="emails" placeholder="a@x.com&#10;b@y.com&#10;c@z.com" required></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn">Verify list</button>
+        <a class="btn ghost" href="{{ url_for('verification_export') }}">⬇ Export all (CSV)</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if bulk_results %}
+<div class="card">
+  <h2>Bulk results ({{ bulk_results|length }})</h2>
+  <table>
+    <thead><tr><th>Email</th><th>Result</th><th class="num">Score</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for r in bulk_results %}
+      <tr><td>{{ r.email }}</td><td><span class="badge b-{{ r.result }}">{{ r.result }}</span></td>
+      <td class="num">{{ r.score }}</td><td class="muted small">{{ r.reason }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="section-head"><h2>Verification history</h2>
+    <a class="btn ghost sm" href="{{ url_for('verification_export') }}">⬇ Export CSV</a></div>
+  <table>
+    <thead><tr><th>Email</th><th>Result</th><th class="num">Score</th><th>Reason</th><th>Source</th><th>When</th></tr></thead>
+    <tbody>
+    {% for h in history %}
+      <tr><td>{{ h.email }}</td><td><span class="badge b-{{ h.result }}">{{ h.result }}</span></td>
+      <td class="num">{{ h.score }}</td><td class="muted small">{{ h.reason }}</td>
+      <td class="small">{{ h.source }}</td><td class="faint small">{{ h.created_at }}</td></tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No verifications yet — try one above.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MailSaaS{% endblock %} · MailSaaS</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📨</text></svg>">
+</head>
+<body data-simple-default="{{ '1' if simple_default else '0' }}" data-role="{{ 'admin' if is_admin_user else 'user' }}">
+{% set endpoints = {
+  'dashboard':'dashboard','verification':'verification','sender':'sender',
+  'ai':'ai_center','deliverability':'deliverability','templates':'templates',
+  'marketplace':'marketplace','bounce':'bounce','complaints':'complaints_center',
+  'inboxtest':'inbox_testing','inboxanalysis':'inbox_analysis','dmarc':'dmarc','deliverai':'deliverability_ai',
+  'integrations':'integrations','gmail_pm':'postmaster_gmail','ms_snds':'postmaster_snds',
+  'blacklist':'blacklist_center','burstcamp':'burst_campaign',
+  'landing':'landing','finder':'finder','contacts':'contacts','campaigns':'campaigns',
+  'smtp':'smtp','pools':'pools','queue':'queue','warmup':'warmup','domains':'domains',
+  'rotsend':'rotation_sending','rotverify':'rotation_verification','burst':'burst','iphealth':'ip_health',
+  'reports':'reports','api':'api_keys','webhooks':'webhooks','automation':'automation',
+  'billing':'billing','team':'team','monitoring':'monitoring','whitelabel':'whitelabel',
+  'admin':'admin','systpl':'admin_templates','plans':'plans','coupons':'coupons','mktmgmt':'marketplace_mgmt',
+  'apimgmt':'api_mgmt','logs':'logs','backups':'backups',
+  'settings':'settings','enterprise':'enterprise'} %}
+<div class="app">
+  {% macro href_for(key) %}{% if key in endpoints %}{{ url_for(endpoints[key]) }}{% else %}{{ url_for('module_page', key=key) }}{% endif %}{% endmacro %}
+  <aside class="sidebar">
+    <div class="brand">📨 Mail<span class="dot">SaaS</span></div>
+    {% for label, keys in NAV_GROUPS %}
+      {% set grp_adv = 'More' in label %}
+      {% if not label %}
+        {# Standalone links (Dashboard) #}
+        {% for key in keys %}
+          <a class="nav-link {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
+            <span class="ic">{{ NAV_BY_KEY[key].icon }}</span><span>{{ NAV_BY_KEY[key].label }}</span></a>
+        {% endfor %}
+      {% elif keys|length == 1 and not grp_adv %}
+        {# Single-feature section → the header is a direct link #}
+        {% set key = keys[0] %}
+        <a class="nav-link {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
+          <span class="ic">{{ label.split(' ')[0] }}</span><span>{{ label.split(' ',1)[1] }}</span>
+          {% if nav_badges.get(key) %}<span class="nav-badge">{{ nav_badges[key] }}</span>{% endif %}</a>
+      {% else %}
+        {# Multi-feature section → collapsible #}
+        {% set open = (active in keys) %}
+        {% set ns = namespace(total=0) %}
+        {% for k in keys %}{% set ns.total = ns.total + (nav_badges.get(k) or 0) %}{% endfor %}
+        <div class="nav-sec {{ 'adv' if grp_adv else '' }}" data-sec>
+          <button type="button" class="nav-link nav-toggle {{ 'open' if open else '' }}">
+            <span class="ic">{{ label.split(' ')[0] }}</span><span>{{ label.split(' ',1)[1] }}</span>
+            {% if ns.total %}<span class="nav-badge">{{ ns.total }}</span>{% endif %}
+            <span class="caret">▸</span>
+          </button>
+          <div class="nav-sub" {{ '' if open else 'hidden' }}>
+            {% for key in keys if not (key == 'admin' and not is_admin_user) %}
+              <a class="nav-link sub {{ 'active' if active == key else '' }}" href="{{ href_for(key) }}">
+                <span class="ic">{{ NAV_BY_KEY[key].icon }}</span><span>{{ NAV_BY_KEY[key].label }}</span>
+                {% if nav_badges.get(key) %}<span class="nav-badge">{{ nav_badges[key] }}</span>{% endif %}</a>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+    <div class="mode-switch" id="modeSwitch" style="margin-top:14px">
+      <button data-mode="simple" class="ms-btn">Simple</button>
+      <button data-mode="advanced" class="ms-btn">Advanced</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb" style="display:flex;align-items:center;gap:10px">
+        <button class="iconbtn" id="navToggle" aria-label="Menu">☰</button>
+        {{ self.title() }}
+      </div>
+      <div class="right">
+        <button class="iconbtn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">☀️</button>
+        <span class="pill">Plan <b>{{ account.plan if account else '—' }}</b></span>
+        <span class="pill">Credits <b>{{ '{:,}'.format(account.credits) if account else 0 }}</b></span>
+        <span class="avatar">{{ (user.name[:1]|upper) if user else '?' }}</span>
+        <a class="small muted" href="{{ url_for('logout') }}">Sign out</a>
+      </div>
+    </div>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+    <script type="application/json" id="flash-data">
+      [{% for cat, msg in get_flashed_messages(with_categories=true) %}
+        {"cat": {{ cat|tojson }}, "msg": {{ msg|tojson }}}{{ "," if not loop.last }}
+      {% endfor %}]
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </div>
+</div>
+</body>
+</html>

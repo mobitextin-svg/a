@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Inbox Analysis{% endblock %}
+{% block content %}
+<div class="section-head">
+  <h1>📊 Inbox Analysis <span class="badge b-Running">⭐ Recommended</span></h1>
+</div>
+<p class="muted">The smart last step before you send — see exactly where your email will land,
+and fix every issue in one click.</p>
+
+{# ---- Campaign picker ---- #}
+<div class="card" style="margin-top:14px">
+  <form method="get" class="row" style="gap:10px;align-items:flex-end">
+    <div style="flex:2">
+      <label class="small">Analyse which campaign?</label>
+      <select name="cid" onchange="this.form.submit()">
+        {% for c in camps %}
+        <option value="{{ c.id }}" {{ 'selected' if selected and selected.id==c.id }}>
+          {{ c.name }} — {{ c.subject or 'no subject' }} ({{ c.status }})</option>
+        {% else %}
+        <option>No campaigns yet — create one first</option>
+        {% endfor %}
+      </select>
+    </div>
+    <a class="btn ghost sm" href="{{ url_for('campaigns') }}">＋ New campaign</a>
+  </form>
+</div>
+
+{% if report %}
+{# =================== HERO SCORE =================== #}
+{% set lvlcolor = 'var(--good)' if report.overall>=85 else ('var(--warn)' if report.overall>=65 else 'var(--bad)') %}
+<div class="card" style="border-color:{{ lvlcolor }};margin-top:14px">
+  <div class="grid g3" style="align-items:center">
+    <div style="text-align:center">
+      <div class="small muted" style="text-transform:uppercase;letter-spacing:.05em">Overall Deliverability</div>
+      <div class="score-ring" style="font-size:3.4rem;color:{{ lvlcolor }};line-height:1.1">{{ report.overall }}<span style="font-size:1.1rem;color:var(--muted)">/100</span></div>
+      <span class="badge {{ 'b-valid' if report.level=='good' else ('b-risky' if report.level=='warn' else 'b-invalid') }}">{{ report.verdict }}</span>
+    </div>
+    <div>
+      <div class="kv"><span>📥 Inbox probability</span><b>{{ report.content.score }}%</b></div>
+      <div class="kv"><span>🚨 Spam risk</span><b style="color:{{ 'var(--good)' if report.spam_level=='Low' else ('var(--warn)' if report.spam_level=='Medium' else 'var(--bad)') }}">{{ report.spam_risk }}/100 · {{ report.spam_level }}</b></div>
+      <div class="kv"><span>📈 Est. open rate</span><b>~{{ report.est_open }}%</b></div>
+      <div class="kv"><span>🌐 Sending domain</span><span class="faint small">{{ report.domain }}</span></div>
+    </div>
+    <div style="text-align:center">
+      <form method="post" action="{{ url_for('inbox_analysis') }}">
+        <input type="hidden" name="action" value="optimize">
+        <input type="hidden" name="cid" value="{{ selected.id }}">
+        <button class="btn" style="font-size:1rem;padding:12px 18px">⚡ One-click Auto-Optimize</button>
+      </form>
+      <p class="faint small" style="margin-top:8px">Softens spam words, adds unsubscribe,<br>footer &amp; personalisation automatically.</p>
+      <a class="btn ghost sm" href="{{ url_for('campaigns') }}" style="margin-top:6px">Skip &amp; go to Send →</a>
+    </div>
+  </div>
+</div>
+
+{# =================== 3-CARD BREAKDOWN =================== #}
+<div class="grid g3" style="margin-top:14px">
+  {# Inbox probability per provider #}
+  <div class="card">
+    <h2>📥 Inbox Probability</h2>
+    {% for prov, pct in report.providers.items() %}
+    <div class="kv" style="border:none;padding-bottom:2px"><span>{{ prov }}</span><b>{{ pct }}%</b></div>
+    <div class="meter" style="margin-bottom:8px"><i style="width:{{ pct }}%"></i></div>
+    {% endfor %}
+  </div>
+
+  {# Email health / authentication #}
+  <div class="card">
+    <h2>✅ Email Health</h2>
+    {% for label, ok in report.health %}
+    <div class="kv"><span>{{ label }}</span>
+      <span class="badge {{ 'b-valid' if ok else 'b-invalid' }}">{{ '✅ Pass' if ok else '❌ Fail' }}</span></div>
+    {% endfor %}
+    <div class="kv"><span>Domain reputation</span><b>{{ report.account.score|round|int }}/100</b></div>
+  </div>
+
+  {# Spam risk + content checks #}
+  <div class="card">
+    <h2>🚨 Spam &amp; Content</h2>
+    <div class="kv"><span>Spam score</span>
+      <span class="badge {{ 'b-valid' if report.spam_level=='Low' else ('b-risky' if report.spam_level=='Medium' else 'b-invalid') }}">{{ report.spam_risk }}/100 · {{ report.spam_level }}</span></div>
+    {% for r in report.analysis.rows %}
+    <div class="kv"><span>{{ r.label }}</span>
+      <span class="small" style="color:{{ 'var(--good)' if r.ok else 'var(--bad)' }}">{{ '✅' if r.ok else '⚠️' }} {{ r.value }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+
+{# =================== AI SUGGESTIONS =================== #}
+<div class="card">
+  <h2>🤖 AI Optimization Suggestions</h2>
+  {% set sev = {'critical':('🔴','b-invalid'),'warning':('🟠','b-risky'),'tip':('🟢','b-valid')} %}
+  {# Content fixes first (one-click fixable), then account-level recs #}
+  {% set content_issues = report.content.issues %}
+  {% if not content_issues and report.recs|selectattr('severity','equalto','critical')|list|length==0 %}
+    <p class="faint">🎉 No issues found — this email is ready for the inbox.</p>
+  {% endif %}
+  {% for f in content_issues %}
+    <div class="kv"><span>🟠 <b>{{ f.label }}</b> — <span class="muted">{{ f.fix }}</span></span>
+      <span class="badge b-risky">content</span></div>
+  {% endfor %}
+  {% for r in report.recs %}
+    <div class="kv"><span>{{ sev[r.severity][0] }} <b>{{ r.title }}</b> — <span class="muted">{{ r.detail }}</span></span>
+      <span class="badge {{ sev[r.severity][1] }}">account</span></div>
+  {% endfor %}
+</div>
+
+{# =================== WHAT'S AFFECTING SCORE =================== #}
+<div class="card">
+  <h2>📉 What's affecting your score</h2>
+  {% for f in report.account.factors %}
+    <div class="kv"><span>{{ f.name }} <span class="faint small">— {{ f.note }}</span></span>
+      <span style="color:{{ 'var(--good)' if f.impact>=0 else 'var(--bad)' }}">{{ '+' if f.impact>=0 }}{{ f.impact }}</span></div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="card"><p class="empty">Create a campaign with a subject and body, then come back to analyse it.</p></div>
+{% endif %}
+{% endblock %}
