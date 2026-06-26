@@ -385,6 +385,8 @@ _MIGRATIONS = [
     ("accounts", "burst_valid_until", "TEXT"),                  # when the boost expires
     ("burst_purchases", "valid_until", "TEXT"),
     ("burst_purchases", "duration_days", "INTEGER NOT NULL DEFAULT 1"),
+    # Campaigns can target a specific contact list (null = all active contacts).
+    ("campaigns", "list_id", "INTEGER"),
     ("burst_purchases", "reason", "TEXT"),
     ("burst_purchases", "used", "INTEGER NOT NULL DEFAULT 0"),  # emails consumed
     # Personal template organisation (folders, favorites, trash, provenance).

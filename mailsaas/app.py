@@ -250,9 +250,16 @@ def execute_campaign_send(account_id, campaign_id, base_url):
     if not camp:
         return {"error": "Campaign not found."}
     acct = D.query("SELECT * FROM accounts WHERE id=?", (account_id,), one=True)
-    recipients = D.query(
-        "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
-        " ORDER BY id LIMIT ?", (account_id, SEND_CAP + 1))
+    # Send to the campaign's target list if one is set, else all active contacts.
+    if camp["list_id"]:
+        recipients = D.query(
+            "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
+            " AND list_id=? ORDER BY id LIMIT ?",
+            (account_id, camp["list_id"], SEND_CAP + 1))
+    else:
+        recipients = D.query(
+            "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
+            " ORDER BY id LIMIT ?", (account_id, SEND_CAP + 1))
     if not recipients:
         return {"error": "No active contacts to send to."}
     overflow = len(recipients) > SEND_CAP
@@ -910,30 +917,86 @@ def register_modules(app):
         aid = acct["id"]
         if request.method == "POST":
             action = request.form.get("action")
+
+            def _list_id():
+                """The chosen list id from the form, validated to this account
+                (None = no list)."""
+                lid = request.form.get("list_id") or ""
+                if lid and D.query("SELECT 1 FROM contact_lists WHERE id=? AND"
+                                   " account_id=?", (lid, aid), one=True):
+                    return int(lid)
+                return None
+
             if action == "add":
                 D.execute(
-                    "INSERT INTO contacts (account_id, email, name, tags, status, created_at)"
-                    " VALUES (?,?,?,?,?,?)",
-                    (aid, request.form.get("email", "").strip().lower(),
+                    "INSERT INTO contacts (account_id, list_id, email, name, tags,"
+                    " status, created_at) VALUES (?,?,?,?,?,?,?)",
+                    (aid, _list_id(), request.form.get("email", "").strip().lower(),
                      request.form.get("name", "").strip(),
                      request.form.get("tags", "").strip(), "active", D.now()))
                 flash("Contact added.", "success")
             elif action == "import":
                 raw = request.form.get("csv", "")
+                # An uploaded CSV/Excel-exported file overrides the pasted text.
+                up = request.files.get("file")
+                if up and up.filename:
+                    try:
+                        raw = up.read().decode("utf-8", "ignore") or raw
+                    except Exception:
+                        pass
+                lid = _list_id()
                 count = 0
                 for line in raw.splitlines():
-                    parts = [p.strip() for p in line.split(",")]
+                    parts = [p.strip() for p in re.split(r"[,;\t]", line)]
                     email = parts[0].lower() if parts else ""
-                    if "@" not in email:
+                    if "@" not in email or email == "email":  # skip header row
                         continue
                     name = parts[1] if len(parts) > 1 else ""
                     D.execute(
-                        "INSERT INTO contacts (account_id, email, name, status, created_at)"
-                        " VALUES (?,?,?,?,?)", (aid, email, name, "active", D.now()))
+                        "INSERT INTO contacts (account_id, list_id, email, name, status,"
+                        " created_at) VALUES (?,?,?,?,?,?)",
+                        (aid, lid, email, name, "active", D.now()))
                     count += 1
                 if count:
                     D.mark_onboarding(aid, "contacts")
-                flash(f"Imported {count} contacts.", "success")
+                where_msg = ""
+                if lid:
+                    nm = D.query("SELECT name FROM contact_lists WHERE id=?", (lid,),
+                                 one=True)
+                    where_msg = f" into list '{nm['name']}'" if nm else ""
+                flash(f"Imported {count} contacts{where_msg}.", "success")
+            elif action == "new_list":
+                name = (request.form.get("name") or "").strip()[:60]
+                if name and not D.query("SELECT 1 FROM contact_lists WHERE account_id=?"
+                                        " AND name=?", (aid, name), one=True):
+                    D.execute("INSERT INTO contact_lists (account_id, name, created_at)"
+                              " VALUES (?,?,?)", (aid, name, D.now()))
+                    flash(f"List '{name}' created.", "success")
+                else:
+                    flash("Enter a unique list name.", "error")
+            elif action == "rename_list":
+                name = (request.form.get("name") or "").strip()[:60]
+                if name:
+                    D.execute("UPDATE contact_lists SET name=? WHERE id=? AND"
+                              " account_id=?", (name, request.form.get("id"), aid))
+                    flash("List renamed.", "success")
+            elif action == "delete_list":
+                lid = request.form.get("id")
+                # Detach contacts (they stay in the account) then drop the list.
+                D.execute("UPDATE contacts SET list_id=NULL WHERE list_id=? AND"
+                          " account_id=?", (lid, aid))
+                D.execute("DELETE FROM contact_lists WHERE id=? AND account_id=?",
+                          (lid, aid))
+                flash("List deleted — its contacts were kept (unassigned).", "success")
+            elif action == "assign_list":
+                lid = _list_id()
+                ids = request.form.getlist("ids")
+                if ids:
+                    qs = ",".join("?" for _ in ids)
+                    D.execute(f"UPDATE contacts SET list_id=? WHERE account_id=? AND"
+                              f" id IN ({qs})", [lid, aid] + ids)
+                    flash(f"Assigned {len(ids)} contact(s) to the selected list.",
+                          "success")
             elif action == "suppress":
                 D.execute("UPDATE contacts SET status='suppressed' WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
@@ -975,11 +1038,15 @@ def register_modules(app):
             page = max(1, int(request.args.get("page", 1)))
         except ValueError:
             page = 1
+        list_filter = request.args.get("list", "").strip()
         where = "account_id=?"
         args = [aid]
         if status_filter:
             where += " AND status=?"
             args.append(status_filter)
+        if list_filter:
+            where += " AND list_id=?"
+            args.append(list_filter)
         if q:
             where += " AND (email LIKE ? OR name LIKE ?)"
             args += [f"%{q}%", f"%{q}%"]
@@ -993,9 +1060,17 @@ def register_modules(app):
         counts = D.query(
             "SELECT status, COUNT(*) c FROM contacts WHERE account_id=? GROUP BY status", (aid,))
         counts = {r["status"]: r["c"] for r in counts}
-        lists = D.query("SELECT * FROM contact_lists WHERE account_id=?", (aid,))
+        # Lists with their active-contact counts for the sidebar.
+        lists = D.query(
+            "SELECT cl.id, cl.name,"
+            " (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id) AS n"
+            " FROM contact_lists cl WHERE cl.account_id=? ORDER BY cl.name", (aid,))
+        unassigned = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
+                             " list_id IS NULL", (aid,), one=True)["c"]
         return render_template("contacts.html", contacts=rows, counts=counts,
-                               lists=lists, status_filter=status_filter, q=q,
+                               lists=lists, unassigned=unassigned,
+                               list_filter=list_filter,
+                               status_filter=status_filter, q=q,
                                page=page, pages=pages, total=total)
 
     @app.route("/contacts/export")
@@ -1020,15 +1095,26 @@ def register_modules(app):
         if request.method == "POST":
             action = request.form.get("action")
             if action == "create":
-                rcpt = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
-                               " AND status='active'", (aid,), one=True)["c"]
+                # Optional target list; null = all active contacts.
+                lid = request.form.get("list_id") or ""
+                lid = int(lid) if lid and D.query(
+                    "SELECT 1 FROM contact_lists WHERE id=? AND account_id=?",
+                    (lid, aid), one=True) else None
+                if lid:
+                    rcpt = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                                   " AND status='active' AND list_id=?",
+                                   (aid, lid), one=True)["c"]
+                else:
+                    rcpt = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                                   " AND status='active'", (aid,), one=True)["c"]
                 D.execute(
                     "INSERT INTO campaigns (account_id, name, subject, body, from_email,"
-                    " status, recipients, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    " status, recipients, list_id, created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?)",
                     (aid, request.form.get("name", "Untitled").strip(),
                      request.form.get("subject", "").strip(),
                      request.form.get("body", "").strip(),
-                     current_user()["email"], "Draft", rcpt, D.now()))
+                     current_user()["email"], "Draft", rcpt, lid, D.now()))
                 D.mark_onboarding(aid, "campaign")
                 D.log_activity(aid, current_user()["email"], "Created a campaign draft")
                 flash("Campaign saved as draft.", "success")
@@ -1106,10 +1192,19 @@ def register_modules(app):
         readiness = {c["id"]: DAI.send_readiness(scores[c["id"]], acct_score)
                      for c in rows}
         acct_recs = DAI.recommendations(sig)[:3]
+        # Contact lists for the recipient picker, with active-contact counts.
+        rcpt_lists = D.query(
+            "SELECT cl.id, cl.name,"
+            " (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id AND"
+            "  c.status='active') AS n"
+            " FROM contact_lists cl WHERE cl.account_id=? ORDER BY cl.name", (aid,))
+        all_active = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
+                             " status='active'", (aid,), one=True)["c"]
         return render_template("campaigns.html", campaigns=rows, counts=counts,
                                status_filter=status_filter, tpl_picker=tpl_picker,
                                scores=scores, readiness=readiness,
-                               acct_score=round(acct_score), acct_recs=acct_recs)
+                               acct_score=round(acct_score), acct_recs=acct_recs,
+                               rcpt_lists=rcpt_lists, all_active=all_active)
 
     # The "Bulk Email Sender" module reuses the campaign composer.
     @app.route("/sender")
