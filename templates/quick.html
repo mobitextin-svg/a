@@ -120,7 +120,7 @@
 </div>
 
 {# Hidden folder field — synced by JS when category is picked #}
-<input type="hidden" name="folder" id="qeFolderHidden" value="{{ (edit.folder if edit else '') or 'General' }}">
+<input type="hidden" name="folder" id="qeFolderHidden" value="{{ edit.folder if edit else '' }}">
 {% endif %}
 
 <!-- MODE SWITCH -->
@@ -476,12 +476,13 @@ window.catMgrSubmit = function(f) {
   return true;
 };
 
-/* If editing an existing template, auto-select its folder */
+/* Auto-select folder only when EDITING an existing template (value set server-side) */
 (function(){
   var existingFolder = document.getElementById('qeFolderHidden');
-  if (existingFolder && existingFolder.value && existingFolder.value !== '') {
+  var isEdit = {% if edit and edit.folder %}'{{ edit.folder }}'{% else %}''{% endif %};
+  if (isEdit && existingFolder && existingFolder.value) {
     var btn = document.querySelector('.cat-pick-btn[data-cat="'+existingFolder.value+'"]');
-    if (btn) { pickCategory(existingFolder.value, btn.dataset.type || 'my', btn); }
+    if (btn) pickCategory(existingFolder.value, btn.dataset.type || 'my', btn);
   }
 })();
 </script>
