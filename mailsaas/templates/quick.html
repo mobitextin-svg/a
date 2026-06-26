@@ -354,7 +354,7 @@
     var pre=document.getElementById('preField').value.trim();
     var preLine=pre?('<div style="font-size:11px;color:#aaa;padding:2px 8px 6px">Inbox preview: '+pre+'</div>'):'';
     box.innerHTML='<div style="background:#e7e7e7;padding:18px"><div style="max-width:600px;margin:0 auto">'+preLine+'<div style="background:#fff;border-radius:4px;font-family:Arial">'+
-      '<div style="padding:20px 28px">'+logoCell+'</div><div style="height:4px;background:'+accent+'"></div>'+heroRow+
+      '<div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div>'+logoCell+'</div><div style="font-size:12px"><a href="#" style="color:#888;text-decoration:none">View in browser</a></div></div><div style="height:4px;background:'+accent+'"></div>'+heroRow+
       '<div style="padding:24px 28px;color:#222;font-size:15px;line-height:1.6"><p>Hi Mariappan,</p>'+bodyHtml().replace(/\{\{name[^}]*\}\}/g,'Mariappan').replace(/\{\{company[^}]*\}\}/g,comp).replace(/\{\{city[^}]*\}\}/g,'Chennai').replace(/\{\{state[^}]*\}\}/g,'Tamil Nadu')+'</div>'+button+
       '<div style="padding:8px 28px 18px;color:#222;font-size:14px">'+(form.signoff.value||'Regards')+'</div>'+socRow+addrRow+
       '<div style="padding:18px 28px;border-top:1px solid #e5e5e5;color:#999;font-size:11px;text-align:center">This is an auto-generated email. Please do not reply.<br><a href="#" style="color:'+accent+'">Unsubscribe</a> | <a href="#" style="color:'+accent+'">Report Spam</a></div>'+

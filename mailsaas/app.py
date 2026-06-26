@@ -2536,12 +2536,16 @@ def register_modules(app):
             '<tr><td align="center">' + pre +
             '<table width="600" cellpadding="0" cellspacing="0" role="presentation" '
             'style="width:600px;max-width:100%">'
-            '<tr><td align="right" style="padding:0 8px 6px;font-size:12px">'
-            '<a href="{{view_in_browser_url}}" style="color:#888;text-decoration:none">'
-            'View in browser</a></td></tr>'
             '<tr><td style="background:#fff;border-radius:4px">'
             '<table width="100%" cellpadding="0" cellspacing="0" role="presentation">'
-            '<tr><td style="padding:20px 28px">' + logo_cell + '</td></tr>'
+            # Top header row: logo + company name on the LEFT, View-in-browser RIGHT.
+            '<tr><td style="padding:18px 28px"><table width="100%" cellpadding="0" '
+            'cellspacing="0" role="presentation"><tr>'
+            '<td align="left" valign="middle">' + logo_cell + '</td>'
+            '<td align="right" valign="middle" style="font-size:12px;white-space:nowrap">'
+            '<a href="{{view_in_browser_url}}" style="color:#888;text-decoration:none">'
+            'View in browser</a></td>'
+            '</tr></table></td></tr>'
             + accent_bar
             + hero_row +
             '<tr><td style="padding:24px 28px;color:#222;font-size:15px;line-height:1.6">'
