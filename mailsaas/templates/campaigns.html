@@ -78,7 +78,12 @@
       {% set sc = scores.get(c.id, 0) %}
       {% set rd = readiness.get(c.id) %}
       <tr>
-        <td><b>{{ c.name }}</b><div class="faint small">{{ c.subject or 'No subject' }}</div></td>
+        <td><b>{{ c.name }}</b><div class="faint small">{{ c.subject or 'No subject' }}</div>
+          {% if c.status == 'Running' %}
+          <div class="meter" style="margin-top:6px" data-prog="{{ c.id }}"><i style="width:0%"></i></div>
+          <div class="faint small" data-prog-label="{{ c.id }}">📤 Sending…</div>
+          {% endif %}
+        </td>
         <td><span class="badge {{ 'b-valid' if sc>=90 else ('b-risky' if sc>=55 else 'b-invalid') }}" title="Predicted inbox placement (email content)">{{ sc }}%</span></td>
         <td><span class="badge {{ 'b-valid' if rd.level=='good' else ('b-risky' if rd.level=='warn' else 'b-invalid') }}" title="{{ rd.verdict }} — content {{ rd.content }}% + account {{ rd.account }}%">{{ rd.overall }}%</span></td>
         <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
@@ -122,4 +127,30 @@
     </tbody>
   </table>
 </div>
+
+<script>
+(function(){
+  // Live bulk-send progress: poll each Running campaign until it completes.
+  var bars=document.querySelectorAll('[data-prog]');
+  if(!bars.length) return;
+  var reloaded=false;
+  function poll(){
+    bars.forEach(function(bar){
+      var cid=bar.getAttribute('data-prog');
+      var label=document.querySelector('[data-prog-label="'+cid+'"]');
+      fetch('/campaigns/'+cid+'/progress').then(function(r){return r.json();}).then(function(j){
+        var i=bar.querySelector('i'); if(i) i.style.width=j.percent+'%';
+        if(j.status==='Running'){
+          if(label) label.textContent='📤 '+j.done+' / '+j.total+' sent'+(j.failed?(' · '+j.failed+' failed'):'')+' ('+j.percent+'%)';
+        }else{
+          if(label) label.textContent='✅ Done — '+j.sent+' sent'+(j.failed?(' · '+j.failed+' failed'):'');
+          if(!reloaded){ reloaded=true; setTimeout(function(){location.reload();}, 1200); }
+        }
+      }).catch(function(){});
+    });
+    setTimeout(poll, 1500);  // bars only exist for Running campaigns; reload clears them
+  }
+  poll();
+})();
+</script>
 {% endblock %}

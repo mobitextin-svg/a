@@ -27,9 +27,13 @@ def get_db():
         g.db = sqlite3.connect(
             current_app.config["DATABASE"],
             detect_types=sqlite3.PARSE_DECLTYPES,
+            timeout=10,
         )
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
+        # Wait briefly instead of erroring when the background sender holds a
+        # write lock (live progress polls read concurrently).
+        g.db.execute("PRAGMA busy_timeout = 8000")
     return g.db
 
 
@@ -387,6 +391,9 @@ _MIGRATIONS = [
     ("burst_purchases", "duration_days", "INTEGER NOT NULL DEFAULT 1"),
     # Campaigns can target a specific contact list (null = all active contacts).
     ("campaigns", "list_id", "INTEGER"),
+    # Bulk-sender controls: emails/minute throttle + how many to send per run.
+    ("campaigns", "send_rate", "INTEGER"),
+    ("campaigns", "batch_size", "INTEGER"),
     ("burst_purchases", "reason", "TEXT"),
     ("burst_purchases", "used", "INTEGER NOT NULL DEFAULT 0"),  # emails consumed
     # Personal template organisation (folders, favorites, trash, provenance).

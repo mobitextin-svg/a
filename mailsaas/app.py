@@ -244,26 +244,42 @@ def plan_credits(plan):
 
 def execute_campaign_send(account_id, campaign_id, base_url):
     """Send a campaign through the rotation engine. Returns a result dict.
-    No request/session use — safe to call from a background worker."""
+    No request/session use — safe to call from a background worker.
+
+    Honours the campaign's optional `batch_size` (how many to send this run) and
+    `send_rate` (emails/minute throttle), and writes live progress as it goes."""
+    import time as _time
     camp = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
                    (campaign_id, account_id), one=True)
     if not camp:
         return {"error": "Campaign not found."}
     acct = D.query("SELECT * FROM accounts WHERE id=?", (account_id,), one=True)
+    # Batch size: user-chosen, clamped between 1 and the hard safety cap.
+    try:
+        batch = int(camp["batch_size"] or SEND_CAP)
+    except (TypeError, ValueError):
+        batch = SEND_CAP
+    batch = max(1, min(batch, SEND_CAP))
+    # Throttle: emails per minute → seconds to wait between sends (0 = full speed).
+    try:
+        rate = int(camp["send_rate"] or 0)
+    except (TypeError, ValueError):
+        rate = 0
+    delay = (60.0 / rate) if rate and rate > 0 else 0
     # Send to the campaign's target list if one is set, else all active contacts.
     if camp["list_id"]:
         recipients = D.query(
             "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
             " AND list_id=? ORDER BY id LIMIT ?",
-            (account_id, camp["list_id"], SEND_CAP + 1))
+            (account_id, camp["list_id"], batch + 1))
     else:
         recipients = D.query(
             "SELECT email, name FROM contacts WHERE account_id=? AND status='active'"
-            " ORDER BY id LIMIT ?", (account_id, SEND_CAP + 1))
+            " ORDER BY id LIMIT ?", (account_id, batch + 1))
     if not recipients:
         return {"error": "No active contacts to send to."}
-    overflow = len(recipients) > SEND_CAP
-    recipients = recipients[:SEND_CAP]
+    overflow = len(recipients) > batch
+    recipients = recipients[:batch]
 
     rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id",
                    (account_id,))
@@ -280,6 +296,10 @@ def execute_campaign_send(account_id, campaign_id, base_url):
     sent = failed = 0
     real = bool(env_cfg) or any(SEND.server_transport(rows_by_id[i])
                                 for i in assigned_ids)
+    # Mark Running with the true total so the live progress bar has a denominator.
+    D.execute("UPDATE campaigns SET status='Running', recipients=?, sent=0, bounces=0"
+              " WHERE id=?", (len(recipients), camp["id"]))
+    total = len(recipients)
     for i, contact in enumerate(recipients):
         sid = assigned_ids[i % len(assigned_ids)]
         token = SEND.make_token()
@@ -297,6 +317,12 @@ def execute_campaign_send(account_id, campaign_id, base_url):
         failed += status == "failed"
         sent += status != "failed"
         D.execute("UPDATE smtp_servers SET sent_today=sent_today+1 WHERE id=?", (sid,))
+        # Live progress: keep campaigns.sent current so /progress can report it.
+        D.execute("UPDATE campaigns SET sent=?, bounces=? WHERE id=?",
+                  (sent, failed, camp["id"]))
+        # Throttle to the requested emails/minute (skip the wait after the last one).
+        if delay and i < total - 1:
+            _time.sleep(delay)
 
     D.execute("UPDATE campaigns SET status='Completed', recipients=?, sent=?, bounces=?"
               " WHERE id=?", (len(recipients), sent, failed, camp["id"]))
@@ -1348,7 +1374,11 @@ def register_modules(app):
             D.mark_onboarding(aid, "campaign")
 
             if decision == "send":
-                msg = _send_campaign_now(aid, cid)
+                def _intval(key):
+                    v = (request.form.get(key) or "").strip()
+                    return int(v) if v.isdigit() and int(v) > 0 else None
+                msg = _send_campaign_now(aid, cid, rate=_intval("send_rate"),
+                                         batch=_intval("batch_size"))
                 flash(msg[1], msg[0])
                 return redirect(url_for("campaigns"))
             if decision == "schedule":
@@ -3667,7 +3697,7 @@ def register_modules(app):
         return render_template("module.html", mod=mod)
 
     # ---- Campaign send pipeline (real SMTP via the rotation engine) ------- #
-    def _send_campaign_now(aid, campaign_id):
+    def _send_campaign_now(aid, campaign_id, rate=None, batch=None):
         camp = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
                        (campaign_id, aid), one=True)
         if not camp:
@@ -3677,22 +3707,56 @@ def register_modules(app):
         if not D.query("SELECT 1 FROM contacts WHERE account_id=? AND status='active'"
                        " LIMIT 1", (aid,), one=True):
             return ("error", "No active contacts to send to. Import contacts first.")
+        # Persist the bulk-sender controls (throttle + batch) on the campaign.
+        if rate is not None or batch is not None:
+            D.execute("UPDATE campaigns SET send_rate=?, batch_size=? WHERE id=? AND"
+                      " account_id=?", (rate, batch, campaign_id, aid))
         base = request.host_url.rstrip("/")
         # In production, send off the request via the worker so a slow SMTP
-        # server can never stall the web tier; inline only in dev.
+        # server can never stall the web tier.
         if tasks.HAVE_CELERY:
             D.execute("UPDATE campaigns SET status='Running' WHERE id=?", (campaign_id,))
             tasks.enqueue(tasks.send_campaign_job, aid, int(campaign_id), base)
-            return ("success", "Campaign queued — sending in the background. "
-                               "Watch the report for live opens & clicks.")
-        res = execute_campaign_send(aid, int(campaign_id), base)
-        if res.get("error"):
-            return ("error", res["error"])
-        mode = ("delivered via SMTP" if res["real"]
-                else "simulated (dry-run — set MAILSAAS_SMTP_* to send for real)")
-        extra = f" Capped to {SEND_CAP} this batch." if res["overflow"] else ""
-        return ("success", f"Campaign sent to {res['sent']} recipients ({mode}); "
-                           f"{res['failed']} failed.{extra} Opens & clicks track live.")
+            return ("success", "📤 Bulk sending started — watch the live progress bar.")
+        # Tests run inline for determinism.
+        if app.config.get("TESTING"):
+            res = execute_campaign_send(aid, int(campaign_id), base)
+            if res.get("error"):
+                return ("error", res["error"])
+            return ("success", f"Campaign sent to {res['sent']} recipients; "
+                               f"{res['failed']} failed.")
+        # Dev / no-Celery: run in a background thread so the page returns at once
+        # and the live progress bar can poll while the bulk sender works.
+        D.execute("UPDATE campaigns SET status='Running' WHERE id=?", (campaign_id,))
+        import threading
+
+        def _run():
+            with app.app_context():
+                try:
+                    execute_campaign_send(aid, int(campaign_id), base)
+                except Exception as exc:  # noqa: BLE001
+                    D.execute("UPDATE campaigns SET status='Failed' WHERE id=?",
+                              (campaign_id,))
+                    D.log_activity(aid, "system", f"Send failed: {exc}")
+
+        threading.Thread(target=_run, daemon=True).start()
+        return ("success", "📤 Bulk sending started — watch the live progress bar below.")
+
+    @app.route("/campaigns/<int:cid>/progress")
+    @login_required
+    def campaign_progress(cid):
+        """Live progress JSON for the bulk sender — polled by the progress bar."""
+        aid = current_account()["id"]
+        c = D.query("SELECT status, recipients, sent, bounces FROM campaigns WHERE"
+                    " id=? AND account_id=?", (cid, aid), one=True)
+        if not c:
+            abort(404)
+        total = c["recipients"] or 0
+        done = (c["sent"] or 0) + (c["bounces"] or 0)
+        pct = round(100 * done / total) if total else (100 if c["status"] == "Completed"
+                                                       else 0)
+        return jsonify({"status": c["status"], "total": total, "sent": c["sent"] or 0,
+                        "failed": c["bounces"] or 0, "done": done, "percent": pct})
 
     @app.route("/campaigns/<int:cid>/report")
     @login_required

@@ -153,6 +153,12 @@
       <div class="card" style="text-align:center;border-color:var(--good)">
         <h3>📤 Send Now</h3>
         <p class="faint small"><b>Bulk sender</b> — emails everyone now (real SMTP, or a safe test run if SMTP isn't set).</p>
+        <div class="row" style="gap:8px;margin-bottom:8px">
+          <div style="flex:1"><label class="small">Speed (emails/min)</label>
+            <input type="number" name="send_rate" min="0" placeholder="0 = full speed"></div>
+          <div style="flex:1"><label class="small">Batch size</label>
+            <input type="number" name="batch_size" min="1" max="100" placeholder="up to 100"></div>
+        </div>
         <button type="button" class="btn" data-decision="send" style="background:var(--good)">Send Now</button>
       </div>
     </div>
