@@ -2251,6 +2251,9 @@ def register_modules(app):
         aid = current_account()["id"]
 
         def _back(default="mine"):
+            nxt = request.args.get("_next") or request.form.get("_next")
+            if nxt and nxt.startswith("/"):
+                return redirect(nxt)
             return redirect(url_for("templates", tab=request.form.get("tab", default)))
 
         if request.method == "POST":
@@ -2838,6 +2841,9 @@ def register_modules(app):
         categories = sorted(set(r["category"] for r in D.query(
             "SELECT DISTINCT category FROM system_templates"))) \
             or ["Education", "Healthcare", "Restaurant", "Finance", "Marketing"]
+        sys_cat_names = sorted(set(
+            ["Marketing", "Welcome", "Newsletter", "Sales", "Offers", "Events", "Transactional"]
+            + categories))
         # Variables the Insert-Variable menu offers — these map to contact fields.
         variables = [("name", "Name"), ("company", "Company name"),
                      ("mobile", "Mobile number"), ("email", "Email id"),
@@ -2850,6 +2856,7 @@ def register_modules(app):
                   ("Green", "#0F7B4F"), ("Minimal Grey", "#374151")]
         return render_template("quick.html", target=target, edit=edit,
                                folders=folders, categories=categories,
+                               sys_cat_names=sys_cat_names,
                                company=acct["name"], variables=variables,
                                subject_vars=subject_vars, themes=themes)
 

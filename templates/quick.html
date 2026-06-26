@@ -24,6 +24,17 @@
   .chip{display:inline-block;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;
     padding:2px 8px;font-size:12px;cursor:pointer}
   .chip:hover{background:var(--brand);color:#fff}
+  /* ── Category Picker ── */
+  .cat-group-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted,#888);margin-bottom:8px}
+  .cat-picker-grid{display:flex;flex-wrap:wrap;gap:8px}
+  .cat-pick-btn{padding:8px 14px;border:2px solid var(--line2,#ddd);border-radius:8px;
+    background:var(--panel,#fff);color:var(--ink,#111);cursor:pointer;font-size:.9rem;
+    transition:border-color .15s,background .15s}
+  .cat-pick-btn:hover{border-color:var(--brand,#3b4edb)}
+  .cat-pick-btn.selected{border-color:var(--brand,#3b4edb);background:color-mix(in srgb,var(--brand,#3b4edb) 10%,transparent);font-weight:600}
+  .cat-manager summary{color:var(--muted,#888);font-size:.9rem}
+  .cat-manager summary:hover{color:var(--ink)}
 </style>
 
 <div class="section-head">
@@ -32,8 +43,87 @@
   <a class="btn ghost" href="{{ url_for('builder', target=target) }}">🎨 Advanced builder</a>
 </div>
 
+{% if target != 'system' %}
+{# ── Step 0: Category Picker ───────────────────────────────────────────────── #}
+<div class="card" id="catPickerBox" style="margin-bottom:14px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div>
+      <h2 style="margin:0">① Choose a Category</h2>
+      <p class="faint small" style="margin:4px 0 0">Select which category this template belongs to before designing it.</p>
+    </div>
+    <span id="catPickedBadge" class="badge b-Running" style="display:none"></span>
+  </div>
+
+  {# System Categories — read-only #}
+  <div class="cat-group-label">🌐 System Categories <span class="faint small">(built-in, cannot delete)</span></div>
+  <div class="cat-picker-grid" id="sysCatGrid">
+    {% set sys_icons = {'Marketing':'📣','Welcome':'👋','Newsletter':'📰','Sales':'💰','Offers':'🎁','Events':'📅','Transactional':'🔔'} %}
+    {% for cat in sys_cat_names %}
+    <button type="button" class="cat-pick-btn" data-cat="{{ cat }}" data-type="system"
+            onclick="pickCategory('{{ cat }}','system',this)">
+      {{ sys_icons.get(cat,'📂') }} {{ cat }}
+    </button>
+    {% endfor %}
+  </div>
+
+  {# My Categories — user-managed #}
+  <div class="cat-group-label" style="margin-top:14px">👤 My Categories <span class="faint small">(your own categories)</span></div>
+  <div class="cat-picker-grid" id="myCatGrid">
+    {% for f in folders %}
+    {% if f != 'General' %}
+    <button type="button" class="cat-pick-btn" data-cat="{{ f }}" data-type="my"
+            onclick="pickCategory('{{ f }}','my',this)">📁 {{ f }}</button>
+    {% endif %}
+    {% endfor %}
+    <button type="button" class="cat-pick-btn" data-cat="General" data-type="my"
+            onclick="pickCategory('General','my',this)">📁 General</button>
+  </div>
+
+  {# Category Manager — inline #}
+  <details class="cat-manager" style="margin-top:16px">
+    <summary style="cursor:pointer;font-weight:600">⚙️ Manage My Categories</summary>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+      {# Add new category #}
+      <form method="post" action="{{ url_for('templates') }}" class="row" style="gap:6px" onsubmit="return catMgrSubmit(this)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="new_folder">
+        <input type="hidden" name="tab" value="mine">
+        <input name="folder_name" placeholder="New category name…" style="flex:1" required>
+        <button class="btn sm">➕ Add</button>
+      </form>
+      {# Existing user categories: rename + delete #}
+      {% for f in folders %}
+      <div class="row" style="gap:6px;align-items:center">
+        <span style="flex:1;padding:6px 10px;background:var(--panel2,#f5f5f5);border-radius:6px">📁 {{ f }}</span>
+        <form method="post" action="{{ url_for('templates') }}" class="row" style="gap:4px;margin:0" onsubmit="return catMgrSubmit(this)">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="rename_folder">
+          <input type="hidden" name="tab" value="mine">
+          <input type="hidden" name="old" value="{{ f }}">
+          <input name="folder_name" placeholder="New name" style="width:130px">
+          <button class="btn ghost sm">✏️</button>
+        </form>
+        {% if f != 'General' %}
+        <form method="post" action="{{ url_for('templates') }}" style="margin:0" onsubmit="return confirm('Delete category «{{ f }}»? Templates will move to General.')&&catMgrSubmit(this)">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="delete_folder">
+          <input type="hidden" name="tab" value="mine">
+          <input type="hidden" name="folder_name" value="{{ f }}">
+          <button class="btn ghost sm" style="color:var(--bad)">🗑</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+</div>
+
+{# Hidden folder field — synced by JS when category is picked #}
+<input type="hidden" name="folder" id="qeFolderHidden" value="{{ (edit.folder if edit else '') or 'General' }}">
+{% endif %}
+
 <!-- MODE SWITCH -->
-<div class="mode-tabs">
+<div class="mode-tabs" id="templateFormSection" style="{{ 'display:none' if not edit and target != 'system' else '' }}">
   <button type="button" id="modeManual" class="on" onclick="setMode('manual')">✍️ Manual — I'll write it</button>
   <button type="button" id="modeAuto" onclick="setMode('auto')">🤖 Auto — AI writes it for me</button>
 </div>
@@ -74,8 +164,7 @@
         <input name="category" list="cats" value="{{ edit.category if edit else '' }}" placeholder="Finance" required>
         <datalist id="cats">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist></div>
       {% else %}
-      <div class="f"><label>Folder</label>
-        <select name="folder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
+      {# folder is submitted via the hidden #qeFolderHidden set by the category picker above #}
       {% endif %}
 
       <div class="f full"><label>Email subject</label>
@@ -361,6 +450,37 @@
       '</div></div></div>';
     box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'nearest'});
   });
+})();
+
+/* ── Category Picker logic ── */
+window.pickCategory = function(cat, type, btn) {
+  // Highlight selected button
+  document.querySelectorAll('.cat-pick-btn').forEach(function(b){ b.classList.remove('selected'); });
+  btn.classList.add('selected');
+  // Set the hidden folder field
+  var h = document.getElementById('qeFolderHidden');
+  if (h) h.value = cat;
+  // Show badge
+  var badge = document.getElementById('catPickedBadge');
+  if (badge) { badge.textContent = (type==='system'?'🌐 ':'📁 ') + cat; badge.style.display=''; }
+  // Reveal the form
+  var formSec = document.getElementById('templateFormSection');
+  if (formSec) { formSec.style.display=''; formSec.scrollIntoView({behavior:'smooth',block:'start'}); }
+};
+
+/* Redirect cat-manager forms back to this page after save */
+window.catMgrSubmit = function(f) {
+  f.action = f.action + '?_next=' + encodeURIComponent(window.location.href);
+  return true;
+};
+
+/* If editing an existing template, auto-select its folder */
+(function(){
+  var existingFolder = document.getElementById('qeFolderHidden');
+  if (existingFolder && existingFolder.value && existingFolder.value !== '') {
+    var btn = document.querySelector('.cat-pick-btn[data-cat="'+existingFolder.value+'"]');
+    if (btn) { pickCategory(existingFolder.value, btn.dataset.type || 'my', btn); }
+  }
 })();
 </script>
 {% endblock %}
