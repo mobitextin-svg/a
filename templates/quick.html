@@ -26,10 +26,10 @@
   .chip:hover{background:var(--brand);color:#fff}
   /* ── Category Picker ── */
   .cat-group-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
-    color:var(--muted,#888);margin-bottom:8px}
+    opacity:.6;margin-bottom:8px}
   .cat-picker-grid{display:flex;flex-wrap:wrap;gap:8px}
   .cat-pick-btn{padding:8px 14px;border:2px solid var(--line2,#ddd);border-radius:8px;
-    background:var(--panel,#fff);color:var(--ink,#111);cursor:pointer;font-size:.9rem;
+    background:var(--panel2,transparent);cursor:pointer;font-size:.9rem;
     transition:border-color .15s,background .15s}
   .cat-pick-btn:hover{border-color:var(--brand,#3b4edb)}
   .cat-pick-btn.selected{border-color:var(--brand,#3b4edb);background:color-mix(in srgb,var(--brand,#3b4edb) 10%,transparent);font-weight:600}
@@ -470,7 +470,8 @@ window.pickCategory = function(cat, type, btn) {
 
 /* Redirect cat-manager forms back to this page after save */
 window.catMgrSubmit = function(f) {
-  f.action = f.action + '?_next=' + encodeURIComponent(window.location.href);
+  var base = f.getAttribute('action');
+  f.setAttribute('action', base + '?_next=' + encodeURIComponent(window.location.href));
   return true;
 };
 
