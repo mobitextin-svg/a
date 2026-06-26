@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}New Campaign{% endblock %}
+{% block content %}
+<div class="section-head"><h1>🚀 New Campaign</h1>
+  <a class="btn ghost sm" href="{{ url_for('campaigns') }}">← All campaigns</a></div>
+
+<div class="wiz-steps" id="wizSteps">
+  <div class="wiz-dot active"><span class="n">1</span> Details</div>
+  <div class="wiz-dot"><span class="n">2</span> Recipients</div>
+  <div class="wiz-dot"><span class="n">3</span> Template</div>
+  <div class="wiz-dot"><span class="n">4</span> Sender</div>
+  <div class="wiz-dot"><span class="n">5</span> 📊 Inbox Analysis</div>
+  <div class="wiz-dot"><span class="n">6</span> Review</div>
+  <div class="wiz-dot"><span class="n">7</span> Send</div>
+</div>
+
+<form method="post" id="wizForm" enctype="multipart/form-data">
+  <input type="hidden" name="decision" id="decision" value="draft">
+
+  {# ---------- STEP 1: Details ---------- #}
+  <div class="wiz-step active card">
+    <h2>① Campaign Details</h2>
+    <label>Campaign name <span class="faint small">(only you see this)</span></label>
+    <input name="name" id="f_name" placeholder="June Festival Offer" required>
+    <label style="margin-top:10px">Subject line <span class="faint small">— what the reader sees in their inbox</span></label>
+    <input name="subject" id="f_subject" placeholder="🎉 Big festival sale — 40% off today!">
+    <p class="faint small" style="margin-top:6px">A clear subject improves open rates. You can still leave it empty.</p>
+  </div>
+
+  {# ---------- STEP 2: Recipients ---------- #}
+  <div class="wiz-step card">
+    <h2>② Recipients</h2>
+    <p class="muted small">Who receives this campaign? Pick one option.</p>
+
+    <label class="rcpt-opt"><input type="radio" name="rcpt_mode" value="all" checked>
+      📂 <b>All active contacts</b> <span class="faint small">({{ all_active }})</span></label>
+
+    <label class="rcpt-opt"><input type="radio" name="rcpt_mode" value="list">
+      📋 <b>Existing contact list</b></label>
+    <div class="rcpt-panel" data-for="list" style="display:none">
+      <select name="list_id">
+        {% for l in rcpt_lists %}<option value="{{ l.id }}">{{ l.name }} ({{ l.n }})</option>
+        {% else %}<option value="">No lists yet — create one in Contacts</option>{% endfor %}
+      </select>
+    </div>
+
+    <label class="rcpt-opt"><input type="radio" name="rcpt_mode" value="single">
+      ✉️ <b>Single email</b></label>
+    <div class="rcpt-panel" data-for="single" style="display:none">
+      <div class="row" style="gap:8px">
+        <input name="single_email" placeholder="person@example.com" style="flex:2">
+        <input name="single_name" placeholder="Name (optional)" style="flex:1">
+      </div>
+    </div>
+
+    <label class="rcpt-opt"><input type="radio" name="rcpt_mode" value="paste">
+      📋 <b>Copy &amp; paste many emails</b></label>
+    <div class="rcpt-panel" data-for="paste" style="display:none">
+      <textarea name="paste_emails" style="min-height:100px"
+        placeholder="jane@acme.com, Jane Doe&#10;bob@acme.com&#10;raj@x.com, Raj"></textarea>
+      <span class="faint small">One per line. Optional name after a comma.</span>
+    </div>
+
+    <label class="rcpt-opt"><input type="radio" name="rcpt_mode" value="txt">
+      📄 <b>Upload CSV / TXT file</b></label>
+    <div class="rcpt-panel" data-for="txt" style="display:none">
+      <input type="file" name="rcpt_file" accept=".csv,.txt,.tsv">
+    </div>
+
+    <label class="rcpt-opt"><input type="radio" name="rcpt_mode" value="excel">
+      📊 <b>Upload Excel (.xlsx)</b></label>
+    <div class="rcpt-panel" data-for="excel" style="display:none">
+      <input type="file" name="rcpt_file" accept=".xlsx,.xls">
+      <span class="faint small">Emails are detected automatically from any column.</span>
+    </div>
+  </div>
+
+  {# ---------- STEP 3: Template ---------- #}
+  <div class="wiz-step card">
+    <h2>③ Email Template</h2>
+    <label>Pick a template <span class="faint small">(grouped by category — fills the email below)</span></label>
+    <div class="row" style="gap:8px;align-items:flex-end">
+      <select id="tplPick" style="flex:2">
+        <option value="">— Start from scratch —</option>
+        {% set groups = tpl_picker | groupby('group') %}
+        {% for g, items in groups %}
+        <optgroup label="{{ g }}">
+          {% for t in items %}<option value="{{ t.gid }}">{{ t.name }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+      <a class="btn ghost" href="{{ url_for('builder') }}" target="_blank" style="flex:0;white-space:nowrap">🎨 Builder</a>
+    </div>
+    <label style="margin-top:10px">Email body <span class="faint small">— use {{ '{{name}}' }} for personalization</span></label>
+    <textarea name="body" id="f_body" style="min-height:130px" placeholder="Write your email…"></textarea>
+    <div id="tplPrev" class="card tight" style="display:none;background:#fff;color:#111;margin-top:8px;max-height:240px;overflow:auto"></div>
+  </div>
+
+  {# ---------- STEP 4: Sender ---------- #}
+  <div class="wiz-step card">
+    <h2>④ Sender &amp; Domain</h2>
+    <div class="row" style="gap:10px">
+      <div style="flex:1"><label>Sender name</label>
+        <input name="from_name" id="f_fromname" placeholder="Acme Store"></div>
+      <div style="flex:1"><label>Sender email</label>
+        {% if domains %}
+        <div class="row" style="gap:6px">
+          <input name="from_user" id="f_fromuser" placeholder="hello" style="flex:1">
+          <span style="align-self:center">@</span>
+          <select name="from_domain" id="f_fromdomain" style="flex:1">
+            {% for d in domains %}<option>{{ d.domain }}</option>{% endfor %}
+          </select>
+        </div>
+        <input type="hidden" name="from_email" id="f_fromemail">
+        {% else %}
+        <input name="from_email" id="f_fromemail" value="{{ default_from }}" placeholder="you@yourdomain.com">
+        <span class="faint small">Tip: add a domain in <a href="{{ url_for('domains') }}" target="_blank">Domains</a> for better delivery.</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ---------- STEP 5: Inbox Analysis ---------- #}
+  <div class="wiz-step card">
+    <div class="section-head"><h2>⑤ 📊 Inbox Analysis <span class="badge b-Running">⭐ Recommended</span></h2>
+      <button type="button" class="btn ghost sm" id="reAnalyze">↻ Re-check</button></div>
+    <p class="muted small">A quick check of your email before sending. This step is optional — you can skip it.</p>
+    <div id="anaBox"><p class="faint">Analyzing…</p></div>
+  </div>
+
+  {# ---------- STEP 6: Review ---------- #}
+  <div class="wiz-step card wiz-review">
+    <h2>⑥ Review Campaign</h2>
+    <div id="reviewBox"></div>
+    <p class="faint small" style="margin-top:10px">Check everything above, then choose how to send on the next step.</p>
+  </div>
+
+  {# ---------- STEP 7: Send ---------- #}
+  <div class="wiz-step card">
+    <h2>⑦ Send Options</h2>
+    <div class="grid g3">
+      <div class="card" style="text-align:center">
+        <h3>💾 Save Draft</h3>
+        <p class="faint small">Save only. No emails are sent. Edit &amp; send later.</p>
+        <button type="button" class="btn ghost" data-decision="draft">Save Draft</button>
+      </div>
+      <div class="card" style="text-align:center">
+        <h3>📅 Schedule</h3>
+        <p class="faint small">Send automatically at a chosen time.</p>
+        <input type="datetime-local" name="scheduled_at" style="margin-bottom:8px">
+        <button type="button" class="btn" data-decision="schedule">Schedule</button>
+      </div>
+      <div class="card" style="text-align:center;border-color:var(--good)">
+        <h3>📤 Send Now</h3>
+        <p class="faint small"><b>Bulk sender</b> — emails everyone now (real SMTP, or a safe test run if SMTP isn't set).</p>
+        <button type="button" class="btn" data-decision="send" style="background:var(--good)">Send Now</button>
+      </div>
+    </div>
+  </div>
+
+  {# ---------- Nav ---------- #}
+  <div class="wiz-nav">
+    <button type="button" class="btn ghost" id="wizBack" style="visibility:hidden">← Back</button>
+    <button type="button" class="btn" id="wizNext">Next →</button>
+  </div>
+</form>
+
+<script type="application/json" id="tplData">{{ tpl_picker | tojson }}</script>
+<script>
+(function(){
+  var form=document.getElementById('wizForm');
+  var steps=Array.prototype.slice.call(document.querySelectorAll('.wiz-step'));
+  var dots=Array.prototype.slice.call(document.querySelectorAll('.wiz-dot'));
+  var cur=0;
+  var back=document.getElementById('wizBack'), next=document.getElementById('wizNext');
+  var csrf=document.querySelector('meta[name=csrf-token]').content;
+
+  function show(i){
+    cur=i;
+    steps.forEach(function(s,idx){ s.classList.toggle('active', idx===i); });
+    dots.forEach(function(d,idx){ d.classList.toggle('active', idx===i); d.classList.toggle('done', idx<i); });
+    back.style.visibility = i===0 ? 'hidden':'visible';
+    next.style.display = i===steps.length-1 ? 'none':'';
+    if(i===4) runAnalysis();
+    if(i===5) buildReview();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  function valid(i){
+    if(i===0 && !form.name.value.trim()){ alert('Please enter a campaign name.'); return false; }
+    if(i===1){
+      var m=(document.querySelector('input[name=rcpt_mode]:checked')||{}).value;
+      if(m==='single' && !form.single_email.value.trim()){ alert('Enter an email address.'); return false; }
+      if(m==='paste' && !form.paste_emails.value.trim()){ alert('Paste at least one email.'); return false; }
+    }
+    return true;
+  }
+  next.addEventListener('click', function(){ if(valid(cur)) show(Math.min(cur+1, steps.length-1)); });
+  back.addEventListener('click', function(){ show(Math.max(cur-1,0)); });
+
+  // Recipient option panels
+  document.querySelectorAll('input[name=rcpt_mode]').forEach(function(r){
+    r.addEventListener('change', function(){
+      document.querySelectorAll('.rcpt-panel').forEach(function(p){
+        p.style.display = (p.dataset.for===r.value) ? 'block':'none';
+      });
+    });
+  });
+
+  // Template picker
+  var data={}; try{ JSON.parse(document.getElementById('tplData').textContent).forEach(function(t){data[t.gid]=t;}); }catch(e){}
+  var pick=document.getElementById('tplPick');
+  pick && pick.addEventListener('change',function(){
+    var t=data[pick.value]; var prev=document.getElementById('tplPrev');
+    if(!t){prev.style.display='none';return;}
+    if(t.subject && !form.subject.value.trim()) form.subject.value=t.subject;
+    document.getElementById('f_body').value=t.content;
+    prev.innerHTML=t.content; prev.style.display='block';
+  });
+
+  // Sender email assembly (domain mode)
+  function syncFrom(){
+    var u=document.getElementById('f_fromuser'), d=document.getElementById('f_fromdomain'),
+        h=document.getElementById('f_fromemail');
+    if(u && d && h) h.value=(u.value.trim()||'hello')+'@'+d.value;
+  }
+  ['f_fromuser','f_fromdomain'].forEach(function(id){ var el=document.getElementById(id); el && el.addEventListener('input',syncFrom); el && el.addEventListener('change',syncFrom); });
+  syncFrom();
+
+  // Step 5 — live inbox analysis
+  function runAnalysis(){
+    var box=document.getElementById('anaBox'); box.innerHTML='<p class="faint">Analyzing…</p>';
+    var fd=new FormData(); fd.append('subject',form.subject.value); fd.append('body',form.body.value);
+    fetch('{{ url_for("campaign_analyze") }}',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+      .then(function(r){return r.json();}).then(function(j){
+        var col=j.overall>=85?'var(--good)':(j.overall>=65?'var(--warn)':'var(--bad)');
+        var rows=j.rows.map(function(r){return '<div class="kv"><span>'+r.label+'</span><span style="color:'+(r.ok?'var(--good)':'var(--bad)')+'">'+(r.ok?'✅ ':'⚠️ ')+r.value+'</span></div>';}).join('');
+        var issues=j.issues.length? '<h3 style="margin-top:12px">🤖 Suggestions</h3>'+j.issues.map(function(i){return '<div class="kv"><span>🟠 <b>'+i.label+'</b> — <span class="muted">'+i.fix+'</span></span></div>';}).join('') : '<p class="faint" style="margin-top:10px">🎉 No content issues found.</p>';
+        box.innerHTML='<div class="grid g3" style="align-items:center"><div style="text-align:center"><div class="score-ring" style="font-size:2.6rem;color:'+col+'">'+j.overall+'<span style="font-size:1rem;color:var(--muted)">/100</span></div><span class="badge '+(j.level==='good'?'b-valid':(j.level==='warn'?'b-risky':'b-invalid'))+'">'+j.verdict+'</span></div><div class="kv"><span>📥 Inbox score</span><b>'+j.content+'%</b></div><div class="kv"><span>🚨 Spam risk</span><b>'+j.spam_risk+'/100</b></div></div><div style="margin-top:10px">'+rows+'</div>'+issues;
+      }).catch(function(){ box.innerHTML='<p class="faint">Could not analyze right now — you can still continue.</p>'; });
+  }
+  document.getElementById('reAnalyze').addEventListener('click',runAnalysis);
+
+  // Step 6 — review
+  function buildReview(){
+    var m=(document.querySelector('input[name=rcpt_mode]:checked')||{}).value;
+    var rcpt={all:'All active contacts',list:'Existing list',single:'Single email',paste:'Pasted emails',txt:'CSV/TXT file',excel:'Excel file'}[m]||m;
+    var from=(document.getElementById('f_fromemail')||{}).value||form.from_email&&form.from_email.value||'';
+    var fn=form.from_name.value.trim(); if(fn) from=fn+' <'+from+'>';
+    var rows=[['Campaign',form.name.value||'—'],['Subject',form.subject.value||'(none)'],['Recipients',rcpt],['Template',pick.options[pick.selectedIndex].text],['Sender',from||'—']];
+    document.getElementById('reviewBox').innerHTML=rows.map(function(r){return '<div class="kv"><span>'+r[0]+'</span><b>'+r[1]+'</b></div>';}).join('');
+  }
+
+  // Step 7 — send decision buttons submit the form
+  document.querySelectorAll('[data-decision]').forEach(function(b){
+    b.addEventListener('click',function(){
+      syncFrom();
+      document.getElementById('decision').value=b.dataset.decision;
+      if(b.dataset.decision==='send' && !confirm('Send this campaign now to all selected recipients?')) return;
+      form.submit();
+    });
+  });
+})();
+</script>
+{% endblock %}

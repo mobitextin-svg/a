@@ -1206,6 +1206,204 @@ def register_modules(app):
                                acct_score=round(acct_score), acct_recs=acct_recs,
                                rcpt_lists=rcpt_lists, all_active=all_active)
 
+    # ---- Guided campaign wizard (7 steps) ------------------------------- #
+    _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+    def _emails_from_text(text):
+        """Pull (email, name) pairs from pasted/CSV/TXT text. Accepts one address
+        per line, optionally 'email, name' or 'name <email>'."""
+        out, seen = [], set()
+        for line in (text or "").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            m = _EMAIL_RE.search(line)
+            if not m:
+                continue
+            email = m.group(0).lower()
+            if email in seen:
+                continue
+            seen.add(email)
+            # Name = the rest of the line with the email & separators removed.
+            name = line.replace(m.group(0), " ")
+            name = re.sub(r"[<>,;\t]", " ", name).strip()
+            out.append((email, name))
+        return out
+
+    def _emails_from_xlsx(file_storage):
+        """Parse an .xlsx upload → [(email, name)]. Returns None if openpyxl
+        isn't installed so the caller can show a friendly message."""
+        try:
+            import openpyxl
+        except ImportError:
+            return None
+        out, seen = [], set()
+        try:
+            wb = openpyxl.load_workbook(file_storage, read_only=True, data_only=True)
+        except Exception:
+            return []
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                cells = [str(c).strip() for c in row if c is not None]
+                email = next((c.lower() for c in cells if _EMAIL_RE.fullmatch(c or "")),
+                             None)
+                if not email or email in seen:
+                    continue
+                seen.add(email)
+                name = next((c for c in cells if not _EMAIL_RE.fullmatch(c or "")), "")
+                out.append((email, name))
+        return out
+
+    def _resolve_recipients(aid, mode, campaign_name):
+        """Turn the wizard's recipient choice into a target list_id.
+        Existing lists are used directly; ad-hoc inputs (single/paste/txt/excel)
+        are imported into a new auto-named list so the send path stays uniform.
+        Returns (list_id, count, error)."""
+        if mode == "list":
+            lid = request.form.get("list_id") or ""
+            if not lid or not D.query("SELECT 1 FROM contact_lists WHERE id=? AND"
+                                      " account_id=?", (lid, aid), one=True):
+                return (None, 0, "Pick a contact list.")
+            n = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
+                        " list_id=? AND status='active'", (aid, lid), one=True)["c"]
+            return (int(lid), n, None)
+        if mode == "all":
+            n = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
+                        " status='active'", (aid,), one=True)["c"]
+            return (None, n, None)
+
+        # Ad-hoc inputs → collect (email, name) pairs.
+        pairs = []
+        if mode == "single":
+            e = (request.form.get("single_email") or "").strip().lower()
+            if _EMAIL_RE.fullmatch(e):
+                pairs = [(e, (request.form.get("single_name") or "").strip())]
+        elif mode == "paste":
+            pairs = _emails_from_text(request.form.get("paste_emails", ""))
+        elif mode in ("txt", "csv"):
+            up = request.files.get("rcpt_file")
+            raw = ""
+            if up and up.filename:
+                raw = up.read().decode("utf-8", "ignore")
+            pairs = _emails_from_text(raw or request.form.get("paste_emails", ""))
+        elif mode == "excel":
+            up = request.files.get("rcpt_file")
+            if not (up and up.filename):
+                return (None, 0, "Choose an .xlsx file.")
+            res = _emails_from_xlsx(up)
+            if res is None:
+                return (None, 0, "Excel import needs the 'openpyxl' library on the "
+                                 "server. Use CSV/TXT/paste instead, or install it.")
+            pairs = res
+        if not pairs:
+            return (None, 0, "No valid email addresses found.")
+
+        # Create a list for these recipients and import them as contacts.
+        base = f"{campaign_name} recipients"[:55] or "Campaign recipients"
+        name, i = base, 2
+        while D.query("SELECT 1 FROM contact_lists WHERE account_id=? AND name=?",
+                      (aid, name), one=True):
+            name = f"{base} ({i})"
+            i += 1
+        lid = D.execute("INSERT INTO contact_lists (account_id, name, created_at)"
+                        " VALUES (?,?,?)", (aid, name, D.now()))
+        for email, nm in pairs:
+            D.execute("INSERT INTO contacts (account_id, list_id, email, name, status,"
+                      " created_at) VALUES (?,?,?,?,?,?)",
+                      (aid, lid, email, nm, "active", D.now()))
+        D.mark_onboarding(aid, "contacts")
+        return (lid, len(pairs), None)
+
+    @app.route("/campaigns/new", methods=["GET", "POST"])
+    @login_required
+    def campaign_wizard():
+        aid = current_account()["id"]
+        if request.method == "POST":
+            name = (request.form.get("name") or "Untitled").strip() or "Untitled"
+            subject = (request.form.get("subject") or "").strip()
+            body = (request.form.get("body") or "").strip()
+            mode = request.form.get("rcpt_mode", "all")
+            list_id, count, err = _resolve_recipients(aid, mode, name)
+            if err:
+                flash(err, "error")
+                return redirect(url_for("campaign_wizard"))
+
+            # Sender: "Name <email>" if a display name was given.
+            s_email = (request.form.get("from_email") or current_user()["email"]).strip()
+            s_name = (request.form.get("from_name") or "").strip()
+            from_email = f"{s_name} <{s_email}>" if s_name else s_email
+
+            decision = request.form.get("decision", "draft")
+            status = "Draft"
+            scheduled_at = None
+            if decision == "schedule":
+                scheduled_at = (request.form.get("scheduled_at") or "").strip() or None
+                status = "Scheduled"
+            cid = D.execute(
+                "INSERT INTO campaigns (account_id, name, subject, body, from_email,"
+                " status, recipients, list_id, scheduled_at, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (aid, name, subject, body, from_email, status, count, list_id,
+                 scheduled_at, D.now()))
+            D.mark_onboarding(aid, "campaign")
+
+            if decision == "send":
+                msg = _send_campaign_now(aid, cid)
+                flash(msg[1], msg[0])
+                return redirect(url_for("campaigns"))
+            if decision == "schedule":
+                flash(f"📅 '{name}' scheduled for {scheduled_at or 'later'} "
+                      f"to {count} recipient(s).", "success")
+                return redirect(url_for("campaigns", status="Scheduled"))
+            flash(f"💾 Draft '{name}' saved with {count} recipient(s).", "success")
+            return redirect(url_for("campaigns", status="Draft"))
+
+        # GET — gather everything the wizard needs.
+        sys_tpl = D.query("SELECT id, category, name, subject, content FROM"
+                          " system_templates WHERE published=1 ORDER BY category, name")
+        my_tpl = D.query("SELECT id, folder, name, subject, content FROM templates"
+                         " WHERE account_id=? AND trashed=0 ORDER BY folder, name", (aid,))
+        tpl_picker = (
+            [{"gid": "sys-%d" % t["id"], "group": "⭐ " + t["category"], "name": t["name"],
+              "subject": t["subject"] or "", "content": t["content"] or ""} for t in sys_tpl]
+            + [{"gid": "my-%d" % t["id"], "group": "📁 " + (t["folder"] or "General"),
+                "name": t["name"], "subject": t["subject"] or "",
+                "content": t["content"] or ""} for t in my_tpl])
+        rcpt_lists = D.query(
+            "SELECT cl.id, cl.name,"
+            " (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id AND"
+            "  c.status='active') AS n"
+            " FROM contact_lists cl WHERE cl.account_id=? ORDER BY cl.name", (aid,))
+        all_active = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
+                             " status='active'", (aid,), one=True)["c"]
+        domains = D.query("SELECT domain FROM domains WHERE account_id=? ORDER BY"
+                          " reputation DESC", (aid,))
+        return render_template("campaign_wizard.html", tpl_picker=tpl_picker,
+                               rcpt_lists=rcpt_lists, all_active=all_active,
+                               domains=domains, default_from=current_user()["email"])
+
+    @app.route("/campaigns/analyze", methods=["POST"])
+    @login_required
+    def campaign_analyze():
+        """Live Inbox-Analysis used by the wizard's step 5 — scores the in-progress
+        subject + body without saving anything."""
+        aid = current_account()["id"]
+        subject = request.form.get("subject", "")
+        body = request.form.get("body", "")
+        content = DAI.inbox_score(subject, body)
+        analysis = DAI.content_analysis(subject, body)
+        sig = _account_signals(aid)
+        acct = DAI.predict_deliverability(sig)
+        readiness = DAI.send_readiness(content["score"], acct["score"])
+        return jsonify({
+            "overall": readiness["overall"], "verdict": readiness["verdict"],
+            "level": readiness["level"], "content": content["score"],
+            "spam_risk": max(0, 100 - content["score"]),
+            "rows": analysis["rows"],
+            "issues": [{"label": f["label"], "fix": f["fix"]}
+                       for f in content["issues"]],
+        })
+
     # The "Bulk Email Sender" module reuses the campaign composer.
     @app.route("/sender")
     @login_required

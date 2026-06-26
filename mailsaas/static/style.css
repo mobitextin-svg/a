@@ -250,3 +250,22 @@ textarea{resize:vertical;min-height:90px}
 .tpl-manage-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line)}
 .tpl-manage-row .nm{flex:1;font-weight:600}
 @media(max-width:760px){.tpl-layout{grid-template-columns:1fr}.tpl-side{position:static}}
+
+/* ===================== Campaign Wizard ===================== */
+.wiz-steps{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
+.wiz-dot{display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;
+  background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:.82rem;white-space:nowrap}
+.wiz-dot .n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
+  border-radius:50%;background:var(--bg);font-size:.72rem;font-weight:700}
+.wiz-dot.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.wiz-dot.active .n{background:rgba(255,255,255,.25);color:#fff}
+.wiz-dot.done{border-color:var(--good);color:var(--good)}
+.wiz-dot.done .n{background:var(--good);color:#fff}
+.wiz-step{display:none}
+.wiz-step.active{display:block}
+.wiz-nav{display:flex;justify-content:space-between;gap:10px;margin-top:18px}
+.rcpt-opt{display:block;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+.rcpt-opt:hover{border-color:var(--brand)}
+.rcpt-opt input{margin-right:8px}
+.rcpt-panel{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.wiz-review .kv b{color:var(--text)}

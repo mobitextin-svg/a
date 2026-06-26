@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Campaigns{% endblock %}
 {% block content %}
-<h1>Campaigns</h1>
-<p class="muted">Draft, schedule, run and analyse your email campaigns.</p>
+<div class="section-head"><h1>🚀 Campaigns</h1>
+  <a class="btn" href="{{ url_for('campaign_wizard') }}">➕ New Campaign (guided)</a></div>
+<p class="muted">Draft, schedule, run and analyse your email campaigns. Use the guided wizard, or the quick composer below.</p>
 
 <div class="tabs" style="margin-top:14px">
   <a class="tab {{ 'active' if not status_filter }}" href="{{ url_for('campaigns') }}">All</a>
