@@ -134,6 +134,8 @@
           <input type="file" id="heroFile" accept="image/*" style="display:none">
         </div><span class="faint small" id="heroStatus"></span>
         <img id="heroThumb" src="{{ fields.hero or '' }}" style="max-height:90px;border-radius:6px;margin-top:6px;{{ '' if fields.hero else 'display:none' }}"></div>
+      <div class="f full"><label>Header image link <span class="faint small">— make the banner clickable (optional)</span></label>
+        <input name="hero_url" value="{{ fields.hero_url or '' }}" placeholder="https://example.com/landing"></div>
     </div>
   </div>
 
@@ -175,11 +177,20 @@
     </div>
   </div>
 
-  <!-- SIGN-OFF + ADDRESS -->
+  <!-- SIGN-OFF + ADDRESS + SOCIAL -->
   <div class="card">
     <div class="qe-grid">
       <div class="f full"><label>Sign-off</label>
         <input name="signoff" value="{{ fields.signoff or '' }}" placeholder="Regards, Team BankBazaar"></div>
+      <div class="f full"><label>🔗 Social links <span class="faint small">— shown as icons in the footer (leave blank to hide)</span></label>
+        <div class="qe-grid" style="gap:8px">
+          <input name="soc_facebook"  value="{{ fields.soc_facebook or '' }}"  placeholder="📘 Facebook URL">
+          <input name="soc_instagram" value="{{ fields.soc_instagram or '' }}" placeholder="📸 Instagram URL">
+          <input name="soc_twitter"   value="{{ fields.soc_twitter or '' }}"   placeholder="🐦 X / Twitter URL">
+          <input name="soc_linkedin"  value="{{ fields.soc_linkedin or '' }}"  placeholder="💼 LinkedIn URL">
+          <input name="soc_youtube"   value="{{ fields.soc_youtube or '' }}"   placeholder="▶️ YouTube URL">
+          <input name="soc_whatsapp"  value="{{ fields.soc_whatsapp or '' }}"  placeholder="💬 WhatsApp URL">
+        </div></div>
       <div class="f full">
         <label style="display:flex;align-items:center;gap:6px">
           <input type="checkbox" id="addrToggle" style="width:auto" {{ 'checked' if fields.address }}>
@@ -329,7 +340,14 @@
     var logoCell = (logoMode==='name'||(logoMode!=='logo'&&!logo)) ? nameSpan
       : (logoMode==='logo'&&logo) ? imgTag
       : (logo ? imgTag+'<span style="display:inline-block;width:10px"></span>'+nameSpan : nameSpan);
-    var heroRow=hero?('<img src="'+hero+'" style="width:100%;display:block">'):'';
+    var heroUrl=(form.hero_url.value||'').trim();
+    var heroImg=hero?('<img src="'+hero+'" style="width:100%;display:block">'):'';
+    var heroRow=heroImg?(heroUrl?('<a href="'+heroUrl+'">'+heroImg+'</a>'):heroImg):'';
+    // Social icons row (matches the saved footer).
+    var socDefs=[['📘',form.soc_facebook.value],['📸',form.soc_instagram.value],['🐦',form.soc_twitter.value],['💼',form.soc_linkedin.value],['▶️',form.soc_youtube.value],['💬',form.soc_whatsapp.value]];
+    var socRow=socDefs.filter(function(s){return (s[1]||'').trim();})
+      .map(function(s){return '<a href="'+s[1].trim()+'" style="font-size:20px;margin:0 7px;text-decoration:none">'+s[0]+'</a>';}).join('');
+    socRow=socRow?('<div style="text-align:center;padding:16px 28px 4px">'+socRow+'</div>'):'';
     var button=bt?('<div style="text-align:center;padding:26px"><a href="'+bu+'" style="'+bcss+';text-decoration:none;font-weight:bold;display:inline-block">'+bt+'</a></div>'):'';
     var addr=document.getElementById('addrBox').value.trim();
     var addrRow=addr?('<div style="padding:0 28px 18px;color:#777;font-size:12px">'+addr.replace(/\n/g,'<br>')+'</div>'):'';
@@ -338,7 +356,7 @@
     box.innerHTML='<div style="background:#e7e7e7;padding:18px"><div style="max-width:600px;margin:0 auto">'+preLine+'<div style="background:#fff;border-radius:4px;font-family:Arial">'+
       '<div style="padding:20px 28px">'+logoCell+'</div><div style="height:4px;background:'+accent+'"></div>'+heroRow+
       '<div style="padding:24px 28px;color:#222;font-size:15px;line-height:1.6"><p>Hi Mariappan,</p>'+bodyHtml().replace(/\{\{name[^}]*\}\}/g,'Mariappan').replace(/\{\{company[^}]*\}\}/g,comp).replace(/\{\{city[^}]*\}\}/g,'Chennai').replace(/\{\{state[^}]*\}\}/g,'Tamil Nadu')+'</div>'+button+
-      '<div style="padding:8px 28px 18px;color:#222;font-size:14px">'+(form.signoff.value||'Regards')+'</div>'+addrRow+
+      '<div style="padding:8px 28px 18px;color:#222;font-size:14px">'+(form.signoff.value||'Regards')+'</div>'+socRow+addrRow+
       '<div style="padding:18px 28px;border-top:1px solid #e5e5e5;color:#999;font-size:11px;text-align:center">This is an auto-generated email. Please do not reply.<br><a href="#" style="color:'+accent+'">Unsubscribe</a> | <a href="#" style="color:'+accent+'">Report Spam</a></div>'+
       '</div></div></div>';
     box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'nearest'});

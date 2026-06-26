@@ -2279,9 +2279,17 @@ def register_modules(app):
         accent_bar = ('<tr><td style="height:4px;background:%s;font-size:0;'
                       'line-height:0">&nbsp;</td></tr>' % accent)
         # The "first image" — a full-width banner shown before the text content.
-        hero_row = (
-            '<tr><td style="padding:0"><img src="%s" alt="" '
-            'style="width:100%%;display:block;border:0"></td></tr>' % hero) if hero else ""
+        # Optionally wrapped in a link, so the banner image is clickable.
+        hero_url = (f.get("hero_url") or "").strip()
+        if hero:
+            hero_img = ('<img src="%s" alt="" style="width:100%%;display:block;'
+                        'border:0">' % hero)
+            if hero_url:
+                hero_img = '<a href="%s" style="text-decoration:none">%s</a>' % (
+                    hero_url, hero_img)
+            hero_row = '<tr><td style="padding:0">%s</td></tr>' % hero_img
+        else:
+            hero_row = ""
         # Button — four styles to choose from.
         button = ""
         if btn_text:
@@ -2306,6 +2314,24 @@ def register_modules(app):
             address_row = (
                 '<tr><td style="padding:0 28px 18px;color:#777;font-size:12px;'
                 'line-height:1.6">' + address.replace("\n", "<br>") + '</td></tr>')
+        # Social profile links — a centred row of icons in the footer.
+        social = [
+            ("Facebook", "📘", (f.get("soc_facebook") or "").strip()),
+            ("Instagram", "📸", (f.get("soc_instagram") or "").strip()),
+            ("X", "🐦", (f.get("soc_twitter") or "").strip()),
+            ("LinkedIn", "💼", (f.get("soc_linkedin") or "").strip()),
+            ("YouTube", "▶️", (f.get("soc_youtube") or "").strip()),
+            ("WhatsApp", "💬", (f.get("soc_whatsapp") or "").strip()),
+        ]
+        social_links = "".join(
+            '<a href="%s" style="text-decoration:none;font-size:20px;'
+            'margin:0 7px" title="%s">%s</a>' % (url, label, icon)
+            for label, icon, url in social if url)
+        social_row = ""
+        if social_links:
+            social_row = (
+                '<tr><td align="center" style="padding:16px 28px 4px">'
+                + social_links + '</td></tr>')
         return (
             '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" '
             'style="background:#e7e7e7;font-family:Arial,sans-serif;margin:0;padding:18px 0">'
@@ -2325,6 +2351,7 @@ def register_modules(app):
             '<tr><td>' + button + '</td></tr>'
             '<tr><td style="padding:8px 28px 18px;color:#222;font-size:14px;line-height:1.6">'
             + signoff + '</td></tr>'
+            + social_row
             + address_row +
             '<tr><td style="padding:18px 28px;border-top:1px solid #e5e5e5;'
             'color:#999;font-size:11px;line-height:1.6;text-align:center">'
@@ -2439,6 +2466,7 @@ def register_modules(app):
                 "logo_mode": request.form.get("logo_mode", "logo_name"),
                 "company": request.form.get("company", ""),
                 "hero": request.form.get("hero", ""),
+                "hero_url": request.form.get("hero_url", ""),
                 "accent": request.form.get("accent", "#3b4edb"),
                 "preheader": request.form.get("preheader", ""),
                 "body_html": request.form.get("body_html", ""),
@@ -2447,6 +2475,13 @@ def register_modules(app):
                 "btn_style": request.form.get("btn_style", "filled"),
                 "signoff": request.form.get("signoff", ""),
                 "address": request.form.get("address", ""),
+                # Social profile links shown as icons in the footer.
+                "soc_facebook": request.form.get("soc_facebook", ""),
+                "soc_instagram": request.form.get("soc_instagram", ""),
+                "soc_twitter": request.form.get("soc_twitter", ""),
+                "soc_linkedin": request.form.get("soc_linkedin", ""),
+                "soc_youtube": request.form.get("soc_youtube", ""),
+                "soc_whatsapp": request.form.get("soc_whatsapp", ""),
             }
 
         if request.method == "POST":
