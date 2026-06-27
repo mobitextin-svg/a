@@ -119,8 +119,6 @@
   </details>
 </div>
 
-{# Hidden folder field — synced by JS when category is picked #}
-<input type="hidden" name="folder" id="qeFolderHidden" value="{{ edit.folder if edit else '' }}">
 {% endif %}
 
 <!-- MODE SWITCH -->
@@ -134,6 +132,8 @@
   <input type="hidden" name="action" id="qeAction" value="save">
   <input type="hidden" name="body_html" id="qeBodyField">
   <input type="hidden" name="btn_style" id="qeBtnStyle" value="{{ fields.btn_style or 'filled' }}">
+  {% if target != 'system' %}{# Folder set by the category picker above — must live INSIDE the form #}
+  <input type="hidden" name="folder" id="qeFolderHidden" value="{{ edit.folder if edit else '' }}">{% endif %}
   {% if edit and edit.id %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
 
   <!-- AUTO PANEL (hidden in manual mode) -->
@@ -402,6 +402,9 @@
   function sync(){ bodyField.value=bodyHtml(); }
   document.getElementById('qeSaveBtn').addEventListener('click',function(){
     if(!form.name.value.trim()){ alert('Please give the template a name.'); form.name.focus(); return; }
+    var fh=document.getElementById('qeFolderHidden');
+    if(fh && !fh.value){ alert('Please choose a category at the top before saving.');
+      var box=document.getElementById('catPickerBox'); if(box) box.scrollIntoView({behavior:'smooth'}); return; }
     document.getElementById('qeAction').value='save'; sync(); form.submit(); });
   document.getElementById('qeAiBtn').addEventListener('click',function(){
     if(!document.getElementById('aiTopic').value.trim()){ alert('Describe the email first.'); return; }

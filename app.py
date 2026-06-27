@@ -2776,7 +2776,8 @@ def register_modules(app):
                         fields["signoff"] = gen["signoff"]
                     name = name if name != "Untitled" else gen["name"]
                     subject = subject or gen["subject"]
-                edit = {"id": tid, "name": name, "subject": subject, "fields": fields}
+                edit = {"id": tid, "name": name, "subject": subject, "fields": fields,
+                        "folder": (request.form.get("folder") or "").strip() or None}
                 return _render_quick(target, edit)
 
             content = _assemble_quick_email(fields)
