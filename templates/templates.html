@@ -183,7 +183,7 @@
           <div class="row">
             <div style="flex:2"><label>Template name</label><input name="name" value="{{ edit.name if edit else '' }}" placeholder="Admission 2027" required></div>
             <div style="flex:1"><label>Category</label>
-              <select name="folder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
+              <select name="folder" id="newTplFolder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
             <div style="flex:1"><label>Type</label>
               <select name="kind"><option {{ 'selected' if edit and edit.kind=='Email' }}>Email</option><option {{ 'selected' if edit and edit.kind=='Landing' }}>Landing</option><option {{ 'selected' if edit and edit.kind=='Block' }}>Block</option></select></div>
           </div>
@@ -325,6 +325,15 @@
     cats.forEach(function(b){ b.classList.remove('active'); });
     var active = document.querySelector('.sidebar-cat-btn[data-filter="' + filter.replace(/"/g, '') + '"]');
     if (active) active.classList.add('active');
+    // Sync the New Template folder dropdown to the active My Category
+    var folderSel = document.getElementById('newTplFolder');
+    if (folderSel && filter !== '*' && filter !== '__fav' && filter.indexOf('sys:') !== 0 && filter !== '__sys_all') {
+      for (var i = 0; i < folderSel.options.length; i++) {
+        if (folderSel.options[i].value === filter || folderSel.options[i].text === filter) {
+          folderSel.selectedIndex = i; break;
+        }
+      }
+    }
 
     if (filter === '__sys_all' || filter.indexOf('sys:') === 0) {
       // Show system panel
