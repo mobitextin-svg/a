@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+{% block title %}Templates{% endblock %}
+{% block content %}
+<div class="section-head"><h1>🧱 Templates</h1>
+  <div class="row" style="gap:8px">
+    <a class="btn" href="{{ url_for('quick_builder') }}">📧 Create Email Template</a>
+    <a class="btn ghost" href="{{ url_for('builder') }}">🎨 Visual Builder</a>
+  </div></div>
+<p class="muted">Browse the <b>System Templates</b> or build your own in <b>My Templates</b> — neatly organised by category.</p>
+
+<div class="tabs" style="margin-top:14px">
+  <a class="tab {{ 'active' if tab=='system' }}" href="{{ url_for('templates', tab='system') }}">⭐ System Templates</a>
+  <a class="tab {{ 'active' if tab=='mine' }}" href="{{ url_for('templates', tab='mine') }}">📁 My Templates{% if mine_count %} ({{ mine_count }}){% endif %}</a>
+  <a class="tab {{ 'active' if tab=='favorites' }}" href="{{ url_for('templates', tab='favorites') }}">⭐ Favorites{% if favorites %} ({{ favorites|length }}){% endif %}</a>
+  <a class="tab {{ 'active' if tab=='trash' }}" href="{{ url_for('templates', tab='trash') }}">🗑 Trash{% if trash %} ({{ trash|length }}){% endif %}</a>
+</div>
+
+{# ============================ SYSTEM TEMPLATES ============================ #}
+{% if tab=='system' %}
+<p class="faint small">Managed by the admin. <b>Preview</b> and <b>Use</b> (copies into My Templates) — originals stay safe.</p>
+{% for category, items in system.items() %}
+<div class="card">
+  <h2>📂 {{ category }}</h2>
+  <div class="tpl-grid">
+    {% for t in items %}
+    <div class="tpl-card">
+      <div class="tpl-thumb">{% if t.content %}<iframe sandbox srcdoc="{{ t.content|e }}"></iframe>{% else %}<div class="ph">📄</div>{% endif %}</div>
+      <div class="tpl-body">
+        <div class="nm">{{ t.name }}</div>
+        <div class="sb">{{ t.subject or '—' }}</div>
+      </div>
+      <div class="tpl-actions">
+        <form method="post" class="row grow" style="gap:6px;align-items:center;margin:0">
+          <input type="hidden" name="action" value="use">
+          <input type="hidden" name="id" value="{{ t.id }}">
+          <input type="hidden" name="tab" value="mine">
+          <select name="folder" style="flex:1;padding:5px">{% for f in folders %}<option {{ 'selected' if f==category }}>{{ f }}</option>{% endfor %}</select>
+          <button class="btn sm">Use</button>
+        </form>
+        <details class="tpl-menu"><summary>⋯</summary>
+          <div class="pop">
+            <a href="{{ url_for('builder', use=t.id) }}">🎨 Customize in Builder</a>
+          </div>
+        </details>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card"><p class="empty">No system templates published yet.</p></div>
+{% endfor %}
+{% endif %}
+
+{# ============================ MY TEMPLATES ============================ #}
+{% if tab=='mine' %}
+
+{# System categories (static) #}
+{% set sys_cats = ['Marketing','Welcome','Newsletter','Sales','Offers','Events','Transactional'] %}
+
+<div class="my-tpl-layout">
+
+  {# -------- LEFT sidebar -------- #}
+  <aside class="my-tpl-sidebar">
+
+    {# System Categories section #}
+    <div class="sidebar-section-label">🌐 System Categories</div>
+    <button class="sidebar-cat-btn" data-filter="__sys_all">All System</button>
+    {% for cat in sys_cats %}
+    {% set sys_count = (system.get(cat) or [])|length %}
+    <button class="sidebar-cat-btn" data-filter="sys:{{ cat }}">
+      <span class="sidebar-cat-name">{{ cat }}</span>
+      {% if sys_count %}<span class="sidebar-cat-cnt">{{ sys_count }}</span>{% endif %}
+    </button>
+    {% endfor %}
+
+    <div class="sidebar-divider"></div>
+
+    {# My Categories section #}
+    <div class="sidebar-section-label">👤 My Categories</div>
+    <button class="sidebar-cat-btn active" data-filter="*">
+      <span class="sidebar-cat-name">All</span>
+      <span class="sidebar-cat-cnt">{{ mine_count }}</span>
+    </button>
+    <button class="sidebar-cat-btn" data-filter="__fav">
+      <span class="sidebar-cat-name">⭐ Favorites</span>
+      <span class="sidebar-cat-cnt">{{ favorites|length }}</span>
+    </button>
+    {% for f in folders %}
+    <button class="sidebar-cat-btn" data-filter="{{ f }}">
+      <span class="sidebar-cat-name">📁 {{ f }}</span>
+      <span class="sidebar-cat-cnt">{{ (by_folder.get(f) or [])|length }}</span>
+    </button>
+    {% endfor %}
+
+    <div class="sidebar-divider"></div>
+
+    {# Add Category inline form #}
+    <form method="post" style="padding:0 10px">
+      <input type="hidden" name="action" value="new_folder">
+      <input type="hidden" name="tab" value="mine">
+      <div style="display:flex;gap:6px;align-items:center">
+        <input name="folder_name" placeholder="New category…" style="flex:1;padding:5px 7px;font-size:.82rem" required>
+        <button class="btn sm" title="Add category">➕</button>
+      </div>
+    </form>
+  </aside>
+
+  {# -------- Main content pane -------- #}
+  <div class="my-tpl-main">
+
+    {# System templates panel (hidden by default, shown when sys cat selected) #}
+    <div id="sysTplPanel" style="display:none">
+      <div class="my-tpl-toolbar">
+        <h3 class="my-tpl-panel-title" id="sysPanelTitle">System Templates</h3>
+      </div>
+      <div class="tpl-grid" id="sysTplGrid"></div>
+      <p class="empty" id="sysTplEmpty" style="display:none">No system templates in this category.</p>
+    </div>
+
+    {# My templates panel #}
+    <div id="myTplPanel">
+      <div class="my-tpl-toolbar">
+        <input class="search" id="tplSearch" placeholder="🔍 Search templates by name or subject…">
+        <a class="btn sm" href="#editor" onclick="document.getElementById('editor').open=true">➕ New template</a>
+        <a class="btn ghost sm" href="{{ url_for('builder') }}">🎨 Builder</a>
+      </div>
+
+      {# Category manager #}
+      <details class="card" id="catManager">
+        <summary style="cursor:pointer"><b>⚙️ Manage categories</b> <span class="faint small">— rename or delete</span></summary>
+        <div style="margin-top:10px">
+          {% for f in folders %}
+          <div class="tpl-manage-row">
+            <span class="nm">📁 {{ f }} <span class="faint small">({{ (by_folder.get(f) or [])|length }})</span></span>
+            {% if f != 'General' %}
+            <form method="post" class="row" style="gap:6px;margin:0;align-items:center">
+              <input type="hidden" name="action" value="rename_folder"><input type="hidden" name="tab" value="mine">
+              <input type="hidden" name="old" value="{{ f }}">
+              <input name="folder_name" placeholder="Rename to…" style="padding:5px;width:130px" required>
+              <button class="btn ghost sm">Rename</button>
+            </form>
+            <form method="post" style="margin:0" onsubmit="return confirm('Delete &quot;{{ f }}&quot;? Its templates move to General.')">
+              <input type="hidden" name="action" value="delete_folder"><input type="hidden" name="tab" value="mine">
+              <input type="hidden" name="folder_name" value="{{ f }}">
+              <button class="btn danger sm">Delete</button>
+            </form>
+            {% else %}<span class="faint small">default — can't be removed</span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <p class="faint small" style="margin-top:8px">Deleting a category never deletes templates — they move to <b>General</b>.</p>
+      </details>
+
+      {# Import HTML #}
+      <details class="card">
+        <summary style="cursor:pointer"><b>📥 Import HTML email</b> <span class="faint small">— paste code or upload a .html file</span></summary>
+        <form method="post" enctype="multipart/form-data" style="margin-top:10px">
+          <input type="hidden" name="action" value="import"><input type="hidden" name="tab" value="mine">
+          <div class="row" style="gap:8px">
+            <div style="flex:2"><label class="small">Name</label><input name="name" placeholder="Imported template" required></div>
+            <div style="flex:1"><label class="small">Category</label>
+              <select name="folder">{% for f in folders %}<option>{{ f }}</option>{% endfor %}</select></div>
+            <div style="flex:2"><label class="small">Subject <span class="faint">(optional)</span></label><input name="subject"></div>
+          </div>
+          <label class="small" style="margin-top:8px">Paste HTML</label>
+          <textarea name="content" style="font-family:ui-monospace,monospace;min-height:110px" placeholder="<table>…</table>"></textarea>
+          <div class="row" style="gap:8px;align-items:center;margin-top:8px">
+            <input type="file" name="file" accept=".html,.htm" style="width:auto">
+            <span class="faint small">A file overrides the pasted code.</span>
+            <button class="btn sm">📥 Import</button>
+          </div>
+        </form>
+      </details>
+
+      {# Editor (create / edit) #}
+      <details class="card" id="editor" style="border-color:var(--brand)" {{ 'open' if edit }}>
+        <summary style="cursor:pointer"><b>{{ '✏️ Edit template' if edit else '➕ New template' }}</b></summary>
+        <form method="post" style="margin-top:10px">
+          <input type="hidden" name="action" value="{{ 'update' if edit else 'create' }}">
+          <input type="hidden" name="tab" value="mine">
+          {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+          <div class="row">
+            <div style="flex:2"><label>Template name</label><input name="name" value="{{ edit.name if edit else '' }}" placeholder="Admission 2027" required></div>
+            <div style="flex:1"><label>Category</label>
+              <select name="folder" id="newTplFolder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
+            <div style="flex:1"><label>Type</label>
+              <select name="kind"><option {{ 'selected' if edit and edit.kind=='Email' }}>Email</option><option {{ 'selected' if edit and edit.kind=='Landing' }}>Landing</option><option {{ 'selected' if edit and edit.kind=='Block' }}>Block</option></select></div>
+          </div>
+          <label>Subject</label><input name="subject" value="{{ edit.subject if edit else '' }}" placeholder="Admissions are now open!">
+          <label>Content (HTML — use {{ '{{name}}' }} merge tags)</label>
+          <textarea name="content" style="font-family:ui-monospace,monospace;min-height:140px" placeholder="<h1>Hi {{ '{{name}}' }}</h1>">{{ edit.content if edit else '' }}</textarea>
+          {% if not edit %}
+          <div class="card tight" style="background:var(--panel2);margin-top:10px">
+            <label class="small">🤖 Or generate with AI (leave Content empty)</label>
+            <input name="ai_topic" placeholder="Create an Admission Open email for a school">
+          </div>
+          {% endif %}
+          <div class="row" style="margin-top:12px">
+            <button class="btn">{{ '💾 Update' if edit else '💾 Save to My Templates' }}</button>
+            {% if edit %}<a class="btn ghost" href="{{ url_for('templates', tab='mine') }}">Cancel</a>{% endif %}
+          </div>
+        </form>
+      </details>
+
+      {# Template grid #}
+      {% if by_folder %}
+      <div class="tpl-grid" id="tplGrid">
+        {% for folder in folders %}{% for t in (by_folder.get(folder) or []) %}
+        <div class="tpl-card" data-folder="{{ folder }}" data-fav="{{ '1' if t.favorite else '0' }}"
+             data-name="{{ (t.name or '')|lower }}" data-subject="{{ (t.subject or '')|lower }}">
+          <div class="tpl-thumb">
+            {% if t.favorite %}<span class="fav">⭐</span>{% endif %}
+            {% if t.content %}<iframe sandbox srcdoc="{{ t.content|e }}"></iframe>{% else %}<div class="ph">📄</div>{% endif %}
+          </div>
+          <div class="tpl-body">
+            <div class="nm">{{ t.name }}</div>
+            <div class="sb">{{ t.subject or '—' }}</div>
+            <div class="faint small">📁 {{ folder }} · {{ 'from system' if t.source_id else 'original' }}</div>
+          </div>
+          <div class="tpl-actions">
+            <a class="btn ghost sm grow" href="{{ url_for('templates', tab='mine', edit=t.id) }}">✏️ Edit</a>
+            <details class="tpl-menu"><summary>⋯</summary>
+              <div class="pop">
+                <a href="{{ url_for('builder', edit=t.id) }}">🎨 Visual Builder</a>
+                {% if t.fields_json %}<a href="{{ url_for('quick_builder', edit=t.id) }}">⚡ Edit fields</a>{% endif %}
+                <form method="post"><input type="hidden" name="action" value="duplicate"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button>📑 Duplicate</button></form>
+                <form method="post"><input type="hidden" name="action" value="favorite"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button>{{ '★ Unfavorite' if t.favorite else '☆ Favorite' }}</button></form>
+                <a href="{{ url_for('template_export', tid=t.id) }}">⬇ Export HTML</a>
+                <form method="post" onsubmit="return confirm('Move &quot;{{ t.name }}&quot; to Trash?')"><input type="hidden" name="action" value="trash"><input type="hidden" name="tab" value="mine"><input type="hidden" name="id" value="{{ t.id }}"><button class="danger">🗑 Move to Trash</button></form>
+              </div>
+            </details>
+          </div>
+        </div>
+        {% endfor %}{% endfor %}
+      </div>
+      <p class="empty" id="tplEmpty" style="display:none">No templates match.</p>
+      {% else %}
+      <div class="card"><p class="empty">No personal templates yet — click <b>➕ New template</b> above, or copy one from System Templates.</p></div>
+      {% endif %}
+    </div>{# /myTplPanel #}
+
+  </div>{# /my-tpl-main #}
+</div>{# /my-tpl-layout #}
+
+<style>
+.my-tpl-layout{display:flex;gap:0;margin-top:16px;align-items:flex-start}
+.my-tpl-sidebar{width:220px;min-width:180px;background:var(--panel,#fff);border:1px solid var(--border);border-radius:10px;padding:12px 0;flex-shrink:0;margin-right:16px}
+.sidebar-section-label{font-size:.73rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 14px 4px}
+.sidebar-divider{height:1px;background:var(--border);margin:10px 0}
+.sidebar-cat-btn{display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 14px;background:none;border:none;cursor:pointer;text-align:left;font-size:.88rem;border-radius:0;transition:background .12s;color:inherit;gap:6px}
+.sidebar-cat-btn:hover{background:var(--panel2)}
+.sidebar-cat-btn.active{background:color-mix(in srgb,var(--accent,#4f46e5) 10%,transparent);color:var(--accent,#4f46e5);font-weight:600}
+.sidebar-cat-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-cat-cnt{font-size:.78rem;color:var(--muted);background:var(--panel2);border-radius:10px;padding:1px 7px;flex-shrink:0}
+.sidebar-cat-btn.active .sidebar-cat-cnt{background:color-mix(in srgb,var(--accent,#4f46e5) 15%,transparent);color:var(--accent,#4f46e5)}
+.my-tpl-main{flex:1;min-width:0}
+.my-tpl-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.my-tpl-toolbar .search{flex:1;min-width:160px}
+.my-tpl-panel-title{margin:0 0 12px;font-size:1rem}
+</style>
+
+<script>
+(function(){
+  var sysData = {{ system | tojson }};
+
+  // My-templates filter
+  var grid   = document.getElementById('tplGrid');
+  var cats   = document.querySelectorAll('.sidebar-cat-btn[data-filter]');
+  var search = document.getElementById('tplSearch');
+  var empty  = document.getElementById('tplEmpty');
+  var myPanel  = document.getElementById('myTplPanel');
+  var sysPanel = document.getElementById('sysTplPanel');
+  var sysPanelTitle = document.getElementById('sysPanelTitle');
+  var sysTplGrid = document.getElementById('sysTplGrid');
+  var sysTplEmpty = document.getElementById('sysTplEmpty');
+  var activeFilter = '*';
+
+  function renderSysGrid(cat, items) {
+    sysTplGrid.innerHTML = '';
+    if (!items || !items.length) { sysTplEmpty.style.display = ''; return; }
+    sysTplEmpty.style.display = 'none';
+    sysPanelTitle.textContent = '🌐 System: ' + cat;
+    items.forEach(function(t) {
+      var thumbHTML = t.content
+        ? '<iframe sandbox srcdoc="' + (t.content || '').replace(/"/g,'&quot;') + '"></iframe>'
+        : '<div class="ph">📄</div>';
+      var card = document.createElement('div');
+      card.className = 'tpl-card';
+      card.innerHTML =
+        '<div class="tpl-thumb">' + thumbHTML + '</div>' +
+        '<div class="tpl-body"><div class="nm">' + (t.name || '') + '</div>' +
+        '<div class="sb">' + (t.subject || '—') + '</div></div>' +
+        '<div class="tpl-actions">' +
+          '<form method="post" class="row grow" style="gap:6px;align-items:center;margin:0">' +
+            '<input type="hidden" name="action" value="use">' +
+            '<input type="hidden" name="id" value="' + t.id + '">' +
+            '<input type="hidden" name="tab" value="mine">' +
+            '<button class="btn sm">Use</button>' +
+          '</form>' +
+          '<details class="tpl-menu"><summary>⋯</summary>' +
+            '<div class="pop"><a href="/templates/builder?use=' + t.id + '">🎨 Customize in Builder</a></div>' +
+          '</details>' +
+        '</div>';
+      sysTplGrid.appendChild(card);
+    });
+  }
+
+  function applyMyFilter() {
+    if (!grid) return;
+    var q = (search ? search.value : '').toLowerCase().trim();
+    var shown = 0;
+    grid.querySelectorAll('.tpl-card').forEach(function(c) {
+      var okCat = activeFilter === '*' || (activeFilter === '__fav' ? c.dataset.fav === '1' : c.dataset.folder === activeFilter);
+      var okQ   = !q || c.dataset.name.indexOf(q) > -1 || c.dataset.subject.indexOf(q) > -1;
+      var show  = okCat && okQ;
+      c.style.display = show ? '' : 'none';
+      if (show) shown++;
+    });
+    if (empty) empty.style.display = shown ? 'none' : '';
+  }
+
+  function switchTo(filter) {
+    activeFilter = filter;
+    cats.forEach(function(b){ b.classList.remove('active'); });
+    var active = document.querySelector('.sidebar-cat-btn[data-filter="' + filter.replace(/"/g, '') + '"]');
+    if (active) active.classList.add('active');
+    // Sync the New Template folder dropdown to the active My Category
+    var folderSel = document.getElementById('newTplFolder');
+    if (folderSel && filter !== '*' && filter !== '__fav' && filter.indexOf('sys:') !== 0 && filter !== '__sys_all') {
+      for (var i = 0; i < folderSel.options.length; i++) {
+        if (folderSel.options[i].value === filter || folderSel.options[i].text === filter) {
+          folderSel.selectedIndex = i; break;
+        }
+      }
+    }
+
+    if (filter === '__sys_all' || filter.indexOf('sys:') === 0) {
+      // Show system panel
+      myPanel.style.display = 'none';
+      sysPanel.style.display = '';
+      if (filter === '__sys_all') {
+        // Show all system templates merged
+        var all = [];
+        Object.keys(sysData).forEach(function(k){ (sysData[k] || []).forEach(function(t){ all.push(t); }); });
+        sysPanelTitle.textContent = '🌐 All System Templates';
+        renderSysGrid('All', all);
+      } else {
+        var catName = filter.slice(4);
+        renderSysGrid(catName, sysData[catName] || []);
+      }
+    } else {
+      myPanel.style.display = '';
+      sysPanel.style.display = 'none';
+      applyMyFilter();
+    }
+  }
+
+  cats.forEach(function(b) {
+    b.addEventListener('click', function(){ switchTo(b.dataset.filter); });
+  });
+  if (search) search.addEventListener('input', applyMyFilter);
+
+  document.addEventListener('click', function(e) {
+    document.querySelectorAll('.tpl-menu[open]').forEach(function(m){
+      if (!m.contains(e.target)) m.removeAttribute('open');
+    });
+  });
+
+  // Init
+  switchTo('*');
+})();
+</script>
+{% endif %}
+
+{# ============================ FAVORITES ============================ #}
+{% if tab=='favorites' %}
+<div class="card"><h2>⭐ Favorites</h2>
+  {% if favorites %}
+  <div class="tpl-grid">
+    {% for t in favorites %}
+    <div class="tpl-card">
+      <div class="tpl-thumb"><span class="fav">⭐</span>{% if t.content %}<iframe sandbox srcdoc="{{ t.content|e }}"></iframe>{% else %}<div class="ph">📄</div>{% endif %}</div>
+      <div class="tpl-body"><div class="nm">{{ t.name }}</div><div class="sb">{{ t.subject or '—' }}</div><div class="faint small">📁 {{ t.folder }}</div></div>
+      <div class="tpl-actions">
+        <a class="btn ghost sm grow" href="{{ url_for('templates', tab='mine', edit=t.id) }}">✏️ Edit</a>
+        <form method="post" style="margin:0"><input type="hidden" name="action" value="favorite"><input type="hidden" name="tab" value="favorites"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">★ Unfavorite</button></form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="empty">No favorites yet — star a template in My Templates.</p>{% endif %}
+</div>
+{% endif %}
+
+{# ============================ TRASH ============================ #}
+{% if tab=='trash' %}
+<div class="card"><h2>🗑 Trash</h2>
+  <p class="faint small">Restore a template or delete it permanently.</p>
+  <table><thead><tr><th>Name</th><th>Category</th><th></th></tr></thead><tbody>
+  {% for t in trash %}
+    <tr><td><b>{{ t.name }}</b></td><td class="faint small">📁 {{ t.folder }}</td>
+      <td class="num">
+        <form class="inline-form" method="post"><input type="hidden" name="action" value="restore"><input type="hidden" name="tab" value="trash"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">Restore</button></form>
+        <form class="inline-form" method="post" onsubmit="return confirm('Delete permanently?')"><input type="hidden" name="action" value="delete"><input type="hidden" name="tab" value="trash"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn danger sm">Delete forever</button></form>
+      </td></tr>
+  {% else %}<tr><td colspan="3" class="empty">Trash is empty.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+{% endblock %}

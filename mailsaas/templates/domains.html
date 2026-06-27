@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Domains{% endblock %}
+{% block content %}
+<h1>Domains</h1>
+<p class="muted">Authenticate sending domains with SPF, DKIM &amp; DMARC and track reputation.</p>
+
+<div class="card" style="margin-top:14px">
+  <h2>Add a domain</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="add">
+    <div class="row"><input name="domain" placeholder="mail.yourdomain.com" required>
+      <button class="btn">Add domain</button></div>
+  </form>
+</div>
+
+{% for d in domains %}
+<div class="card">
+  <div class="section-head">
+    <div><h2 style="display:inline">{{ d.domain }}</h2>
+      {% if d.verified %}<span class="badge b-valid" style="margin-left:8px">Verified</span>
+      {% else %}<span class="badge b-risky" style="margin-left:8px">Pending</span>{% endif %}
+    </div>
+    <div class="pill">Reputation <b>{{ d.reputation }}/100</b></div>
+  </div>
+  <div class="grid g3" style="margin-top:8px">
+    <div class="kv"><span>SPF</span><span class="{{ 'dot-ok' if d.spf else 'dot-bad' }}">{{ '✔ pass' if d.spf else '✗ missing' }}</span></div>
+    <div class="kv"><span>DKIM</span><span class="{{ 'dot-ok' if d.dkim else 'dot-bad' }}">{{ '✔ pass' if d.dkim else '✗ missing' }}</span></div>
+    <div class="kv"><span>DMARC</span><span class="{{ 'dot-ok' if d.dmarc else 'dot-warn' }}">{{ '✔ pass' if d.dmarc else '⚠ none' }}</span></div>
+  </div>
+  {% if not d.verified %}
+  <div class="code" style="margin-top:12px">TXT  @            v=spf1 include:mailsaas.io ~all
+TXT  ms._domainkey  v=DKIM1; k=rsa; p=MIGfMA0GCSq...
+TXT  _dmarc         v=DMARC1; p=quarantine; rua=mailto:dmarc@{{ d.domain }}</div>
+  <form class="inline-form" method="post" style="margin-top:12px">
+    <input type="hidden" name="action" value="verify"><input type="hidden" name="id" value="{{ d.id }}">
+    <button class="btn">Verify DNS records</button></form>
+  {% endif %}
+</div>
+{% else %}
+<div class="card"><div class="empty">No domains yet — add one above.</div></div>
+{% endfor %}
+{% endblock %}

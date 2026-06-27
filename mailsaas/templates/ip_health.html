@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}IP Health Dashboard{% endblock %}
+{% block content %}
+<h1>❤️‍🩹 IP Health Dashboard</h1>
+<p class="muted">Live reputation, blacklist, latency &amp; capacity for every sending IP.</p>
+
+<div class="card" style="margin-top:14px">
+  <table>
+    <thead><tr><th>Relay / IP</th><th>Pool</th><th class="num">IP score</th><th>RBL</th>
+      <th class="num">Latency</th><th class="num">Inbox</th><th>Warm-up</th>
+      <th class="num">Remaining</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for n in nodes %}
+      <tr>
+        <td><b>{{ n.name }}</b><div class="faint small">{{ n.ip }}</div></td>
+        <td><span class="badge {{ 'b-risky' if n.purpose=='burst' else 'b-Running' }}">{{ n.purpose }}{{ ' · busy' if n.busy }}</span></td>
+        <td class="num" style="color:{{ 'var(--good)' if n.ip_score>=80 else ('var(--warn)' if n.ip_score>=70 else 'var(--bad)') }}">{{ n.ip_score }}</td>
+        <td><span class="badge {{ 'b-valid' if n.detail.rbl=='pass' else 'b-invalid' }}">{{ 'clean' if n.detail.rbl=='pass' else 'listed' }}</span></td>
+        <td class="num">{{ n.detail.latency }}ms</td>
+        <td class="num">{{ n.detail.inbox }}%</td>
+        <td class="small">{{ 'warm' if n.warmup_ok else 'warming' }}</td>
+        <td class="num">{{ '{:,}'.format(n.remaining) }}</td>
+        <td><span class="badge {{ 'b-valid' if n.healthy else 'b-invalid' }}">{{ 'healthy' if n.healthy else 'unhealthy' }}</span></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="empty">No SMTP servers yet — add some under SMTP Servers.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="faint small">Engines consume these signals independently: Sending requires warm-up + low bounce + IP ≥ 70; Verification needs only health; Burst uses reserved IPs exclusively.</p>
+{% endblock %}

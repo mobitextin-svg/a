@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+{% if not user.verified %}
+<div class="flash error">📧 Please verify your email address to secure your account. Check your inbox for the confirmation link.</div>
+{% endif %}
+<h1>Welcome back, {{ user.name.split(' ')[0] }} 👋</h1>
+<p class="muted">Here's what's happening across {{ account.name }}.</p>
+
+{% if onboarding.done < onboarding.total %}
+<div class="card" style="border-color:var(--brand)">
+  <div class="section-head">
+    <h2>🚀 Get started — {{ onboarding.done }}/{{ onboarding.total }} complete</h2>
+    <span class="pill"><b>{{ onboarding.pct }}%</b></span>
+  </div>
+  <div class="meter" style="margin-bottom:14px"><i style="width:{{ onboarding.pct }}%"></i></div>
+  <div class="feature-grid">
+    {% for label, ok, href, icon in onboarding.steps %}
+      <a class="feature" href="{{ href }}" style="text-decoration:none;display:flex;gap:10px;align-items:center;
+         {{ 'opacity:.55' if ok else '' }}">
+        <span style="font-size:1.3rem">{{ '✅' if ok else icon }}</span>
+        <div><h4 style="margin:0">{{ label }}</h4>
+          <p style="margin:0">{{ 'Done' if ok else 'Pending →' }}</p></div>
+      </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="grid g4" style="margin-top:18px">
+  <div class="stat"><div class="k">Contacts</div><div class="v">{{ '{:,}'.format(stats.contacts) }}</div><div class="trend up">▲ healthy list</div></div>
+  <div class="stat"><div class="k">Campaigns</div><div class="v">{{ stats.campaigns }}</div><div class="trend up">▲ {{ deliver.sent|int }} emails sent</div></div>
+  <div class="stat"><div class="k">Verifications</div><div class="v">{{ '{:,}'.format(stats.verifications) }}</div><div class="trend">{{ '{:,}'.format(account.credits) }} credits left</div></div>
+  <div class="stat"><div class="k">Domains</div><div class="v">{{ stats.domains }}</div><div class="trend up">▲ authenticated</div></div>
+</div>
+
+<div class="grid g3" style="margin-top:4px">
+  <div class="stat"><div class="k">Open rate</div><div class="v">{{ deliver.open_rate }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Click rate</div><div class="v">{{ deliver.click_rate }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Bounce rate</div><div class="v">{{ deliver.bounce_rate }}<span class="unit">%</span></div></div>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Operations at a glance</h2>
+    <span class="pill">Top campaign <b>{{ tiles.top_campaign }}</b></span></div>
+  <div class="grid g4">
+    <div class="stat"><div class="k">Today's sends</div><div class="v">{{ '{:,}'.format(tiles.today_sends) }}</div></div>
+    <div class="stat"><div class="k">Inbox %</div><div class="v" style="color:var(--good)">{{ tiles.inbox_pct }}<span class="unit">%</span></div></div>
+    <div class="stat"><div class="k">Bounce %</div><div class="v" style="color:{{ 'var(--bad)' if tiles.bounce_pct>2 else 'var(--text)' }}">{{ tiles.bounce_pct }}<span class="unit">%</span></div></div>
+    <div class="stat"><div class="k">SMTP health</div><div class="v">{{ tiles.smtp_healthy }}<span class="unit">/{{ tiles.smtp_total }} ok</span></div></div>
+  </div>
+  <div class="grid g4" style="margin-top:14px">
+    <div class="stat"><div class="k">Queue</div><div class="v">{{ '{:,}'.format(tiles.queue) }}</div></div>
+    <div class="stat"><div class="k">Domains</div><div class="v">{{ tiles.domains }}</div></div>
+    <div class="stat"><div class="k">Warming relays</div><div class="v">{{ tiles.warmup }}</div></div>
+    <div class="stat"><div class="k">Revenue</div><div class="v">${{ '{:,.0f}'.format(tiles.revenue) }}</div></div>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="section-head"><h2>📈 7-day send trend</h2><span class="pill">Credits <b>{{ '{:,}'.format(tiles.credits) }}</b></span></div>
+    {% set mx = spark|max %}
+    <svg viewBox="0 0 280 90" width="100%" height="100" preserveAspectRatio="none">
+      <polyline fill="none" stroke="#5b8cff" stroke-width="2"
+        points="{% for v in spark %}{{ loop.index0 * 46 }},{{ 85 - (v / mx * 70) }} {% endfor %}"/>
+      {% for v in spark %}<circle cx="{{ loop.index0 * 46 }}" cy="{{ 85 - (v / mx * 70) }}" r="3" fill="#22d3a6"/>{% endfor %}
+    </svg>
+    <div class="row faint small">{% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}<span style="text-align:center">{{ d }}</span>{% endfor %}</div>
+  </div>
+  <div class="card">
+    <div class="section-head"><h2>🤖 AI suggestions</h2></div>
+    {% for s in suggestions %}
+      <div class="kv"><span>💡 {{ s }}</span></div>
+    {% endfor %}
+    <a class="btn ghost sm" style="margin-top:10px" href="{{ url_for('ai_center') }}">Open AI Center →</a>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="section-head"><h2>Quick actions</h2></div>
+    <div class="row">
+      <a class="btn ghost" href="{{ url_for('verification') }}">✅ Verify email</a>
+      <a class="btn ghost" href="{{ url_for('sender') }}">📤 New campaign</a>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <a class="btn ghost" href="{{ url_for('contacts') }}">👥 Import contacts</a>
+      <a class="btn ghost" href="{{ url_for('domains') }}">🌐 Add domain</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-head"><h2>Recent activity</h2></div>
+    {% for a in activity %}
+      <div class="kv"><span>{{ a.action }}</span><span class="faint small">{{ a.created_at }}</span></div>
+    {% else %}
+      <div class="empty">No activity yet.</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Latest campaigns</h2><a class="small" href="{{ url_for('campaigns') }}">View all →</a></div>
+  <table>
+    <thead><tr><th>Campaign</th><th>Status</th><th class="num">Sent</th><th class="num">Opens</th><th class="num">Clicks</th></tr></thead>
+    <tbody>
+    {% for c in campaigns %}
+      <tr><td>{{ c.name }}</td><td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+      <td class="num">{{ '{:,}'.format(c.sent) }}</td><td class="num">{{ '{:,}'.format(c.opens) }}</td>
+      <td class="num">{{ '{:,}'.format(c.clicks) }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No campaigns yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Complaint Center{% endblock %}
+{% block content %}
+<h1>🚨 Complaint Center</h1>
+{% if admin %}
+<p class="muted">Spam complaints across all accounts. Auto-suspend high-complaint senders.</p>
+<div class="card" style="margin-top:14px"><h2>Complaints by account</h2>
+  <table><thead><tr><th>Account</th><th class="num">Complaints</th><th></th></tr></thead>
+  <tbody>{% for a in accounts %}<tr><td><b>{{ a.name }}</b> <span class="faint small">#{{ a.id }}</span></td>
+    <td class="num"><span class="badge {{ 'b-invalid' if a.complaints>2 else 'b-valid' }}">{{ a.complaints }}</span></td>
+    <td class="num">{% if a.complaints>2 %}<form class="inline-form" method="post">
+      <input type="hidden" name="action" value="suspend"><input type="hidden" name="acct" value="{{ a.id }}">
+      <button class="btn danger sm">Suspend</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+</div>
+<div class="card"><h2>Recent complaints</h2>
+  {% for r in recent %}<div class="kv"><span>#{{ r.account_id }} · {{ r.email }}</span>
+    <span class="badge {{ 'b-invalid' if r.kind=='complaint' else 'b-risky' }}">{{ r.kind }}</span></div>
+  {% else %}<div class="faint small">No complaints.</div>{% endfor %}
+</div>
+{% else %}
+<p class="muted">Spam complaints &amp; unsubscribes from your campaigns.</p>
+<div class="grid g3" style="margin-top:14px">
+  <div class="stat"><div class="k">Complaints</div><div class="v" style="color:var(--bad)">{{ ncomp }}</div></div>
+  <div class="stat"><div class="k">Unsubscribes</div><div class="v">{{ nunsub }}</div></div>
+  <div class="stat"><div class="k">Complaint rate</div><div class="v">{{ rate }}<span class="unit">%</span></div></div>
+</div>
+<div class="card"><h2>Details</h2>
+  <table><thead><tr><th>Email</th><th>Type</th><th>When</th></tr></thead>
+  <tbody>{% for r in rows %}<tr><td>{{ r.email }}</td>
+    <td><span class="badge {{ 'b-invalid' if r.kind=='complaint' else 'b-risky' }}">{{ r.kind }}</span></td>
+    <td class="faint small">{{ r.created_at }}</td></tr>
+  {% else %}<tr><td colspan="3" class="empty">No complaints 🎉</td></tr>{% endfor %}</tbody></table>
+</div>
+{% endif %}
+{% endblock %}

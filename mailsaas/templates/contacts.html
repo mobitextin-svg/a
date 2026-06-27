@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Contacts{% endblock %}
+{% block content %}
+<h1>👥 Contacts</h1>
+<p class="muted">Lists, tags, segments, suppression &amp; opt-outs — all in one place.</p>
+
+{# ---- Contact Lists ---- #}
+<div class="card">
+  <div class="section-head"><h2>📋 Contact Lists</h2>
+    <span class="faint small">Group contacts so a campaign can target just one list.</span>
+  </div>
+  <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center">
+    <a class="badge {{ 'b-Running' if not list_filter else '' }}" href="{{ url_for('contacts') }}" style="text-decoration:none;padding:6px 12px">📂 All contacts ({{ counts.values()|sum }})</a>
+    {% for l in lists %}
+    <span class="row" style="gap:0;align-items:center">
+      <a class="badge {{ 'b-valid' if list_filter==l.id|string else 'b-Draft' }}" href="{{ url_for('contacts', list=l.id) }}" style="text-decoration:none;padding:6px 12px">📋 {{ l.name }} ({{ l.n }})</a>
+    </span>
+    {% endfor %}
+    {% if unassigned %}<a class="badge" href="{{ url_for('contacts') }}" style="text-decoration:none;padding:6px 12px;opacity:.7">• {{ unassigned }} unassigned</a>{% endif %}
+  </div>
+
+  <div class="row" style="gap:18px;margin-top:14px;flex-wrap:wrap">
+    {# Create a list #}
+    <form method="post" class="row" style="gap:8px;align-items:flex-end;flex:1;min-width:240px">
+      <input type="hidden" name="action" value="new_list">
+      <div style="flex:1"><label class="small">+ New contact list</label>
+        <input name="name" placeholder="e.g. VIP Clients, Leads, Kannan Customers" required></div>
+      <button class="btn sm">Create list</button>
+    </form>
+    {# Rename / delete the currently-open list #}
+    {% if list_filter %}
+      {% for l in lists if l.id|string == list_filter %}
+      <form method="post" class="row" style="gap:6px;align-items:flex-end">
+        <input type="hidden" name="action" value="rename_list"><input type="hidden" name="id" value="{{ l.id }}">
+        <div><label class="small">Rename “{{ l.name }}”</label><input name="name" placeholder="New name" required style="width:150px"></div>
+        <button class="btn ghost sm">Rename</button>
+      </form>
+      <form method="post" style="align-self:flex-end" onsubmit="return confirm('Delete list “{{ l.name }}”? Contacts are kept (just unassigned).')">
+        <input type="hidden" name="action" value="delete_list"><input type="hidden" name="id" value="{{ l.id }}">
+        <button class="btn danger sm">Delete list</button>
+      </form>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="tabs" style="margin-top:14px">
+  {% set lq = '&list=' + list_filter if list_filter else '' %}
+  <a class="tab {{ 'active' if not status_filter }}" href="{{ url_for('contacts', list=list_filter) }}">All ({{ counts.values()|sum }})</a>
+  <a class="tab {{ 'active' if status_filter=='active' }}" href="{{ url_for('contacts', status='active', list=list_filter) }}">Active ({{ counts.get('active',0) }})</a>
+  <a class="tab {{ 'active' if status_filter=='suppressed' }}" href="{{ url_for('contacts', status='suppressed', list=list_filter) }}">Suppressed ({{ counts.get('suppressed',0) }})</a>
+  <a class="tab {{ 'active' if status_filter=='unsubscribed' }}" href="{{ url_for('contacts', status='unsubscribed', list=list_filter) }}">Unsubscribed ({{ counts.get('unsubscribed',0) }})</a>
+  <a class="tab {{ 'active' if status_filter=='bounced' }}" href="{{ url_for('contacts', status='bounced', list=list_filter) }}">Bounced ({{ counts.get('bounced',0) }})</a>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Add a contact</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="add">
+      <div class="row"><input name="email" placeholder="email@company.com" required>
+        <input name="name" placeholder="Full name"></div>
+      <div class="row" style="margin-top:8px">
+        <div style="flex:1"><label class="small">Tags (comma separated)</label>
+          <input name="tags" placeholder="vip, newsletter"></div>
+        <div style="flex:1"><label class="small">Add to list</label>
+          <select name="list_id"><option value="">— No list —</option>
+            {% for l in lists %}<option value="{{ l.id }}" {{ 'selected' if list_filter==l.id|string }}>{{ l.name }}</option>{% endfor %}</select></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn">Add contact</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Import contacts</h2>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="action" value="import">
+      <div class="row" style="gap:8px">
+        <div style="flex:1"><label class="small">Import into list</label>
+          <select name="list_id"><option value="">— No list —</option>
+            {% for l in lists %}<option value="{{ l.id }}" {{ 'selected' if list_filter==l.id|string }}>{{ l.name }}</option>{% endfor %}</select></div>
+        <div style="flex:1"><label class="small">Upload file <span class="faint">(CSV / Excel-exported)</span></label>
+          <input type="file" name="file" accept=".csv,.txt,.tsv"></div>
+      </div>
+      <label class="small" style="margin-top:8px">…or paste rows — <span class="faint">email, name</span></label>
+      <textarea name="csv" placeholder="jane@acme.com, Jane Doe&#10;bob@acme.com, Bob Smith"></textarea>
+      <div class="row" style="margin-top:10px"><button class="btn">Import</button>
+        <a class="btn ghost" href="{{ url_for('contacts_export') }}">⬇ Export all</a></div>
+      <p class="faint small" style="margin-top:6px">A header row (email,name,…) and ; / tab separators are handled automatically. A file overrides pasted text.</p>
+    </form>
+  </div>
+</div>
+
+{# Standalone forms referenced by table controls via the HTML5 form= attribute
+   (keeps the data table free of nested forms). #}
+<form method="post" id="bulkForm"><input type="hidden" name="action" value="assign_list"></form>
+<form method="post" id="dedupeForm"><input type="hidden" name="action" value="dedupe"></form>
+
+<div class="card">
+  <div class="section-head"><h2>{{ (status_filter or 'All')|capitalize }} contacts
+      {% if list_filter %}{% for l in lists if l.id|string == list_filter %}<span class="faint small">in 📋 {{ l.name }}</span>{% endfor %}{% endif %}
+      <span class="faint small">({{ '{:,}'.format(total) }})</span></h2>
+    <div class="row" style="flex:0;gap:8px">
+      <form method="get" class="inline-form">
+        {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+        {% if list_filter %}<input type="hidden" name="list" value="{{ list_filter }}">{% endif %}
+        <input name="q" value="{{ q }}" placeholder="Search email or name…" style="width:220px">
+      </form>
+      <button form="dedupeForm" class="btn ghost sm">🧹 Remove duplicates</button>
+    </div>
+  </div>
+
+  {# Bulk-assign bar — submits the checkboxes (which carry form="bulkForm") #}
+  <div class="row" style="gap:8px;align-items:center;margin-bottom:10px">
+    <span class="faint small">With selected:</span>
+    <select name="list_id" form="bulkForm" style="width:200px">
+      <option value="">— Unassign (no list) —</option>
+      {% for l in lists %}<option value="{{ l.id }}">📋 {{ l.name }}</option>{% endfor %}</select>
+    <button class="btn sm" form="bulkForm" type="submit">Assign to list</button>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th style="width:24px"><input type="checkbox" id="checkAll" title="Select all"></th>
+      <th>Email</th><th>Name</th><th>Tags</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for c in contacts %}
+      <tr>
+        <td><input type="checkbox" name="ids" value="{{ c.id }}" class="rowChk" form="bulkForm"></td>
+        <td>{{ c.email }}</td><td>{{ c.name or '—' }}</td>
+        <td>{% for t in (c.tags or '').split(',') if t %}<span class="tag">{{ t.strip() }}</span>{% endfor %}</td>
+        <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="num">
+          {% if c.status != 'suppressed' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="suppress">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn ghost sm">Suppress</button></form>
+          {% endif %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn danger sm">Delete</button></form>
+          <form class="inline-form" method="post" onsubmit="return confirm('GDPR erase {{ c.email }}? This cannot be undone.')">
+            <input type="hidden" name="action" value="gdpr"><input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn danger sm" title="GDPR erasure">⌦ GDPR</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">{{ 'No contacts match your search.' if q else 'No contacts in this view.' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if pages > 1 %}
+  <div class="section-head" style="margin-top:12px">
+    <span class="faint small">Page {{ page }} of {{ pages }} · {{ '{:,}'.format(total) }} contacts</span>
+    <div class="row" style="flex:0;gap:6px">
+      {% set base = url_for('contacts') + '?' + ('status=' + status_filter + '&' if status_filter else '') + ('list=' + list_filter + '&' if list_filter else '') + ('q=' + q + '&' if q else '') %}
+      {% if page > 1 %}<a class="btn ghost sm" href="{{ base }}page={{ page-1 }}">← Prev</a>{% endif %}
+      {% if page < pages %}<a class="btn ghost sm" href="{{ base }}page={{ page+1 }}">Next →</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function(){
+  var all=document.getElementById('checkAll');
+  if(all) all.addEventListener('change',function(){
+    document.querySelectorAll('.rowChk').forEach(function(x){x.checked=all.checked});
+  });
+})();
+</script>
+{% endblock %}

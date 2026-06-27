@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Team{% endblock %}
+{% block content %}
+<h1>Team Workspace</h1>
+<p class="muted">Invite members, assign roles &amp; permissions, and audit activity.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>Invite a teammate</h2>
+    <form method="post">
+      <div class="row"><input name="email" type="email" placeholder="colleague@company.com" required>
+        <select name="role" style="max-width:140px">
+          <option>Admin</option><option>Manager</option><option>Employee</option><option>Viewer</option></select></div>
+      <div style="margin-top:12px"><button class="btn">Send invite</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Roles</h2>
+    {% for name, desc in roles %}
+      <div class="kv"><span><b>{{ name }}</b></span><span class="muted small" style="text-align:right;max-width:60%">{{ desc }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Members</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>2FA</th><th>Last login</th></tr></thead>
+    <tbody>
+    {% for m in members %}
+      <tr><td><b>{{ m.name }}</b></td><td>{{ m.email }}</td>
+        <td><span class="badge b-Running">{{ m.role }}</span></td>
+        <td>{{ '🔒 on' if m.twofa else '— off' }}</td>
+        <td class="faint small">{{ m.last_login or 'pending invite' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Permissions matrix</h2>
+  <table>
+    <thead><tr><th>Capability</th>{% for r in all_roles %}<th class="num">{{ r }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for cap, allowed in perms %}
+      <tr><td>{{ cap }}</td>
+        {% for r in all_roles %}<td class="num">{{ '✅' if r in allowed else '—' }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Activity log</h2>
+    {% for a in activity %}
+      <div class="kv"><span><b class="muted">{{ a.actor }}</b> — {{ a.action }}</span>
+        <span class="faint small">{{ a.created_at }}</span></div>
+    {% else %}
+      <div class="empty">No activity recorded.</div>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <h2>Login history</h2>
+    <table>
+      <thead><tr><th>User</th><th>IP</th><th>Result</th><th>When</th></tr></thead>
+      <tbody>
+      {% for l in logins %}
+        <tr><td class="small">{{ l.user_email }}</td><td class="faint small">{{ l.ip }}</td>
+          <td><span class="badge {{ 'b-valid' if l.ok else 'b-invalid' }}">{{ 'success' if l.ok else 'failed' }}</span></td>
+          <td class="faint small">{{ l.created_at }}</td></tr>
+      {% else %}
+        <tr><td colspan="4" class="empty">No logins recorded.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
