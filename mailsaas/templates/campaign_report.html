@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Campaign Report{% endblock %}
+{% block content %}
+<h1>📊 {{ camp.name }}</h1>
+<p class="muted">{{ camp.subject or 'No subject' }} · <span class="badge b-{{ camp.status }}">{{ camp.status }}</span></p>
+
+{% set total = agg.total or 0 %}
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Sent</div><div class="v">{{ '{:,}'.format(total) }}</div></div>
+  <div class="stat"><div class="k">Opens</div><div class="v" style="color:var(--good)">{{ agg.opens }}</div>
+    <div class="trend">{{ (100*agg.opens/total)|round(1) if total else 0 }}%</div></div>
+  <div class="stat"><div class="k">Clicks</div><div class="v" style="color:var(--brand2)">{{ agg.clicks }}</div>
+    <div class="trend">{{ (100*agg.clicks/total)|round(1) if total else 0 }}%</div></div>
+  <div class="stat"><div class="k">Failed</div><div class="v" style="color:{{ 'var(--bad)' if agg.failed else 'var(--text)' }}">{{ agg.failed }}</div></div>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Recipients</h2>
+    <a class="btn ghost sm" href="{{ url_for('campaigns') }}">← Back to campaigns</a></div>
+  <table>
+    <thead><tr><th>Email</th><th>Status</th><th>Opened</th><th>Clicked</th><th>Relay</th><th>When</th></tr></thead>
+    <tbody>
+    {% for m in msgs %}
+      <tr>
+        <td>{{ m.email }}</td>
+        <td><span class="badge {{ 'b-valid' if m.status=='sent' else ('b-Draft' if m.status=='dry-run' else 'b-invalid') }}">{{ m.status }}</span>
+          {% if m.error %}<div class="faint small">{{ m.error[:50] }}</div>{% endif %}</td>
+        <td>{{ '👁️ ' + m.opened_at if m.opened else '—' }}</td>
+        <td>{{ '🖱️ ' + m.clicked_at if m.clicked else '—' }}</td>
+        <td class="faint small">#{{ m.smtp_id }}</td>
+        <td class="faint small">{{ m.created_at }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No messages yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="faint small" style="margin-top:8px">Opens register when the recipient's mail client loads the tracking pixel; clicks register when they click a link in the email.</p>
+</div>
+{% endblock %}

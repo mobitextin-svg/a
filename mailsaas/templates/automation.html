@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Automation{% endblock %}
+{% block content %}
+<h1>⚙️ Automation &amp; Workflows</h1>
+<p class="muted">Welcome series, drip campaigns, triggers and a visual workflow builder.</p>
+
+<div class="card" style="margin-top:14px">
+  <h2>New workflow</h2>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="action" value="create">
+    <div style="flex:2"><label>Name</label><input name="name" placeholder="Onboarding flow" required></div>
+    <div style="flex:2"><label>Trigger</label><select name="trigger">
+      <option>Contact subscribes</option><option>Tag added: lead</option>
+      <option>No open in 60 days</option><option>Date: birthday</option>
+      <option>Form submitted</option><option>Link clicked</option></select></div>
+    <div style="flex:0"><label>Steps</label><input name="steps" type="number" value="3" style="width:80px"></div>
+    <div style="flex:0"><button class="btn">Create</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Workflows</h2>
+  <table>
+    <thead><tr><th>Workflow</th><th>Trigger</th><th class="num">Steps</th><th class="num">Enrolled</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for a in automations %}
+      <tr><td><b>{{ a.name }}</b></td><td class="muted small">{{ a.trigger }}</td>
+        <td class="num">{{ a.steps }}</td><td class="num">{{ '{:,}'.format(a.enrolled) }}</td>
+        <td><span class="badge {{ 'b-active' if a.status=='Active' else ('b-risky' if a.status=='Paused' else 'b-Draft') }}">{{ a.status }}</span></td>
+        <td class="num"><form class="inline-form" method="post">
+          <input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ a.id }}">
+          <button class="btn ghost sm">{{ 'Pause' if a.status=='Active' else 'Activate' }}</button></form></td></tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No workflows yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Visual workflow builder</h2>
+  <div class="row" style="align-items:center;flex-wrap:nowrap;overflow-x:auto">
+    <div class="feature" style="min-width:150px;text-align:center">⚡<h4>Trigger</h4><p>Contact subscribes</p></div>
+    <div class="faint">→</div>
+    <div class="feature" style="min-width:150px;text-align:center">📧<h4>Send</h4><p>Welcome email</p></div>
+    <div class="faint">→</div>
+    <div class="feature" style="min-width:150px;text-align:center">⏳<h4>Wait</h4><p>2 days</p></div>
+    <div class="faint">→</div>
+    <div class="feature" style="min-width:150px;text-align:center">🔀<h4>If opened?</h4><p>branch</p></div>
+    <div class="faint">→</div>
+    <div class="feature" style="min-width:150px;text-align:center">🎯<h4>Goal</h4><p>Converted</p></div>
+  </div>
+</div>
+{% endblock %}

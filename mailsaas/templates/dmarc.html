@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}DMARC Analytics{% endblock %}
+{% block content %}
+<h1>📊 DMARC Analytics</h1>
+{% if admin %}
+<p class="muted">Authentication status across all customer domains. {{ fails }} need attention.</p>
+<div class="card" style="margin-top:14px">
+  <table><thead><tr><th>Domain</th><th>Account</th><th>SPF</th><th>DKIM</th><th>DMARC</th><th class="num">Reputation</th></tr></thead>
+  <tbody>{% for d in domains %}<tr><td><b>{{ d.domain }}</b></td><td class="small">{{ d.acct }}</td>
+    <td>{{ '✅' if d.spf else '❌' }}</td><td>{{ '✅' if d.dkim else '❌' }}</td><td>{{ '✅' if d.dmarc else '❌' }}</td>
+    <td class="num">{{ d.reputation }}</td></tr>{% endfor %}</tbody></table>
+</div>
+{% else %}
+<p class="muted">SPF / DKIM / DMARC for your domains, with fixes.</p>
+{% for d in domains %}
+<div class="card" style="margin-top:14px">
+  <div class="section-head"><h2 style="display:inline">{{ d.domain }}</h2><span class="pill">Reputation <b>{{ d.reputation }}/100</b></span></div>
+  <div class="grid g3" style="margin-top:8px">
+    <div class="kv"><span>SPF</span><span class="{{ 'dot-ok' if d.spf else 'dot-bad' }}">{{ '✅ Pass' if d.spf else '❌ Fail' }}</span></div>
+    <div class="kv"><span>DKIM</span><span class="{{ 'dot-ok' if d.dkim else 'dot-bad' }}">{{ '✅ Pass' if d.dkim else '❌ Fail' }}</span></div>
+    <div class="kv"><span>DMARC</span><span class="{{ 'dot-ok' if d.dmarc else 'dot-bad' }}">{{ '✅ Pass' if d.dmarc else '❌ Fail' }}</span></div>
+    <div class="kv"><span>BIMI <span class="faint small">(brand logo in inbox)</span></span>
+      <span class="{{ 'dot-ok' if d.bimi else 'dot-warn' }}">{{ '✅ Published' if d.bimi else ('◻ Eligible — add BIMI record' if d.dmarc else '— needs DMARC first') }}</span></div>
+  </div>
+  {% if not (d.spf and d.dkim and d.dmarc) %}
+  <div class="flash error" style="margin-top:10px">Suggestions:
+    <ul style="margin:6px 0 0">
+      {% if not d.spf %}<li>Add an SPF record: <code>v=spf1 include:mailsaas.io ~all</code></li>{% endif %}
+      {% if not d.dkim %}<li>Publish your DKIM public key</li>{% endif %}
+      {% if not d.dmarc %}<li>Add a DMARC record &amp; fix alignment: <code>v=DMARC1; p=quarantine</code></li>{% endif %}
+    </ul></div>
+  {% else %}<div class="flash success" style="margin-top:10px">Fully authenticated ✔</div>{% endif %}
+</div>
+{% else %}<div class="card"><div class="empty">No domains yet — add one under Domains.</div></div>{% endfor %}
+{% endif %}
+{% endblock %}

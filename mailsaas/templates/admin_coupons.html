@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Coupons{% endblock %}
+{% block content %}
+<h1>🎫 Coupons</h1>
+<p class="muted">Create and manage discount codes.</p>
+<div class="card" style="margin-top:14px">
+  <h3>New coupon</h3>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="action" value="create">
+    <div style="flex:2"><label>Code</label><input name="code" placeholder="SUMMER25" required></div>
+    <div style="flex:1"><label>% off</label><input name="percent" type="number" value="20"></div>
+    <div style="flex:0"><button class="btn">Create</button></div>
+  </form>
+</div>
+<div class="card">
+  <table>
+    <thead><tr><th>Code</th><th class="num">% off</th><th class="num">Redemptions</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for c in coupons %}
+      <tr><td><b>{{ c.code }}</b></td><td class="num">{{ c.percent }}%</td><td class="num">{{ c.redemptions }}</td>
+        <td><span class="badge {{ 'b-valid' if c.active else 'b-invalid' }}">{{ 'active' if c.active else 'disabled' }}</span></td>
+        <td class="num"><form class="inline-form" method="post"><input type="hidden" name="action" value="toggle">
+          <input type="hidden" name="id" value="{{ c.id }}"><button class="btn ghost sm">{{ 'Disable' if c.active else 'Enable' }}</button></form></td></tr>
+    {% else %}<tr><td colspan="5" class="empty">No coupons.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

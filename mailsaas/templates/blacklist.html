@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Blacklist Center{% endblock %}
+{% block content %}
+<h1>🚫 Blacklist Center</h1>
+<p class="muted">{{ 'All' if admin else 'Your' }} domains &amp; IPs checked against major RBLs.
+  {% if listed %}<span class="badge b-invalid">{{ listed }} listed</span>{% else %}<span class="badge b-valid">All clean</span>{% endif %}</p>
+<div class="card" style="margin-top:14px">
+  <table>
+    <thead><tr><th>Target</th><th>Type</th>{% if admin %}<th>Account</th>{% endif %}<th>Status</th><th>Listed on</th></tr></thead>
+    <tbody>
+    {% for c in checks %}
+      <tr><td><b>{{ c.target }}</b></td><td>{{ c.type }}</td>
+        {% if admin %}<td class="small">{{ c.acct or '—' }}</td>{% endif %}
+        <td><span class="badge {{ 'b-valid' if c.clean else 'b-invalid' }}">{{ '✔ clean' if c.clean else '✗ listed' }}</span></td>
+        <td>{% if c.listed_on %}{{ c.listed_on|join(', ') }}{% else %}<span class="faint">—</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="5" class="empty">Nothing to check yet — add domains or SMTP servers.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <p class="faint small" style="margin-top:8px">Monitored lists: {{ rbls|join(', ') }}. Listed targets should request delisting from the operator.</p>
+</div>
+{% endblock %}

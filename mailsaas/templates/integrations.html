@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Integrations{% endblock %}
+{% block content %}
+<h1>🧩 ISP Integrations & Feedback Loops</h1>
+<p class="muted">Connect provider feedback loops &amp; postmaster tools for live reputation and complaint data.{% if not admin %} <span class="faint">(admins manage connections)</span>{% endif %}</p>
+
+<div class="feature-grid" style="margin-top:16px">
+  {% for pid, name, icon, desc in providers %}
+    {% set st = state.get(pid) %}
+    {% set on = st and st.connected %}
+    <div class="feature" style="display:flex;flex-direction:column;gap:8px">
+      <div class="section-head" style="margin:0"><h4 style="margin:0">{{ icon }} {{ name }}</h4>
+        <span class="badge {{ 'b-valid' if on else 'b-Draft' }}">{{ 'Connected' if on else 'Not connected' }}</span></div>
+      <p style="margin:0;flex:1">{{ desc }}</p>
+      {% if admin %}
+      <form method="post">
+        <input type="hidden" name="provider" value="{{ pid }}">
+        {% if on %}
+          <input type="hidden" name="action" value="disconnect">
+          <button class="btn ghost sm" style="width:100%">Disconnect</button>
+        {% else %}
+          <input type="hidden" name="action" value="connect">
+          <input name="config" placeholder="API key / domain (optional)" style="margin-bottom:6px">
+          <button class="btn sm" style="width:100%">Connect</button>
+        {% endif %}
+      </form>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+<p class="faint small" style="margin-top:14px">Once connected with provider credentials, live reputation, spam-rate and complaint data stream into Deliverability, Complaint Center and IP Health. Without credentials these run in demo mode.</p>
+{% endblock %}

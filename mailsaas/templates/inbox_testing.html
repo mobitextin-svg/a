@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Inbox Testing{% endblock %}
+{% block content %}
+<h1>📥 Inbox Placement Testing</h1>
+{% if admin %}
+<p class="muted">Configure seed accounts &amp; providers; view platform-wide placement.</p>
+<div class="grid g2" style="margin-top:14px">
+  <div class="card"><h2>Seed accounts</h2>
+    {% for s in seeds %}<div class="kv"><span>{{ s }}</span><span class="badge b-valid">active</span></div>{% endfor %}
+    <button class="btn ghost sm" style="margin-top:10px">+ Add seed account</button>
+  </div>
+  <div class="card"><h2>Platform inbox rate</h2>
+    {% for p, sc in platform.items() %}<div class="kv"><span>{{ p }}</span><span>{{ sc }}%</span></div>
+      <div class="meter" style="margin-bottom:8px"><i style="width:{{ sc }}%"></i></div>{% endfor %}
+  </div>
+</div>
+{% else %}
+<p class="muted">Run a seed-list test to see where your mail lands across providers.</p>
+<div class="card" style="margin-top:14px">
+  <form method="post"><button class="btn">▶ Run inbox placement test</button></form>
+</div>
+{% if test %}
+<div class="card"><h2>Results</h2>
+  <table><thead><tr><th>Provider</th><th>Placement</th></tr></thead>
+  <tbody>{% for p, where in test.items() %}<tr><td>{{ p }}</td>
+    <td><span class="badge {{ 'b-valid' if where=='Inbox' else ('b-risky' if where=='Promotions' else 'b-invalid') }}">{{ where }}{{ ' ✅' if where=='Inbox' else (' ⚠️' if where=='Promotions' else ' 🚫') }}</span></td></tr>{% endfor %}</tbody></table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

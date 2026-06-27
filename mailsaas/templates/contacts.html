@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}All Contacts{% endblock %}
+{% block content %}
+<h1>📋 All Contacts</h1>
+<p class="muted">View, search, filter, edit, delete &amp; move every contact in your account.</p>
+
+{# ---- Toolbar: list filter · search · quick actions ---- #}
+<div class="card">
+  <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center">
+    <a class="badge {{ 'b-Running' if not list_filter else '' }}" href="{{ url_for('contacts') }}" style="text-decoration:none;padding:6px 12px">📂 All ({{ counts.values()|sum }})</a>
+    {% for l in lists %}
+    <a class="badge {{ 'b-valid' if list_filter==l.id|string else 'b-Draft' }}" href="{{ url_for('contacts', list=l.id) }}" style="text-decoration:none;padding:6px 12px">📋 {{ l.name }} ({{ l.n }})</a>
+    {% endfor %}
+    {% if unassigned %}<span class="badge" style="opacity:.7">• {{ unassigned }} unassigned</span>{% endif %}
+    <span style="flex:1"></span>
+    <a class="btn ghost sm" href="{{ url_for('contacts_import') }}">📥 Import</a>
+    <a class="btn ghost sm" href="{{ url_for('contacts_export') }}">📤 Export</a>
+  </div>
+</div>
+
+<div class="tabs" style="margin-top:14px">
+  <a class="tab {{ 'active' if not status_filter }}" href="{{ url_for('contacts', list=list_filter) }}">All ({{ counts.values()|sum }})</a>
+  <a class="tab {{ 'active' if status_filter=='active' }}" href="{{ url_for('contacts', status='active', list=list_filter) }}">Active ({{ counts.get('active',0) }})</a>
+  <a class="tab {{ 'active' if status_filter=='suppressed' }}" href="{{ url_for('contacts', status='suppressed', list=list_filter) }}">Suppressed ({{ counts.get('suppressed',0) }})</a>
+  <a class="tab {{ 'active' if status_filter=='unsubscribed' }}" href="{{ url_for('contacts', status='unsubscribed', list=list_filter) }}">Unsubscribed ({{ counts.get('unsubscribed',0) }})</a>
+  <a class="tab {{ 'active' if status_filter=='bounced' }}" href="{{ url_for('contacts', status='bounced', list=list_filter) }}">Bounced ({{ counts.get('bounced',0) }})</a>
+</div>
+
+{# Standalone form referenced by table checkboxes via the form= attribute. #}
+<form method="post" id="bulkForm"><input type="hidden" name="action" value="assign_list"></form>
+
+<div class="card">
+  <div class="section-head"><h2>{{ (status_filter or 'All')|capitalize }} contacts
+      {% if list_filter %}{% for l in lists if l.id|string == list_filter %}<span class="faint small">in 📋 {{ l.name }}</span>{% endfor %}{% endif %}
+      <span class="faint small">({{ '{:,}'.format(total) }})</span></h2>
+    <div class="row" style="flex:0;gap:8px">
+      <form method="get" class="inline-form">
+        {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+        {% if list_filter %}<input type="hidden" name="list" value="{{ list_filter }}">{% endif %}
+        <input name="q" value="{{ q }}" placeholder="🔍 Search email or name…" style="width:240px">
+      </form>
+      <button type="button" class="btn sm" id="btnAdd">＋ Add Contact</button>
+    </div>
+  </div>
+
+  {# Bulk move bar — submits checkboxes carrying form="bulkForm" #}
+  <div class="row" style="gap:8px;align-items:center;margin-bottom:10px">
+    <span class="faint small">Move selected to:</span>
+    <select name="list_id" form="bulkForm" style="width:200px">
+      <option value="">— Unassign (no list) —</option>
+      {% for l in lists %}<option value="{{ l.id }}">📋 {{ l.name }}</option>{% endfor %}</select>
+    <button class="btn sm" form="bulkForm" type="submit">Move to list</button>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th style="width:24px"><input type="checkbox" id="checkAll" title="Select all"></th>
+      <th>Email</th><th>Name</th><th>Tags</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for c in contacts %}
+      <tr>
+        <td><input type="checkbox" name="ids" value="{{ c.id }}" class="rowChk" form="bulkForm"></td>
+        <td>{{ c.email }}</td><td>{{ c.name or '—' }}</td>
+        <td>{% for t in (c.tags or '').split(',') if t %}<span class="tag">{{ t.strip() }}</span>{% endfor %}</td>
+        <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="num">
+          <button type="button" class="btn ghost sm js-edit"
+                  data-id="{{ c.id }}" data-email="{{ c.email }}"
+                  data-name="{{ c.name or '' }}" data-tags="{{ c.tags or '' }}"
+                  data-list="{{ c.list_id or '' }}">✏️ Edit</button>
+          {% if c.status != 'suppressed' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="suppress">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn ghost sm">Suppress</button></form>
+          {% endif %}
+          <form class="inline-form" method="post" onsubmit="return confirm('Delete {{ c.email }}?')">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn danger sm">Delete</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">{{ 'No contacts match your search.' if q else 'No contacts in this view.' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if pages > 1 %}
+  <div class="section-head" style="margin-top:12px">
+    <span class="faint small">Page {{ page }} of {{ pages }} · {{ '{:,}'.format(total) }} contacts</span>
+    <div class="row" style="flex:0;gap:6px">
+      {% set base = url_for('contacts') + '?' + ('status=' + status_filter + '&' if status_filter else '') + ('list=' + list_filter + '&' if list_filter else '') + ('q=' + q + '&' if q else '') %}
+      {% if page > 1 %}<a class="btn ghost sm" href="{{ base }}page={{ page-1 }}">← Prev</a>{% endif %}
+      {% if page < pages %}<a class="btn ghost sm" href="{{ base }}page={{ page+1 }}">Next →</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# ---- Add contact dialog ---- #}
+<dialog id="dlgAdd" class="c-dlg">
+  <form method="post"><input type="hidden" name="action" value="add">
+    <h3>＋ Add Contact</h3>
+    <label class="small">Email</label>
+    <input name="email" type="email" placeholder="email@company.com" required>
+    <label class="small" style="margin-top:8px">Name</label>
+    <input name="name" placeholder="Full name">
+    <label class="small" style="margin-top:8px">Tags <span class="faint">(comma separated)</span></label>
+    <input name="tags" placeholder="vip, newsletter">
+    <label class="small" style="margin-top:8px">Add to list</label>
+    <select name="list_id"><option value="">— No list —</option>
+      {% for l in lists %}<option value="{{ l.id }}" {{ 'selected' if list_filter==l.id|string }}>{{ l.name }}</option>{% endfor %}</select>
+    <div class="c-dlg-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button>
+      <button class="btn sm">Add</button></div>
+  </form>
+</dialog>
+
+{# ---- Edit contact dialog (+ move to list) ---- #}
+<dialog id="dlgEdit" class="c-dlg">
+  <form method="post"><input type="hidden" name="action" value="edit">
+    <input type="hidden" name="id" id="e-id">
+    <h3>✏️ Edit Contact</h3>
+    <label class="small">Email</label>
+    <input name="email" id="e-email" type="email" required>
+    <label class="small" style="margin-top:8px">Name</label>
+    <input name="name" id="e-name">
+    <label class="small" style="margin-top:8px">Tags <span class="faint">(comma separated)</span></label>
+    <input name="tags" id="e-tags">
+    <div class="c-dlg-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button>
+      <button class="btn sm">Save changes</button></div>
+  </form>
+  <form method="post" style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+    <input type="hidden" name="action" value="move"><input type="hidden" name="id" id="m-id">
+    <label class="small">Move to Contact List</label>
+    <div class="row" style="gap:8px;margin-top:4px">
+      <select name="list_id" id="m-list" style="flex:1">
+        <option value="">— No list (unassign) —</option>
+        {% for l in lists %}<option value="{{ l.id }}">📋 {{ l.name }}</option>{% endfor %}</select>
+      <button class="btn ghost sm">Move</button>
+    </div>
+  </form>
+</dialog>
+
+<style>
+.c-dlg{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);
+  padding:20px;width:min(420px,92vw);box-shadow:0 16px 48px rgba(0,0,0,.45)}
+.c-dlg::backdrop{background:rgba(0,0,0,.5)}
+.c-dlg h3{margin:0 0 10px}
+.c-dlg input:not([type=checkbox]),.c-dlg select{width:100%}
+.c-dlg-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+</style>
+
+<script>
+(function(){
+  var all=document.getElementById('checkAll');
+  if(all) all.addEventListener('change',function(){
+    document.querySelectorAll('.rowChk').forEach(function(x){x.checked=all.checked});
+  });
+  function open(d){ if(d.showModal) d.showModal(); else d.setAttribute('open',''); }
+  var add=document.getElementById('dlgAdd'), edit=document.getElementById('dlgEdit');
+  var btnAdd=document.getElementById('btnAdd');
+  if(btnAdd) btnAdd.addEventListener('click',function(){ open(add); });
+  document.querySelectorAll('.js-edit').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.getElementById('e-id').value=b.dataset.id;
+      document.getElementById('m-id').value=b.dataset.id;
+      document.getElementById('e-email').value=b.dataset.email;
+      document.getElementById('e-name').value=b.dataset.name;
+      document.getElementById('e-tags').value=b.dataset.tags;
+      var ml=document.getElementById('m-list'); if(ml) ml.value=b.dataset.list||'';
+      open(edit);
+    });
+  });
+  document.querySelectorAll('.c-dlg [data-close]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var d=b.closest('dialog'); if(d.close) d.close(); else d.removeAttribute('open');
+    });
+  });
+})();
+</script>
+{% endblock %}
