@@ -373,6 +373,22 @@ CREATE TABLE IF NOT EXISTS platform_settings (
     value        TEXT
 );
 
+-- Campaign file attachments. While the wizard is open, files are staged under
+-- a session `token`; on campaign creation they're linked via `campaign_id`.
+CREATE TABLE IF NOT EXISTS campaign_attachments (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    campaign_id  INTEGER,
+    token        TEXT,
+    filename     TEXT NOT NULL,
+    stored       TEXT NOT NULL,
+    size         INTEGER NOT NULL DEFAULT 0,
+    mime         TEXT,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_attach_campaign ON campaign_attachments(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_attach_token    ON campaign_attachments(token);
+
 -- Audit trail of contact imports, powering each list's "Import History" view.
 CREATE TABLE IF NOT EXISTS contact_imports (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

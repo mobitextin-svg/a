@@ -281,6 +281,15 @@ def execute_campaign_send(account_id, campaign_id, base_url):
     overflow = len(recipients) > batch
     recipients = recipients[:batch]
 
+    # Campaign attachments — read once and pass to every message.
+    attachments = []
+    for a in D.query("SELECT filename, stored, mime FROM campaign_attachments"
+                     " WHERE account_id=? AND campaign_id=?", (account_id, camp["id"])):
+        path = os.path.join(ATTACH_DIR, a["stored"])
+        if os.path.exists(path):
+            attachments.append({"path": path, "filename": a["filename"],
+                                "mime": a["mime"]})
+
     rows = D.query("SELECT * FROM smtp_servers WHERE account_id=? ORDER BY id",
                    (account_id,))
     nodes = [ROT.node_from_row(r, ip_score=smtp_health_detail(r)["ip_score"])
@@ -308,7 +317,8 @@ def execute_campaign_send(account_id, campaign_id, base_url):
         status, err = "dry-run", None
         if cfg:
             ok, info = SEND.smtp_send(cfg, contact["email"], camp["subject"], html,
-                                      from_addr=camp["from_email"])
+                                      from_addr=camp["from_email"],
+                                      attachments=attachments)
             status, err = ("sent", None) if ok else ("failed", info)
         D.execute(
             "INSERT INTO messages (account_id, campaign_id, email, token, smtp_id,"
@@ -380,8 +390,9 @@ def create_app():
         SESSION_REFRESH_EACH_REQUEST=True,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        # Cap any single request body (covers image uploads) at 6 MB.
-        MAX_CONTENT_LENGTH=6 * 1024 * 1024,
+        # Cap any single request body. Campaign attachments allow up to 10 MB
+        # per file, so the request ceiling sits a little above that.
+        MAX_CONTENT_LENGTH=12 * 1024 * 1024,
     )
     # Where uploaded images live — served by Flask's static route.
     app.config["UPLOAD_DIR"] = os.path.join(app.static_folder, "uploads")
@@ -811,6 +822,37 @@ def register_auth(app):
 # --------------------------------------------------------------------------- #
 #  Functional module routes
 # --------------------------------------------------------------------------- #
+
+
+# ---- Campaign attachments ------------------------------------------------- #
+ATTACH_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads",
+                          "attachments")
+# Allowed extension → MIME. Executables (.exe/.bat/.msi/.js…) are intentionally
+# excluded — many providers block or flag mail that carries them.
+ATTACH_TYPES = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "ppt": "application/vnd.ms-powerpoint",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "txt": "text/plain", "csv": "text/csv", "zip": "application/zip",
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "gif": "image/gif", "webp": "image/webp",
+}
+ATTACH_MAX_FILES = 10
+ATTACH_MAX_FILE = 10 * 1024 * 1024     # 10 MB per file
+ATTACH_MAX_TOTAL = 25 * 1024 * 1024    # 25 MB combined (safe Gmail/Outlook limit)
+
+
+def _human_size(n):
+    n = n or 0
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.0f} KB"
+    return f"{n / (1024 * 1024):.2f} MB"
 
 
 def _read_import_rows():
@@ -1931,6 +1973,75 @@ def register_modules(app):
         D.mark_onboarding(aid, "contacts")
         return (lid, len(pairs), None)
 
+    # ---- Campaign attachments (wizard step 4) --------------------------- #
+    def _attach_query(aid, token=None, campaign_id=None):
+        if campaign_id is not None:
+            return D.query("SELECT * FROM campaign_attachments WHERE account_id=?"
+                           " AND campaign_id=? ORDER BY id", (aid, campaign_id))
+        return D.query("SELECT * FROM campaign_attachments WHERE account_id=? AND"
+                       " token=? AND campaign_id IS NULL ORDER BY id", (aid, token))
+
+    @app.route("/campaigns/attachments/upload", methods=["POST"])
+    @login_required
+    def campaign_attach_upload():
+        aid = current_account()["id"]
+        token = (request.form.get("token") or "").strip()
+        up = request.files.get("file")
+        if not token or not up or not up.filename:
+            return jsonify({"error": "No file."}), 400
+        ext = up.filename.rsplit(".", 1)[-1].lower() if "." in up.filename else ""
+        if ext not in ATTACH_TYPES:
+            return jsonify({"error": "File type not supported."}), 400
+        existing = _attach_query(aid, token=token)
+        if len(existing) >= ATTACH_MAX_FILES:
+            return jsonify({"error": f"Maximum {ATTACH_MAX_FILES} files."}), 400
+        data = up.read()
+        if len(data) > ATTACH_MAX_FILE:
+            return jsonify({"error": "File exceeds 10 MB."}), 400
+        if sum(r["size"] for r in existing) + len(data) > ATTACH_MAX_TOTAL:
+            return jsonify({"error": "Total attachment size exceeds 25 MB."}), 400
+        os.makedirs(ATTACH_DIR, exist_ok=True)
+        stored = f"{aid}_{secrets.token_hex(8)}.{ext}"
+        with open(os.path.join(ATTACH_DIR, stored), "wb") as fh:
+            fh.write(data)
+        safe_name = secure_filename(up.filename) or f"file.{ext}"
+        attid = D.execute(
+            "INSERT INTO campaign_attachments (account_id, campaign_id, token,"
+            " filename, stored, size, mime, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (aid, None, token, safe_name, stored, len(data), ATTACH_TYPES[ext],
+             D.now()))
+        return jsonify({"id": attid, "name": safe_name, "size": len(data),
+                        "human": _human_size(len(data))})
+
+    @app.route("/campaigns/attachments/delete", methods=["POST"])
+    @login_required
+    def campaign_attach_delete():
+        aid = current_account()["id"]
+        row = D.query("SELECT * FROM campaign_attachments WHERE id=? AND account_id=?",
+                      (request.form.get("id"), aid), one=True)
+        if row:
+            try:
+                os.remove(os.path.join(ATTACH_DIR, row["stored"]))
+            except OSError:
+                pass
+            D.execute("DELETE FROM campaign_attachments WHERE id=? AND account_id=?",
+                      (row["id"], aid))
+        return jsonify({"ok": True})
+
+    @app.route("/campaigns/attachments/<int:attid>")
+    @login_required
+    def campaign_attach_download(attid):
+        aid = current_account()["id"]
+        row = D.query("SELECT * FROM campaign_attachments WHERE id=? AND account_id=?",
+                      (attid, aid), one=True)
+        if not row:
+            abort(404)
+        path = os.path.join(ATTACH_DIR, row["stored"])
+        if not os.path.exists(path):
+            abort(404)
+        from flask import send_file
+        return send_file(path, as_attachment=True, download_name=row["filename"])
+
     @app.route("/campaigns/new", methods=["GET", "POST"])
     @login_required
     def campaign_wizard():
@@ -1964,6 +2075,12 @@ def register_modules(app):
                 (aid, name, subject, preview_text, body, from_email, status, count,
                  list_id, scheduled_at, D.now()))
             D.mark_onboarding(aid, "campaign")
+            # Link any files staged during the wizard to this campaign.
+            token = (request.form.get("attach_token") or "").strip()
+            if token:
+                D.execute("UPDATE campaign_attachments SET campaign_id=? WHERE"
+                          " token=? AND account_id=? AND campaign_id IS NULL",
+                          (cid, token, aid))
 
             if decision == "send":
                 msg = _send_campaign_now(aid, cid)
@@ -2008,7 +2125,8 @@ def register_modules(app):
         return render_template("campaign_wizard.html", tpl_picker=tpl_picker,
                                rcpt_lists=rcpt_lists, all_active=all_active,
                                domains=domains, default_from=current_user()["email"],
-                               sys_categories=sys_categories, folders=folders)
+                               sys_categories=sys_categories, folders=folders,
+                               attach_token=secrets.token_hex(12))
 
     @app.route("/campaigns/analyze", methods=["POST"])
     @login_required

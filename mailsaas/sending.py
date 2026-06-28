@@ -212,7 +212,7 @@ _UNSUB_RE = re.compile(r'href="(https?://[^"]+/t/u/[^"]+)"', re.IGNORECASE)
 
 
 def build_message(cfg, to_addr, subject, html, from_addr=None, text=None,
-                  headers=None):
+                  headers=None, attachments=None):
     """Assemble a fully-formed, multipart/alternative EmailMessage with the
     headers corporate inboxes expect. Auto-derives the one-click unsubscribe
     header from the unsubscribe link already in the body."""
@@ -243,6 +243,20 @@ def build_message(cfg, to_addr, subject, html, from_addr=None, text=None,
     # Real text part first, HTML alternative second.
     msg.set_content(text if text is not None else html_to_text(html))
     msg.add_alternative(html or "", subtype="html")
+
+    # File attachments. Adding any attachment restructures the message into
+    # multipart/mixed automatically (the EmailMessage API handles this).
+    for att in (attachments or []):
+        try:
+            with open(att["path"], "rb") as fh:
+                data = fh.read()
+            mime = att.get("mime") or "application/octet-stream"
+            maintype, _, subtype = mime.partition("/")
+            msg.add_attachment(data, maintype=maintype or "application",
+                               subtype=subtype or "octet-stream",
+                               filename=att.get("filename") or "attachment")
+        except Exception:
+            continue
     return msg
 
 
@@ -269,7 +283,7 @@ def open_connection(cfg):
 
 
 def smtp_send(cfg, to_addr, subject, html, from_addr=None, text=None,
-              headers=None, conn=None):
+              headers=None, conn=None, attachments=None):
     """Deliver one email. Returns (ok, info) — info is a short string, exactly
     as before, so existing callers are unaffected.
 
@@ -280,7 +294,8 @@ def smtp_send(cfg, to_addr, subject, html, from_addr=None, text=None,
                  given, the connection is NOT closed (the caller owns it)
     """
     try:
-        msg = build_message(cfg, to_addr, subject, html, from_addr, text, headers)
+        msg = build_message(cfg, to_addr, subject, html, from_addr, text, headers,
+                            attachments)
         raw = _dkim_sign(msg.as_bytes(), cfg)
         sender = (from_addr or cfg.get("from") or "no-reply@mailsaas.io")
 

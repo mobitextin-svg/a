@@ -111,6 +111,16 @@ Final Contacts     : 1,200
 [View Contacts] [Download Error Report] [Undo Import]
 ```
 
+### Campaign wizard (7 steps)
+**Campaign Details → Recipients → Email Template → Attachments 📎 → Sender &
+Domain → Inbox Analysis → Review/Send.** The Attachments step supports drag &
+drop and multi-file upload with live progress, per-file size display and a
+running total. Limits: **10 MB/file · 25 MB total · 10 files** (safe Gmail/Outlook
+ceiling). Allowed: PDF, Word, Excel, PowerPoint, TXT, CSV, ZIP and images —
+executables (.exe/.bat/.msi/.js) are rejected so providers don't flag the mail.
+Attachments are carried through to the actual SMTP send as a multipart/mixed
+message.
+
 ### Tests
 ```bash
 pip install -r requirements-dev.txt
