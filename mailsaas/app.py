@@ -1828,11 +1828,15 @@ def register_modules(app):
             " FROM contact_lists cl WHERE cl.account_id=? ORDER BY cl.name", (aid,))
         all_active = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
                              " status='active'", (aid,), one=True)["c"]
+        attach_counts = {r["campaign_id"]: r["c"] for r in D.query(
+            "SELECT campaign_id, COUNT(*) c FROM campaign_attachments WHERE"
+            " account_id=? AND campaign_id IS NOT NULL GROUP BY campaign_id", (aid,))}
         return render_template("campaigns.html", campaigns=rows, counts=counts,
                                status_filter=status_filter, tpl_picker=tpl_picker,
                                scores=scores, readiness=readiness,
                                acct_score=round(acct_score), acct_recs=acct_recs,
-                               rcpt_lists=rcpt_lists, all_active=all_active)
+                               rcpt_lists=rcpt_lists, all_active=all_active,
+                               attach_counts=attach_counts)
 
     # ---- Guided campaign wizard (7 steps) ------------------------------- #
     _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
@@ -1981,18 +1985,28 @@ def register_modules(app):
         return D.query("SELECT * FROM campaign_attachments WHERE account_id=? AND"
                        " token=? AND campaign_id IS NULL ORDER BY id", (aid, token))
 
+    def _own_campaign(aid, cid):
+        if not cid:
+            return None
+        return D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                       (cid, aid), one=True)
+
     @app.route("/campaigns/attachments/upload", methods=["POST"])
     @login_required
     def campaign_attach_upload():
         aid = current_account()["id"]
-        token = (request.form.get("token") or "").strip()
+        # Staged via a wizard `token`, or attached to an existing `campaign_id`.
+        token = (request.form.get("token") or "").strip() or None
+        cid = (request.form.get("campaign_id") or "").strip() or None
+        if cid and not _own_campaign(aid, cid):
+            return jsonify({"error": "Campaign not found."}), 404
         up = request.files.get("file")
-        if not token or not up or not up.filename:
+        if (not token and not cid) or not up or not up.filename:
             return jsonify({"error": "No file."}), 400
         ext = up.filename.rsplit(".", 1)[-1].lower() if "." in up.filename else ""
         if ext not in ATTACH_TYPES:
             return jsonify({"error": "File type not supported."}), 400
-        existing = _attach_query(aid, token=token)
+        existing = _attach_query(aid, token=token, campaign_id=cid)
         if len(existing) >= ATTACH_MAX_FILES:
             return jsonify({"error": f"Maximum {ATTACH_MAX_FILES} files."}), 400
         data = up.read()
@@ -2008,10 +2022,21 @@ def register_modules(app):
         attid = D.execute(
             "INSERT INTO campaign_attachments (account_id, campaign_id, token,"
             " filename, stored, size, mime, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            (aid, None, token, safe_name, stored, len(data), ATTACH_TYPES[ext],
-             D.now()))
+            (aid, int(cid) if cid else None, None if cid else token, safe_name,
+             stored, len(data), ATTACH_TYPES[ext], D.now()))
         return jsonify({"id": attid, "name": safe_name, "size": len(data),
                         "human": _human_size(len(data))})
+
+    @app.route("/campaigns/<int:cid>/attachments")
+    @login_required
+    def campaign_attachments(cid):
+        aid = current_account()["id"]
+        camp = _own_campaign(aid, cid)
+        if not camp:
+            abort(404)
+        atts = [dict(r) for r in _attach_query(aid, campaign_id=cid)]
+        return render_template("campaign_attachments.html", camp=camp,
+                               attachments=atts, human=_human_size)
 
     @app.route("/campaigns/attachments/delete", methods=["POST"])
     @login_required
@@ -2094,6 +2119,17 @@ def register_modules(app):
             return redirect(url_for("campaigns", status="Draft"))
 
         # GET — gather everything the wizard needs.
+        # Sweep up files staged in abandoned wizard sessions (never linked to a
+        # campaign) so orphaned uploads don't accumulate on disk.
+        cutoff = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+        for r in D.query("SELECT id, stored FROM campaign_attachments WHERE"
+                         " account_id=? AND campaign_id IS NULL AND created_at<?",
+                         (aid, cutoff)):
+            try:
+                os.remove(os.path.join(ATTACH_DIR, r["stored"]))
+            except OSError:
+                pass
+            D.execute("DELETE FROM campaign_attachments WHERE id=?", (r["id"],))
         sys_tpl = D.query("SELECT id, category, name, subject, content FROM"
                           " system_templates WHERE published=1 ORDER BY category, name")
         my_tpl = D.query("SELECT id, folder, name, subject, content FROM templates"

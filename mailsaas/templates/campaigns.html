@@ -98,6 +98,7 @@
             <button class="btn sm" title="Auto-fix unsubscribe, view-in-browser & spam triggers">⚡ Optimize 100%</button></form>
           {% endif %}
           {% if c.status in ['Draft','Scheduled'] %}
+          <a class="btn ghost sm" href="{{ url_for('campaign_attachments', cid=c.id) }}" title="Add or remove file attachments">📎 Attachments{% if attach_counts.get(c.id) %} ({{ attach_counts[c.id] }}){% endif %}</a>
           <a class="btn ghost sm" href="{{ url_for('inbox_analysis', cid=c.id) }}" title="Recommended: check inbox placement before sending">📊 Inbox Analysis</a>
           <form class="inline-form" method="post" onsubmit="return confirm('Send Readiness: {{ rd.overall }}% ({{ rd.verdict }}).\nSend to your active contacts now?')">
             <input type="hidden" name="action" value="send"><input type="hidden" name="id" value="{{ c.id }}">

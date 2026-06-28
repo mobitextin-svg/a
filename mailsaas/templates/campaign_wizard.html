@@ -722,6 +722,17 @@
     if (b < 1048576) return (b/1024).toFixed(b<10240?1:0) + ' KB';
     return (b/1048576).toFixed(2) + ' MB';
   }
+  function iconFor(name){
+    var e = (name.split('.').pop()||'').toLowerCase();
+    if (e==='pdf') return '📕';
+    if (e==='doc'||e==='docx') return '📘';
+    if (e==='xls'||e==='xlsx'||e==='csv') return '📊';
+    if (e==='ppt'||e==='pptx') return '📙';
+    if (e==='zip') return '🗜️';
+    if (['jpg','jpeg','png','gif','webp'].indexOf(e)>=0) return '🖼️';
+    if (e==='txt') return '📄';
+    return '📎';
+  }
   function attMsg(text, ok){
     var m = document.getElementById('attMsg');
     if (!text){ m.style.display='none'; return; }
@@ -732,7 +743,7 @@
   function renderAtt(){
     var list = document.getElementById('attList');
     list.innerHTML = ATT.map(function(f){
-      return '<div class="att-item"><span class="att-ico">📎</span>'+
+      return '<div class="att-item"><span class="att-ico">'+iconFor(f.name)+'</span>'+
         '<span class="att-name">'+f.name+'</span>'+
         '<span class="att-size">'+humanSize(f.size)+'</span>'+
         '<button type="button" class="att-rm" data-id="'+f.id+'">❌ Remove</button></div>';
