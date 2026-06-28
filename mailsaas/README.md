@@ -1,5 +1,7 @@
 # 📨 MailSaaS — Enterprise Email Verification & Delivery Platform
 
+[![CI](https://github.com/mobitextin-svg/a/actions/workflows/ci.yml/badge.svg)](https://github.com/mobitextin-svg/a/actions/workflows/ci.yml)
+
 A self-contained, enterprise-grade SaaS platform for **email verification** and
 **bulk email delivery**, built with Flask + SQLite (matches the repo's
 `fileshare` style — single process, server-rendered, no build step).
@@ -126,10 +128,14 @@ message.
 pip install -r requirements-dev.txt
 python -m pytest mailsaas/tests -q     # from the repo root
 ```
-The suite (`mailsaas/tests/`) covers the engines (verification, rotation,
-deliverability AI, TOTP, rendering) and the app (auth, 2FA, role split + access
-gating, real send + open/click/unsubscribe tracking, deliverability, admin,
-CSRF, API rate-limit).
+The suite (`mailsaas/tests/`) covers auth & the default admin, the contacts
+import pipeline (header mapping, the 1,000+500→1,300 de-dupe, statuses, tags,
+favourites), campaign attachments (validation, limits, multipart assembly),
+logo/header auto-resize, the campaign wizard flow (incl. Save as Ready) and a
+render smoke-test of every major page.
+
+It runs automatically on every push and pull request via **GitHub Actions**
+(`.github/workflows/ci.yml`) on Python 3.10 / 3.11 / 3.12.
 
 Create an account on the signup screen — your workspace is auto-seeded with
 realistic demo data (contacts, campaigns, SMTP relays, domains, invoices) so
