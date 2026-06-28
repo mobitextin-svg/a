@@ -607,27 +607,15 @@ def login_required(view):
     return wrapped
 
 
-# Endpoints that belong to the Contacts area, mapped to their sidebar sub key.
-# All of them light up the single "Contacts" parent so the section stays open.
-CONTACTS_ENDPOINTS = {
-    "contacts": "contacts",
-    "contact_lists": "clists",
-    "contacts_import": "contacts_import",
-    "contacts_export": "contacts_export",
-    "contacts_suppression": "suppression",
-    "contacts_settings": "contact_settings",
-}
+# Every Contacts endpoint lights up the single "Contacts" sidebar entry.
+CONTACTS_ENDPOINTS = {"contacts", "contact_lists", "contacts_export",
+                      "contact_lists_sample"}
 
 
 def _active_keys():
-    """Resolve the active top-level module and (for Contacts) the active sub.
-
-    The sidebar opens a group when ``active`` is one of its keys, so every
-    Contacts page reports ``active='contacts'`` while ``active_sub`` tracks
-    which nested page is open."""
-    ep = request.endpoint or ""
-    if ep in CONTACTS_ENDPOINTS:
-        return {"active": "contacts", "active_sub": CONTACTS_ENDPOINTS[ep]}
+    """Resolve the active top-level module for sidebar highlighting."""
+    if (request.endpoint or "") in CONTACTS_ENDPOINTS:
+        return {"active": "contacts", "active_sub": "contacts"}
     seg = request.path.strip("/").split("/")[0] or "dashboard"
     return {"active": seg, "active_sub": seg}
 
@@ -1023,25 +1011,253 @@ def register_modules(app):
             buf.getvalue(), mimetype="text/csv",
             headers={"Content-Disposition": "attachment; filename=verifications.csv"})
 
-    # ---- Contacts -------------------------------------------------------- #
+    # ---- Contacts (single consolidated dashboard) ----------------------- #
+    # One list-first dashboard handles everything: lists, view/search/filter,
+    # add/edit/delete/move/copy, import (de-duplicated) & export, merge,
+    # statistics, suppression (account-wide) and settings (folded in as a
+    # modal). There are no separate Import/Export/Suppression/Settings pages.
+    LIST_TYPE_ICONS = {"Email": "📧", "SMS": "💬", "WhatsApp": "🟢",
+                       "Universal": "🌐"}
+
+    def _own_list(aid, lid):
+        """Fetch a list by id, scoped to this account (None if not owned)."""
+        if not lid:
+            return None
+        return D.query("SELECT * FROM contact_lists WHERE id=? AND account_id=?",
+                       (lid, aid), one=True)
+
+    def _scope_stats(aid, lid):
+        """Total / per-status counts for a list (lid) or the whole account (None)."""
+        where, args = "account_id=?", [aid]
+        if lid:
+            where += " AND list_id=?"
+            args.append(lid)
+        rows = D.query(f"SELECT status, COUNT(*) c FROM contacts WHERE {where}"
+                       f" GROUP BY status", args)
+        by = {r["status"]: r["c"] for r in rows}
+        return {
+            "total": sum(by.values()),
+            "active": by.get("active", 0),
+            "bounced": by.get("bounced", 0),
+            "unsubscribed": by.get("unsubscribed", 0),
+            "suppressed": by.get("suppressed", 0),
+        }
+
     @app.route("/contacts", methods=["GET", "POST"])
     @login_required
     def contacts():
         acct = current_account()
         aid = acct["id"]
+
+        def _list_id(field="list_id"):
+            """A chosen list id from the form, validated to this account (None)."""
+            lid = (request.form.get(field) or "").strip()
+            if lid and _own_list(aid, lid):
+                return int(lid)
+            return None
+
         if request.method == "POST":
             action = request.form.get("action")
+            sel = request.form.get("sel", "all")    # where to return to
 
-            def _list_id():
-                """The chosen list id from the form, validated to this account
-                (None = no list)."""
-                lid = request.form.get("list_id") or ""
-                if lid and D.query("SELECT 1 FROM contact_lists WHERE id=? AND"
-                                   " account_id=?", (lid, aid), one=True):
-                    return int(lid)
-                return None
+            # ---------- List-level actions ---------- #
+            if action == "create_list":
+                name = (request.form.get("name") or "").strip()[:60]
+                ltype = request.form.get("list_type") or "Universal"
+                if ltype not in LIST_TYPE_ICONS:
+                    ltype = "Universal"
+                if name and not D.query("SELECT 1 FROM contact_lists WHERE"
+                                        " account_id=? AND name=?", (aid, name),
+                                        one=True):
+                    nid = D.execute("INSERT INTO contact_lists (account_id, name,"
+                                    " list_type, created_at) VALUES (?,?,?,?)",
+                                    (aid, name, ltype, D.now()))
+                    flash(f"List '{name}' created.", "success")
+                    sel = str(nid)
+                else:
+                    flash("Enter a unique list name.", "error")
+            elif action == "rename_list":
+                lst = _own_list(aid, request.form.get("id"))
+                name = (request.form.get("name") or "").strip()[:60]
+                if lst and name:
+                    D.execute("UPDATE contact_lists SET name=? WHERE id=? AND"
+                              " account_id=?", (name, lst["id"], aid))
+                    flash("List renamed.", "success")
+            elif action == "duplicate_list":
+                src = _own_list(aid, request.form.get("id"))
+                if src:
+                    base = f"{src['name']} (copy)"[:60]
+                    name, i = base, 2
+                    while D.query("SELECT 1 FROM contact_lists WHERE account_id=?"
+                                  " AND name=?", (aid, name), one=True):
+                        name = f"{base} {i}"[:60]
+                        i += 1
+                    nid = D.execute("INSERT INTO contact_lists (account_id, name,"
+                                    " list_type, created_at) VALUES (?,?,?,?)",
+                                    (aid, name, src["list_type"], D.now()))
+                    D.execute(
+                        "INSERT INTO contacts (account_id, list_id, email, name,"
+                        " tags, status, company, mobile, city, state, created_at)"
+                        " SELECT account_id, ?, email, name, tags, status, company,"
+                        " mobile, city, state, ? FROM contacts WHERE account_id=?"
+                        " AND list_id=?", (nid, D.now(), aid, src["id"]))
+                    flash(f"List duplicated as '{name}'.", "success")
+                    sel = str(nid)
+            elif action == "merge_lists":
+                # Combine the selected (source) list into a target list, then
+                # de-duplicate the target by email. Optionally delete the source.
+                src = _own_list(aid, request.form.get("id"))
+                dst = _own_list(aid, request.form.get("to_id"))
+                if src and dst and src["id"] != dst["id"]:
+                    D.execute("UPDATE contacts SET list_id=? WHERE account_id=?"
+                              " AND list_id=?", (dst["id"], aid, src["id"]))
+                    D.execute(
+                        "DELETE FROM contacts WHERE account_id=? AND list_id=?"
+                        " AND id NOT IN (SELECT MIN(id) FROM contacts WHERE"
+                        " account_id=? AND list_id=? GROUP BY email)",
+                        (aid, dst["id"], aid, dst["id"]))
+                    if request.form.get("delete_source"):
+                        D.execute("DELETE FROM contact_lists WHERE id=? AND"
+                                  " account_id=?", (src["id"], aid))
+                    flash(f"Merged '{src['name']}' into '{dst['name']}'"
+                          f" (duplicates removed).", "success")
+                    sel = str(dst["id"])
+                else:
+                    flash("Pick two different lists to merge.", "error")
+            elif action == "move_contacts":
+                # Move all contacts from the source list into a target list.
+                src = _own_list(aid, request.form.get("id"))
+                dst = _own_list(aid, request.form.get("to_id"))
+                if src and dst and src["id"] != dst["id"]:
+                    D.execute("UPDATE contacts SET list_id=? WHERE account_id=?"
+                              " AND list_id=?", (dst["id"], aid, src["id"]))
+                    flash(f"Contacts moved to '{dst['name']}'.", "success")
+                else:
+                    flash("Pick two different lists.", "error")
+            elif action == "copy_contacts":
+                # Copy all contacts from the source list into a target list.
+                src = _own_list(aid, request.form.get("id"))
+                dst = _own_list(aid, request.form.get("to_id"))
+                if src and dst and src["id"] != dst["id"]:
+                    D.execute(
+                        "INSERT INTO contacts (account_id, list_id, email, name,"
+                        " tags, status, company, mobile, city, state, created_at)"
+                        " SELECT account_id, ?, email, name, tags, status, company,"
+                        " mobile, city, state, ? FROM contacts WHERE account_id=?"
+                        " AND list_id=?", (dst["id"], D.now(), aid, src["id"]))
+                    flash(f"Contacts copied to '{dst['name']}'.", "success")
+                else:
+                    flash("Pick two different lists.", "error")
+            elif action == "dedupe":
+                lid = _list_id("id")
+                scope = "account_id=?" + (" AND list_id=?" if lid else "")
+                sargs = [aid] + ([lid] if lid else [])
+                before = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {scope}",
+                                 sargs, one=True)["c"]
+                D.execute(
+                    f"DELETE FROM contacts WHERE {scope} AND id NOT IN"
+                    f" (SELECT MIN(id) FROM contacts WHERE {scope} GROUP BY email)",
+                    sargs + sargs)
+                after = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {scope}",
+                                sargs, one=True)["c"]
+                flash(f"Removed {before - after} duplicate contact(s).", "success")
+            elif action == "delete_contacts":
+                # "Delete Contacts" empties the list but keeps the list itself.
+                lst = _own_list(aid, request.form.get("id"))
+                if lst:
+                    D.execute("DELETE FROM contacts WHERE account_id=? AND list_id=?",
+                              (aid, lst["id"]))
+                    flash(f"All contacts removed from '{lst['name']}'.", "success")
+                    sel = str(lst["id"])
+            elif action == "delete_list":
+                lst = _own_list(aid, request.form.get("id"))
+                if lst:
+                    if request.form.get("keep_contacts"):
+                        D.execute("UPDATE contacts SET list_id=NULL WHERE"
+                                  " account_id=? AND list_id=?", (aid, lst["id"]))
+                        msg = "list deleted, contacts kept (unassigned)"
+                    else:
+                        D.execute("DELETE FROM contacts WHERE account_id=? AND"
+                                  " list_id=?", (aid, lst["id"]))
+                        msg = "list and its contacts deleted"
+                    D.execute("DELETE FROM contact_lists WHERE id=? AND account_id=?",
+                              (lst["id"], aid))
+                    flash(f"'{lst['name']}' — {msg}.", "success")
+                sel = "all"
 
-            if action == "add":
+            # ---------- Import (de-duplicated, with summary) ---------- #
+            elif action == "import":
+                lid = _list_id()
+                rule = request.form.get("rule") or acct["default_import_rule"] or "skip"
+                if rule not in ("skip", "update", "keep"):
+                    rule = "skip"
+                by_name = acct["dup_check"] == "email_name"
+                raw, fname = _read_import_payload()
+                scope = "account_id=?" + (" AND list_id=?" if lid else "")
+                sargs = [aid] + ([lid] if lid else [])
+                existing = {}
+                for r in D.query(f"SELECT id, email, name FROM contacts WHERE {scope}",
+                                 sargs):
+                    key = r["email"].lower()
+                    if by_name:
+                        key += "|" + (r["name"] or "").strip().lower()
+                    existing[key] = r["id"]
+                seen = set()
+                rows = added = updated = skipped = 0
+                for line in raw.splitlines():
+                    parts = [p.strip() for p in re.split(r"[,;\t]", line)]
+                    email = parts[0].lower() if parts else ""
+                    if "@" not in email or email == "email":
+                        continue
+                    name = parts[1] if len(parts) > 1 else ""
+                    rows += 1
+                    key = email + ("|" + name.strip().lower() if by_name else "")
+                    dup_id = existing.get(key)
+                    if (dup_id or key in seen) and rule == "skip":
+                        skipped += 1
+                        continue
+                    if dup_id and rule == "update":
+                        if name:
+                            D.execute("UPDATE contacts SET name=? WHERE id=?",
+                                      (name, dup_id))
+                        updated += 1
+                        continue
+                    # rule == keep, or brand-new email
+                    if not dup_id and key not in seen:
+                        seen.add(key)
+                    elif rule != "keep":
+                        skipped += 1
+                        continue
+                    D.execute(
+                        "INSERT INTO contacts (account_id, list_id, email, name,"
+                        " status, created_at) VALUES (?,?,?,?,?,?)",
+                        (aid, lid, email, name, "active", D.now()))
+                    added += 1
+                if rows:
+                    D.mark_onboarding(aid, "contacts")
+                list_name = None
+                if lid:
+                    nm = D.query("SELECT name FROM contact_lists WHERE id=?", (lid,),
+                                 one=True)
+                    list_name = nm["name"] if nm else None
+                    D.execute("UPDATE contact_lists SET last_import_at=? WHERE id=?",
+                              (D.now(), lid))
+                    D.execute(
+                        "INSERT INTO contact_imports (account_id, list_id, filename,"
+                        " rows, added, updated, skipped, rule, created_at)"
+                        " VALUES (?,?,?,?,?,?,?,?,?)",
+                        (aid, lid, fname, rows, added, updated, skipped, rule, D.now()))
+                final_count = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {scope}",
+                                      sargs, one=True)["c"]
+                session["import_summary"] = {
+                    "rows": rows, "added": added, "updated": updated,
+                    "skipped": skipped, "final": final_count,
+                    "list_id": lid, "list_name": list_name, "rule": rule,
+                }
+                sel = str(lid) if lid else "all"
+
+            # ---------- Contact-level actions ---------- #
+            elif action == "add":
                 D.execute(
                     "INSERT INTO contacts (account_id, list_id, email, name, tags,"
                     " status, created_at) VALUES (?,?,?,?,?,?,?)",
@@ -1050,7 +1266,6 @@ def register_modules(app):
                      request.form.get("tags", "").strip(), "active", D.now()))
                 flash("Contact added.", "success")
             elif action == "edit":
-                # Inline edit of a single contact (email / name / tags).
                 cid = request.form.get("id")
                 email = request.form.get("email", "").strip().lower()
                 if cid and "@" in email:
@@ -1062,289 +1277,30 @@ def register_modules(app):
                     flash("Contact updated.", "success")
                 else:
                     flash("Enter a valid email address.", "error")
-            elif action == "move":
-                # Move one contact to a chosen list ("" = unassign).
-                cid = request.form.get("id")
-                if cid:
-                    D.execute("UPDATE contacts SET list_id=? WHERE id=? AND"
-                              " account_id=?", (_list_id(), cid, aid))
-                    flash("Contact moved.", "success")
-            elif action == "import":
-                raw = request.form.get("csv", "")
-                # An uploaded CSV/Excel-exported file overrides the pasted text.
-                up = request.files.get("file")
-                if up and up.filename:
-                    try:
-                        raw = up.read().decode("utf-8", "ignore") or raw
-                    except Exception:
-                        pass
-                lid = _list_id()
-                count = 0
-                for line in raw.splitlines():
-                    parts = [p.strip() for p in re.split(r"[,;\t]", line)]
-                    email = parts[0].lower() if parts else ""
-                    if "@" not in email or email == "email":  # skip header row
-                        continue
-                    name = parts[1] if len(parts) > 1 else ""
-                    D.execute(
-                        "INSERT INTO contacts (account_id, list_id, email, name, status,"
-                        " created_at) VALUES (?,?,?,?,?,?)",
-                        (aid, lid, email, name, "active", D.now()))
-                    count += 1
-                if count:
-                    D.mark_onboarding(aid, "contacts")
-                where_msg = ""
-                if lid:
-                    nm = D.query("SELECT name FROM contact_lists WHERE id=?", (lid,),
-                                 one=True)
-                    where_msg = f" into list '{nm['name']}'" if nm else ""
-                flash(f"Imported {count} contacts{where_msg}.", "success")
-            elif action == "new_list":
-                name = (request.form.get("name") or "").strip()[:60]
-                if name and not D.query("SELECT 1 FROM contact_lists WHERE account_id=?"
-                                        " AND name=?", (aid, name), one=True):
-                    D.execute("INSERT INTO contact_lists (account_id, name, created_at)"
-                              " VALUES (?,?,?)", (aid, name, D.now()))
-                    flash(f"List '{name}' created.", "success")
-                else:
-                    flash("Enter a unique list name.", "error")
-            elif action == "rename_list":
-                name = (request.form.get("name") or "").strip()[:60]
-                if name:
-                    D.execute("UPDATE contact_lists SET name=? WHERE id=? AND"
-                              " account_id=?", (name, request.form.get("id"), aid))
-                    flash("List renamed.", "success")
-            elif action == "delete_list":
-                lid = request.form.get("id")
-                # Detach contacts (they stay in the account) then drop the list.
-                D.execute("UPDATE contacts SET list_id=NULL WHERE list_id=? AND"
-                          " account_id=?", (lid, aid))
-                D.execute("DELETE FROM contact_lists WHERE id=? AND account_id=?",
-                          (lid, aid))
-                flash("List deleted — its contacts were kept (unassigned).", "success")
             elif action == "assign_list":
-                lid = _list_id()
+                # Move the selected contacts (checkboxes) to a chosen list.
                 ids = request.form.getlist("ids")
                 if ids:
                     qs = ",".join("?" for _ in ids)
-                    D.execute(f"UPDATE contacts SET list_id=? WHERE account_id=? AND"
-                              f" id IN ({qs})", [lid, aid] + ids)
-                    flash(f"Assigned {len(ids)} contact(s) to the selected list.",
-                          "success")
+                    D.execute(f"UPDATE contacts SET list_id=? WHERE account_id=?"
+                              f" AND id IN ({qs})", [_list_id(), aid] + ids)
+                    flash(f"Moved {len(ids)} contact(s).", "success")
+            elif action == "delete_selected":
+                ids = request.form.getlist("ids")
+                if ids:
+                    qs = ",".join("?" for _ in ids)
+                    D.execute(f"DELETE FROM contacts WHERE account_id=? AND"
+                              f" id IN ({qs})", [aid] + ids)
+                    flash(f"Deleted {len(ids)} contact(s).", "success")
             elif action == "suppress":
-                D.execute("UPDATE contacts SET status='suppressed' WHERE id=? AND account_id=?",
-                          (request.form.get("id"), aid))
+                D.execute("UPDATE contacts SET status='suppressed' WHERE id=? AND"
+                          " account_id=?", (request.form.get("id"), aid))
             elif action == "delete":
                 D.execute("DELETE FROM contacts WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
-            elif action == "dedupe":
-                total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?",
-                                (aid,), one=True)["c"]
-                uniq = D.query("SELECT COUNT(DISTINCT email) c FROM contacts WHERE"
-                               " account_id=?", (aid,), one=True)["c"]
-                # Keep the lowest id per email, delete the rest.
-                D.execute(
-                    "DELETE FROM contacts WHERE account_id=? AND id NOT IN ("
-                    "  SELECT MIN(id) FROM contacts WHERE account_id=? GROUP BY email)",
-                    (aid, aid))
-                D.log_activity(aid, current_user()["email"], "Removed duplicate contacts")
-                flash(f"Removed {total - uniq} duplicate contact(s).", "success")
-            elif action == "gdpr":
-                # GDPR erasure: hard-delete and add a tombstone to the suppression list
-                # so the address can never be re-imported.
-                cid = request.form.get("id")
-                row = D.query("SELECT email FROM contacts WHERE id=? AND account_id=?",
-                              (cid, aid), one=True)
-                if row:
-                    D.execute("DELETE FROM contacts WHERE id=? AND account_id=?", (cid, aid))
-                    D.execute("INSERT INTO contacts (account_id, email, name, status,"
-                              " created_at) VALUES (?,?,?,?,?)",
-                              (aid, row["email"], "[erased]", "suppressed", D.now()))
-                    D.log_activity(aid, current_user()["email"],
-                                   "GDPR erasure for a contact")
-                    flash("Contact erased (GDPR) and added to the suppression list.",
-                          "success")
-            return redirect(url_for("contacts"))
-        status_filter = request.args.get("status")
-        q = request.args.get("q", "").strip()
-        per_page = 25
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-        except ValueError:
-            page = 1
-        list_filter = request.args.get("list", "").strip()
-        where = "account_id=?"
-        args = [aid]
-        if status_filter:
-            where += " AND status=?"
-            args.append(status_filter)
-        if list_filter:
-            where += " AND list_id=?"
-            args.append(list_filter)
-        if q:
-            where += " AND (email LIKE ? OR name LIKE ?)"
-            args += [f"%{q}%", f"%{q}%"]
-        total = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {where}", args,
-                        one=True)["c"]
-        pages = max(1, (total + per_page - 1) // per_page)
-        page = min(page, pages)
-        rows = D.query(
-            f"SELECT * FROM contacts WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
-            args + [per_page, (page - 1) * per_page])
-        counts = D.query(
-            "SELECT status, COUNT(*) c FROM contacts WHERE account_id=? GROUP BY status", (aid,))
-        counts = {r["status"]: r["c"] for r in counts}
-        # Lists with their active-contact counts for the sidebar.
-        lists = D.query(
-            "SELECT cl.id, cl.name,"
-            " (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id) AS n"
-            " FROM contact_lists cl WHERE cl.account_id=? ORDER BY cl.name", (aid,))
-        unassigned = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=? AND"
-                             " list_id IS NULL", (aid,), one=True)["c"]
-        return render_template("contacts.html", contacts=rows, counts=counts,
-                               lists=lists, unassigned=unassigned,
-                               list_filter=list_filter,
-                               status_filter=status_filter, q=q,
-                               page=page, pages=pages, total=total)
 
-    def _account_lists(aid):
-        """Lists for this account with their contact counts (for pickers)."""
-        return D.query(
-            "SELECT cl.id, cl.name,"
-            " (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id) AS n"
-            " FROM contact_lists cl WHERE cl.account_id=? ORDER BY cl.name", (aid,))
-
-    @app.route("/contacts/export")
-    @login_required
-    def contacts_export():
-        """Export Contacts hub. A plain visit renders the page with CSV/Excel
-        buttons; a ?download=csv|excel request streams the file."""
-        aid = current_account()["id"]
-        list_filter = (request.args.get("list") or "").strip()
-        status_filter = (request.args.get("status") or "").strip()
-        download = request.args.get("download")
-        if download in ("csv", "excel"):
-            where, args = "account_id=?", [aid]
-            if list_filter:
-                where += " AND list_id=?"
-                args.append(list_filter)
-            if status_filter:
-                where += " AND status=?"
-                args.append(status_filter)
-            rows = D.query(f"SELECT email, name, tags, status, created_at FROM contacts"
-                           f" WHERE {where} ORDER BY id DESC", args)
-            buf = io.StringIO()
-            w = csv.writer(buf)
-            w.writerow(["email", "name", "tags", "status", "added"])
-            for r in rows:
-                w.writerow([r["email"], r["name"], r["tags"], r["status"],
-                            r["created_at"]])
-            excel = download == "excel"
-            ext = "xls" if excel else "csv"
-            mime = "application/vnd.ms-excel" if excel else "text/csv"
-            return Response(buf.getvalue(), mimetype=mime, headers={
-                "Content-Disposition": f"attachment; filename=contacts.{ext}"})
-        counts = D.query("SELECT status, COUNT(*) c FROM contacts WHERE account_id=?"
-                         " GROUP BY status", (aid,))
-        counts = {r["status"]: r["c"] for r in counts}
-        return render_template("contacts_export.html", lists=_account_lists(aid),
-                               counts=counts, total=sum(counts.values()),
-                               list_filter=list_filter, status_filter=status_filter)
-
-    @app.route("/contacts/import", methods=["GET", "POST"])
-    @login_required
-    def contacts_import():
-        """Import Contacts: CSV / Excel / copy & paste, de-duplicated by email
-        within the target list. Shows a professional import summary afterwards."""
-        acct = current_account()
-        aid = acct["id"]
-        if request.method == "POST":
-            # Resolve / create the destination list.
-            lid = (request.form.get("list_id") or "").strip()
-            new_name = (request.form.get("new_list") or "").strip()[:60]
-            if new_name:
-                if D.query("SELECT 1 FROM contact_lists WHERE account_id=? AND name=?",
-                           (aid, new_name), one=True):
-                    flash("A list with that name already exists.", "error")
-                    return redirect(url_for("contacts_import"))
-                lid = D.execute("INSERT INTO contact_lists (account_id, name,"
-                                " created_at) VALUES (?,?,?)", (aid, new_name, D.now()))
-            elif lid:
-                if not D.query("SELECT 1 FROM contact_lists WHERE id=? AND account_id=?",
-                               (lid, aid), one=True):
-                    lid = None
-            else:
-                lid = None
-
-            raw, fname = _read_import_payload()
-            # Duplicate detection scope follows the account's setting.
-            by_name = acct["dup_check"] == "email_name"
-            # Pre-load existing emails (optionally email|name) in the target scope.
-            scope = "account_id=?" + (" AND list_id=?" if lid else "")
-            sargs = [aid] + ([lid] if lid else [])
-            existing = set()
-            for r in D.query(f"SELECT email, name FROM contacts WHERE {scope}", sargs):
-                key = r["email"].lower()
-                if by_name:
-                    key += "|" + (r["name"] or "").strip().lower()
-                existing.add(key)
-
-            seen = set()
-            rows = added = skipped = 0
-            for line in raw.splitlines():
-                parts = [p.strip() for p in re.split(r"[,;\t]", line)]
-                email = parts[0].lower() if parts else ""
-                if "@" not in email or email == "email":      # skip header / blanks
-                    continue
-                name = parts[1] if len(parts) > 1 else ""
-                rows += 1
-                key = email + ("|" + name.strip().lower() if by_name else "")
-                if key in existing or key in seen:            # duplicate → skip
-                    skipped += 1
-                    continue
-                seen.add(key)
-                D.execute(
-                    "INSERT INTO contacts (account_id, list_id, email, name, status,"
-                    " created_at) VALUES (?,?,?,?,?,?)",
-                    (aid, lid, email, name, "active", D.now()))
-                added += 1
-
-            final_count = D.query(
-                f"SELECT COUNT(*) c FROM contacts WHERE {scope}", sargs,
-                one=True)["c"]
-            if added:
-                D.mark_onboarding(aid, "contacts")
-            list_name = None
-            if lid:
-                nm = D.query("SELECT name FROM contact_lists WHERE id=?", (lid,),
-                             one=True)
-                list_name = nm["name"] if nm else None
-                D.execute("UPDATE contact_lists SET last_import_at=? WHERE id=?",
-                          (D.now(), lid))
-                D.execute(
-                    "INSERT INTO contact_imports (account_id, list_id, filename,"
-                    " rows, added, updated, skipped, rule, created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?)",
-                    (aid, lid, fname, rows, added, 0, skipped, "skip", D.now()))
-            # Stash the summary for the post-redirect view (PRG pattern).
-            session["import_summary"] = {
-                "rows": rows, "added": added, "skipped": skipped,
-                "final": final_count, "list_id": lid, "list_name": list_name,
-            }
-            return redirect(url_for("contacts_import"))
-
-        summary = session.pop("import_summary", None)
-        return render_template("contacts_import.html", lists=_account_lists(aid),
-                               summary=summary)
-
-    @app.route("/contacts/suppression", methods=["GET", "POST"])
-    @login_required
-    def contacts_suppression():
-        """Suppression List: unsubscribed, bounced, complaints & blocked emails."""
-        aid = current_account()["id"]
-        if request.method == "POST":
-            action = request.form.get("action")
-            if action == "block":
+            # ---------- Suppression (account-wide) ---------- #
+            elif action == "block":
                 email = request.form.get("email", "").strip().lower()
                 if "@" in email and not D.query(
                         "SELECT 1 FROM blocked_emails WHERE account_id=? AND email=?",
@@ -1353,43 +1309,25 @@ def register_modules(app):
                               " created_at) VALUES (?,?,?,?)",
                               (aid, email, request.form.get("reason", "").strip(),
                                D.now()))
-                    # Also suppress any matching contacts so they're never mailed.
                     D.execute("UPDATE contacts SET status='suppressed' WHERE"
                               " account_id=? AND email=?", (aid, email))
-                    flash(f"{email} added to the blocked list.", "success")
+                    flash(f"{email} blocked.", "success")
                 else:
                     flash("Enter a valid, not-already-blocked email.", "error")
+                sel = "suppression"
             elif action == "unblock":
                 D.execute("DELETE FROM blocked_emails WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
                 flash("Email unblocked.", "success")
+                sel = "suppression"
             elif action == "resubscribe":
                 D.execute("UPDATE contacts SET status='active' WHERE id=? AND"
                           " account_id=?", (request.form.get("id"), aid))
                 flash("Contact re-activated.", "success")
-            return redirect(url_for("contacts_suppression",
-                                    tab=request.form.get("tab", "unsubscribed")))
-        tab = request.args.get("tab", "unsubscribed")
-        unsub = D.query("SELECT * FROM contacts WHERE account_id=? AND"
-                        " status='unsubscribed' ORDER BY id DESC", (aid,))
-        bounced = D.query("SELECT * FROM contacts WHERE account_id=? AND"
-                          " status='bounced' ORDER BY id DESC", (aid,))
-        complaints = D.query("SELECT * FROM complaints WHERE account_id=? AND"
-                             " kind='complaint' ORDER BY id DESC", (aid,))
-        blocked = D.query("SELECT * FROM blocked_emails WHERE account_id=?"
-                          " ORDER BY id DESC", (aid,))
-        return render_template("contacts_suppression.html", tab=tab, unsub=unsub,
-                               bounced=bounced, complaints=complaints,
-                               blocked=blocked)
+                sel = "suppression"
 
-    @app.route("/contacts/settings", methods=["GET", "POST"])
-    @login_required
-    def contacts_settings():
-        """Contact Settings: duplicate check, default import settings, custom fields."""
-        aid = current_account()["id"]
-        if request.method == "POST":
-            action = request.form.get("action")
-            if action == "save":
+            # ---------- Settings (folded-in modal) ---------- #
+            elif action == "save_settings":
                 dup = request.form.get("dup_check", "email")
                 dup = dup if dup in ("email", "email_name") else "email"
                 rule = request.form.get("default_import_rule", "skip")
@@ -1410,242 +1348,113 @@ def register_modules(app):
                 D.execute("DELETE FROM contact_fields WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
                 flash("Custom field removed.", "success")
-            return redirect(url_for("contacts_settings"))
-        acct = current_account()
-        fields = D.query("SELECT * FROM contact_fields WHERE account_id=? ORDER BY id",
-                         (aid,))
-        return render_template("contacts_settings.html", acct=acct, fields=fields)
 
-    # ---- Contact List Management ---------------------------------------- #
-    # A dedicated, list-first management screen: every list carries a channel
-    # type (Email/SMS/WhatsApp/Universal) and a per-list actions menu (rename,
-    # import, export, copy, move, empty, delete, dedupe, import history).
-    LIST_TYPE_ICONS = {"Email": "📧", "SMS": "💬", "WhatsApp": "🟢",
-                       "Universal": "🌐"}
+            return redirect(url_for("contacts", list=sel))
 
-    @app.route("/contact-lists", methods=["GET", "POST"])
-    @login_required
-    def contact_lists():
-        aid = current_account()["id"]
-
-        def _own_list(lid):
-            """Fetch a list by id, scoped to this account (None if not owned)."""
-            if not lid:
-                return None
-            return D.query("SELECT * FROM contact_lists WHERE id=? AND"
-                           " account_id=?", (lid, aid), one=True)
-
-        if request.method == "POST":
-            action = request.form.get("action")
-            if action == "create":
-                name = (request.form.get("name") or "").strip()[:60]
-                ltype = request.form.get("list_type") or "Universal"
-                if ltype not in LIST_TYPE_ICONS:
-                    ltype = "Universal"
-                if name and not D.query("SELECT 1 FROM contact_lists WHERE"
-                                        " account_id=? AND name=?", (aid, name),
-                                        one=True):
-                    D.execute("INSERT INTO contact_lists (account_id, name,"
-                              " list_type, created_at) VALUES (?,?,?,?)",
-                              (aid, name, ltype, D.now()))
-                    flash(f"List '{name}' created.", "success")
-                else:
-                    flash("Enter a unique list name.", "error")
-            elif action == "rename":
-                lst = _own_list(request.form.get("id"))
-                name = (request.form.get("name") or "").strip()[:60]
-                if lst and name:
-                    D.execute("UPDATE contact_lists SET name=? WHERE id=? AND"
-                              " account_id=?", (name, lst["id"], aid))
-                    flash("List renamed.", "success")
-            elif action == "import":
-                lst = _own_list(request.form.get("id"))
-                if lst:
-                    rule = request.form.get("rule") or "skip"  # skip/update/keep
-                    raw = request.form.get("csv", "")
-                    up = request.files.get("file")
-                    fname = ""
-                    if up and up.filename:
-                        fname = up.filename
-                        try:
-                            raw = up.read().decode("utf-8", "ignore") or raw
-                        except Exception:
-                            pass
-                    rows = added = updated = skipped = 0
-                    for line in raw.splitlines():
-                        parts = [p.strip() for p in re.split(r"[,;\t]", line)]
-                        email = parts[0].lower() if parts else ""
-                        if "@" not in email or email == "email":  # skip header
-                            continue
-                        name = parts[1] if len(parts) > 1 else ""
-                        rows += 1
-                        existing = D.query(
-                            "SELECT id FROM contacts WHERE account_id=? AND"
-                            " list_id=? AND email=?", (aid, lst["id"], email),
-                            one=True)
-                        if existing and rule == "skip":
-                            skipped += 1
-                            continue
-                        if existing and rule == "update":
-                            if name:
-                                D.execute("UPDATE contacts SET name=? WHERE id=?",
-                                          (name, existing["id"]))
-                            updated += 1
-                            continue
-                        # rule == "keep" (keep both) or a brand-new email.
-                        D.execute(
-                            "INSERT INTO contacts (account_id, list_id, email,"
-                            " name, status, created_at) VALUES (?,?,?,?,?,?)",
-                            (aid, lst["id"], email, name, "active", D.now()))
-                        added += 1
-                    if rows:
-                        D.mark_onboarding(aid, "contacts")
-                    D.execute("UPDATE contact_lists SET last_import_at=? WHERE"
-                              " id=?", (D.now(), lst["id"]))
-                    D.execute(
-                        "INSERT INTO contact_imports (account_id, list_id,"
-                        " filename, rows, added, updated, skipped, rule,"
-                        " created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                        (aid, lst["id"], fname, rows, added, updated, skipped,
-                         rule, D.now()))
-                    # Stamp import_id on contacts added in this batch so smart delete works.
-                    imp = D.query(
-                        "SELECT id FROM contact_imports WHERE account_id=? ORDER BY id DESC LIMIT 1",
-                        (aid,), one=True)
-                    if imp:
-                        D.execute(
-                            "UPDATE contacts SET import_id=? WHERE account_id=?"
-                            " AND list_id=? AND import_id IS NULL",
-                            (imp["id"], aid, lst["id"]))
-                    flash(f"Imported into '{lst['name']}': {added} added,"
-                          f" {updated} updated, {skipped} skipped.", "success")
-            elif action == "delete_import":
-                # Smart-delete: remove only contacts exclusively from this import.
-                # Contacts that were skipped as duplicates (they already existed
-                # in an earlier import) are NOT deleted.
-                imp_id = request.form.get("imp_id")
-                if imp_id:
-                    imp_row = D.query(
-                        "SELECT * FROM contact_imports WHERE id=? AND account_id=?",
-                        (imp_id, aid), one=True)
-                    if imp_row:
-                        # Only delete contacts whose import_id matches this batch
-                        # (the duplicates that were skipped have a different import_id).
-                        deleted = D.query(
-                            "SELECT COUNT(*) c FROM contacts WHERE account_id=?"
-                            " AND import_id=?", (aid, imp_id), one=True)["c"]
-                        D.execute(
-                            "DELETE FROM contacts WHERE account_id=? AND import_id=?",
-                            (aid, imp_id))
-                        D.execute(
-                            "DELETE FROM contact_imports WHERE id=? AND account_id=?",
-                            (imp_id, aid))
-                        flash(f"Import deleted — {deleted} contacts removed."
-                              f" Earlier imports untouched.", "success")
-            elif action == "copy":
-                src = _own_list(request.form.get("id"))
-                name = (request.form.get("name") or "").strip()[:60]
-                if src and name and not D.query(
-                        "SELECT 1 FROM contact_lists WHERE account_id=? AND"
-                        " name=?", (aid, name), one=True):
-                    D.execute("INSERT INTO contact_lists (account_id, name,"
-                              " list_type, created_at) VALUES (?,?,?,?)",
-                              (aid, name, src["list_type"], D.now()))
-                    new = D.query("SELECT id FROM contact_lists WHERE"
-                                  " account_id=? AND name=?", (aid, name),
-                                  one=True)
-                    if request.form.get("copy_contacts"):
-                        D.execute(
-                            "INSERT INTO contacts (account_id, list_id, email,"
-                            " name, tags, status, company, mobile, city, state,"
-                            " created_at) SELECT account_id, ?, email, name,"
-                            " tags, status, company, mobile, city, state, ?"
-                            " FROM contacts WHERE account_id=? AND list_id=?",
-                            (new["id"], D.now(), aid, src["id"]))
-                    flash(f"List copied to '{name}'.", "success")
-                else:
-                    flash("Enter a unique new list name.", "error")
-            elif action == "duplicate":
-                # One-click clone: auto-named "(copy)", always includes contacts.
-                src = _own_list(request.form.get("id"))
-                if src:
-                    base = f"{src['name']} (copy)"[:60]
-                    name, i = base, 2
-                    while D.query("SELECT 1 FROM contact_lists WHERE account_id=?"
-                                  " AND name=?", (aid, name), one=True):
-                        name = f"{base} {i}"[:60]
-                        i += 1
-                    nid = D.execute("INSERT INTO contact_lists (account_id, name,"
-                                    " list_type, created_at) VALUES (?,?,?,?)",
-                                    (aid, name, src["list_type"], D.now()))
-                    D.execute(
-                        "INSERT INTO contacts (account_id, list_id, email, name,"
-                        " tags, status, company, mobile, city, state, created_at)"
-                        " SELECT account_id, ?, email, name, tags, status, company,"
-                        " mobile, city, state, ? FROM contacts WHERE account_id=?"
-                        " AND list_id=?", (nid, D.now(), aid, src["id"]))
-                    flash(f"List duplicated as '{name}'.", "success")
-            elif action == "move":
-                src = _own_list(request.form.get("from_id"))
-                dst = _own_list(request.form.get("to_id"))
-                if src and dst and src["id"] != dst["id"]:
-                    if request.form.get("remove_source"):
-                        D.execute("UPDATE contacts SET list_id=? WHERE"
-                                  " account_id=? AND list_id=?",
-                                  (dst["id"], aid, src["id"]))
-                    else:
-                        D.execute(
-                            "INSERT INTO contacts (account_id, list_id, email,"
-                            " name, tags, status, company, mobile, city, state,"
-                            " created_at) SELECT account_id, ?, email, name,"
-                            " tags, status, company, mobile, city, state, ?"
-                            " FROM contacts WHERE account_id=? AND list_id=?",
-                            (dst["id"], D.now(), aid, src["id"]))
-                    flash(f"Contacts moved to '{dst['name']}'.", "success")
-                else:
-                    flash("Choose two different lists to move between.", "error")
-            elif action == "dedupe":
-                lst = _own_list(request.form.get("id"))
-                if lst:
-                    before = D.query("SELECT COUNT(*) c FROM contacts WHERE"
-                                     " account_id=? AND list_id=?",
-                                     (aid, lst["id"]), one=True)["c"]
-                    D.execute(
-                        "DELETE FROM contacts WHERE account_id=? AND list_id=?"
-                        " AND id NOT IN (SELECT MIN(id) FROM contacts WHERE"
-                        " account_id=? AND list_id=? GROUP BY email)",
-                        (aid, lst["id"], aid, lst["id"]))
-                    after = D.query("SELECT COUNT(*) c FROM contacts WHERE"
-                                    " account_id=? AND list_id=?",
-                                    (aid, lst["id"]), one=True)["c"]
-                    flash(f"Removed {before - after} duplicate(s) from"
-                          f" '{lst['name']}'.", "success")
-            elif action == "empty":
-                lst = _own_list(request.form.get("id"))
-                if lst:
-                    D.execute("DELETE FROM contacts WHERE account_id=? AND"
-                              " list_id=?", (aid, lst["id"]))
-                    flash(f"List '{lst['name']}' emptied — the list still"
-                          f" exists.", "success")
-            elif action == "delete":
-                lst = _own_list(request.form.get("id"))
-                if lst:
-                    D.execute("DELETE FROM contacts WHERE account_id=? AND"
-                              " list_id=?", (aid, lst["id"]))
-                    D.execute("DELETE FROM contact_lists WHERE id=? AND"
-                              " account_id=?", (lst["id"], aid))
-                    flash(f"List '{lst['name']}' and its contacts were"
-                          f" deleted.", "success")
-            return redirect(url_for("contact_lists"))
-
+        # -------------------- GET: render the dashboard -------------------- #
         lists = D.query(
             "SELECT cl.*, (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id"
             " AND c.account_id=cl.account_id) AS n FROM contact_lists cl WHERE"
             " cl.account_id=? ORDER BY cl.name", (aid,))
-        imports = D.query("SELECT * FROM contact_imports WHERE account_id=?"
+        sel = (request.args.get("list") or "all").strip()
+        sel_list = _own_list(aid, sel) if sel.isdigit() else None
+        if sel.isdigit() and not sel_list:
+            sel = "all"
+
+        # Suppression view payload (always cheap to compute).
+        unsub = D.query("SELECT * FROM contacts WHERE account_id=? AND"
+                        " status='unsubscribed' ORDER BY id DESC", (aid,))
+        bounced = D.query("SELECT * FROM contacts WHERE account_id=? AND"
+                          " status='bounced' ORDER BY id DESC", (aid,))
+        complaints = D.query("SELECT * FROM complaints WHERE account_id=? AND"
+                             " kind='complaint' ORDER BY id DESC", (aid,))
+        blocked = D.query("SELECT * FROM blocked_emails WHERE account_id=?"
                           " ORDER BY id DESC", (aid,))
-        return render_template("contact_lists.html", lists=lists,
-                               imports=imports, type_icons=LIST_TYPE_ICONS)
+
+        contacts_rows = []
+        page = pages = total = 1
+        q = request.args.get("q", "").strip()
+        status_filter = request.args.get("status", "").strip()
+        stats = None
+        if sel != "suppression":
+            lid = sel_list["id"] if sel_list else None
+            where, args = "account_id=?", [aid]
+            if lid:
+                where += " AND list_id=?"
+                args.append(lid)
+            if status_filter:
+                where += " AND status=?"
+                args.append(status_filter)
+            if q:
+                where += " AND (email LIKE ? OR name LIKE ?)"
+                args += [f"%{q}%", f"%{q}%"]
+            per_page = 25
+            try:
+                page = max(1, int(request.args.get("page", 1)))
+            except ValueError:
+                page = 1
+            total = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {where}", args,
+                            one=True)["c"]
+            pages = max(1, (total + per_page - 1) // per_page)
+            page = min(page, pages)
+            contacts_rows = D.query(
+                f"SELECT * FROM contacts WHERE {where} ORDER BY id DESC"
+                f" LIMIT ? OFFSET ?", args + [per_page, (page - 1) * per_page])
+            stats = _scope_stats(aid, lid)
+
+        all_total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?",
+                            (aid,), one=True)["c"]
+        suppress_count = len(unsub) + len(bounced) + len(complaints) + len(blocked)
+        return render_template(
+            "contacts.html", lists=lists, sel=sel, sel_list=sel_list,
+            contacts=contacts_rows, q=q, status_filter=status_filter,
+            page=page, pages=pages, total=total, stats=stats,
+            all_total=all_total, suppress_count=suppress_count,
+            unsub=unsub, bounced=bounced, complaints=complaints, blocked=blocked,
+            acct=acct, fields=D.query("SELECT * FROM contact_fields WHERE"
+                                      " account_id=? ORDER BY id", (aid,)),
+            type_icons=LIST_TYPE_ICONS,
+            import_summary=session.pop("import_summary", None))
+
+    @app.route("/contact-lists")
+    @login_required
+    def contact_lists():
+        # The dedicated list page is folded into the Contacts dashboard now.
+        return redirect(url_for("contacts", list=request.args.get("list", "")))
+
+    @app.route("/contacts/export")
+    @login_required
+    def contacts_export():
+        """Stream contacts as CSV / Excel. Scope by ?list= (id or 'all') and
+        optional ?status=. Used by the dashboard's Export modal."""
+        aid = current_account()["id"]
+        sel = (request.args.get("list") or "all").strip()
+        status_filter = (request.args.get("status") or "").strip()
+        where, args = "account_id=?", [aid]
+        label = "contacts"
+        if sel.isdigit():
+            lst = D.query("SELECT name FROM contact_lists WHERE id=? AND account_id=?",
+                          (sel, aid), one=True)
+            if lst:
+                where += " AND list_id=?"
+                args.append(sel)
+                label = re.sub(r"[^A-Za-z0-9_-]+", "_", lst["name"]) or "list"
+        if status_filter:
+            where += " AND status=?"
+            args.append(status_filter)
+        rows = D.query(f"SELECT email,name,tags,status,created_at FROM contacts"
+                       f" WHERE {where} ORDER BY id DESC", args)
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["email", "name", "tags", "status", "added"])
+        for r in rows:
+            w.writerow([r["email"], r["name"], r["tags"], r["status"],
+                        r["created_at"]])
+        excel = request.args.get("fmt") == "excel"
+        ext = "xls" if excel else "csv"
+        mime = "application/vnd.ms-excel" if excel else "text/csv"
+        return Response(buf.getvalue(), mimetype=mime, headers={
+            "Content-Disposition": f"attachment; filename={label}.{ext}"})
 
     @app.route("/contact-lists/sample.csv")
     @login_required
@@ -1660,39 +1469,6 @@ def register_modules(app):
         return Response(buf.getvalue(), mimetype="text/csv",
                         headers={"Content-Disposition":
                                  "attachment; filename=sample_contacts.csv"})
-
-    @app.route("/contact-lists/<int:lid>/export")
-    @login_required
-    def contact_list_export(lid):
-        aid = current_account()["id"]
-        lst = D.query("SELECT * FROM contact_lists WHERE id=? AND account_id=?",
-                      (lid, aid), one=True)
-        if not lst:
-            abort(404)
-        # Map the UI's friendly filter names onto stored contact statuses.
-        smap = {"active": "active", "unsubscribed": "unsubscribed",
-                "invalid": "bounced"}
-        where, args = "account_id=? AND list_id=?", [aid, lid]
-        f = request.args.get("filter", "all")
-        if f in smap:
-            where += " AND status=?"
-            args.append(smap[f])
-        rows = D.query(f"SELECT email,name,tags,status,created_at FROM contacts"
-                       f" WHERE {where} ORDER BY id DESC", args)
-        buf = io.StringIO()
-        w = csv.writer(buf)
-        w.writerow(["email", "name", "tags", "status", "added"])
-        for r in rows:
-            w.writerow([r["email"], r["name"], r["tags"], r["status"],
-                        r["created_at"]])
-        safe = re.sub(r"[^A-Za-z0-9_-]+", "_", lst["name"]) or "list"
-        # "Excel" export ships CSV bytes that Excel opens natively as a .xls.
-        excel = request.args.get("fmt") == "excel"
-        ext = "xls" if excel else "csv"
-        mime = "application/vnd.ms-excel" if excel else "text/csv"
-        return Response(buf.getvalue(), mimetype=mime,
-                        headers={"Content-Disposition":
-                                 f"attachment; filename={safe}.{ext}"})
 
     # ---- Campaigns / Sender --------------------------------------------- #
     @app.route("/campaigns", methods=["GET", "POST"])

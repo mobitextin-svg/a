@@ -71,16 +71,21 @@ Change it afterwards from **Settings → Security**. Override the seed for
 production with `MAILSAAS_ADMIN_EMAIL` / `MAILSAAS_ADMIN_PASSWORD`.
 
 ### Contacts
-The **👥 Contacts** area is organised into:
-- **📋 All Contacts** — view, search, filter, edit, delete, move to list
-- **📂 Contact Lists** — create, rename, delete, copy, duplicate, import, export, view, count
-- **📥 Import Contacts** — CSV, Excel (.xlsx) or copy & paste, **de-duplicated by email**
-- **📤 Export Contacts** — CSV or Excel
-- **🚫 Suppression List** — unsubscribed, bounced, complaints, blocked emails
-- **⚙ Contact Settings** — duplicate check, default import settings, custom fields
+A single **👥 Contacts** menu opens one list-first dashboard — no separate
+Import/Export/Settings pages. Pick a list (or **All Contacts** / **Suppression**)
+from the left rail and act on it from the toolbar:
 
-Imports skip addresses that already exist (matched by email), so the same person
-never receives two copies of a campaign. Each import ends with a summary:
+- **Lists** — create, rename, duplicate, **merge**, move, copy, delete
+- **Contacts** — view, search, filter, edit, delete, move/assign, bulk actions
+- **Import** — CSV, Excel (.xlsx) or copy & paste, **de-duplicated by email**
+- **Export** — CSV or Excel (whole account or one list)
+- **📊 Statistics** — total, active, bounced, unsubscribed per list
+- **🚫 Suppression** — unsubscribed, bounced, complaints, blocked emails (account-wide)
+- **⚙ Settings** — duplicate check, default import rule, custom fields (gear modal)
+
+Imports skip addresses that already exist (matched by email, or email+name if you
+choose), so the same person never receives two copies of a campaign. Each import
+ends with a summary:
 
 ```
 ✅ Import Completed

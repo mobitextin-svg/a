@@ -134,23 +134,15 @@ NAV = [
     },
     {
         "key": "contacts", "label": "Contacts", "icon": "👥", "built": True,
-        # The full Contacts information architecture. Each tuple is
-        # (sub key, sidebar label, endpoint) and renders as a nested link.
-        "sub": [
-            ("contacts",         "📋 All Contacts",      "contacts"),
-            ("clists",           "📂 Contact Lists",     "contact_lists"),
-            ("contacts_import",  "📥 Import Contacts",   "contacts_import"),
-            ("contacts_export",  "📤 Export Contacts",   "contacts_export"),
-            ("suppression",      "🚫 Suppression List",  "contacts_suppression"),
-            ("contact_settings", "⚙ Contact Settings",   "contacts_settings"),
-        ],
+        # One consolidated, list-first dashboard — no sub-pages. Everything
+        # (lists, import/export, suppression, settings) is managed in place.
         "items": [
-            ("All Contacts", "View, search, filter, edit, delete & move"),
-            ("Contact Lists", "Create, manage, import, export & duplicate"),
-            ("Import Contacts", "CSV, Excel or copy & paste"),
-            ("Export Contacts", "Download as CSV or Excel"),
-            ("Suppression List", "Unsubscribed, bounced, complaints & blocked"),
-            ("Contact Settings", "Duplicate check, import defaults & custom fields"),
+            ("Contact Lists", "Create, rename, duplicate, merge, delete"),
+            ("View & Search", "Find, filter, edit, delete & move contacts"),
+            ("Import / Export", "CSV, Excel or copy & paste — de-duplicated"),
+            ("Statistics", "Total, active, bounced & unsubscribed"),
+            ("Suppression", "Unsubscribed, bounced, complaints & blocked"),
+            ("Settings", "Duplicate check, import defaults & custom fields"),
         ],
     },
     {
@@ -554,9 +546,7 @@ ESSENTIAL = {
     "dashboard", "admin", "smtp", "pools", "queue", "warmup", "iphealth",
     "domains", "deliverability", "reports", "monitoring", "billing", "settings",
     # user essentials
-    "campaigns", "burstcamp", "contacts", "clists", "contacts_import",
-    "contacts_export", "suppression", "contact_settings",
-    "templates", "landing", "verification",
+    "campaigns", "burstcamp", "contacts", "templates", "landing", "verification",
     "finder", "marketplace", "api",
 }
 
