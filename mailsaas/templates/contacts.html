@@ -121,10 +121,10 @@
 
       {# ---- Toolbar: common actions up front, the rest under ⋮ More ---- #}
       <div class="ct-toolbar">
-        <button type="button" class="tb primary" data-open="dlgAdd">➕ Add</button>
-        <button type="button" class="tb primary" data-open="dlgImport">📥 Import</button>
-        <button type="button" class="tb primary" data-open="dlgExport">📤 Export</button>
-        <button type="button" class="tb primary" data-open="dlgStats">📊 Statistics</button>
+        <button type="button" class="tb primary" data-open="dlgAdd" title="Add a contact (press A)">➕ Add</button>
+        <button type="button" class="tb primary" data-open="dlgImport" title="Import from CSV, Excel or paste (press I)">📥 Import</button>
+        <button type="button" class="tb primary" data-open="dlgExport" title="Export this view to CSV or Excel (press E)">📤 Export</button>
+        <button type="button" class="tb primary" data-open="dlgStats" title="View list statistics (press S)">📊 Statistics</button>
         <details class="tb-more">
           <summary class="tb">⋮ More</summary>
           <div class="pop">
@@ -463,6 +463,22 @@
   });
   var all=document.getElementById('checkAll');
   if(all) all.addEventListener('change',function(){ document.querySelectorAll('.rowChk').forEach(function(x){x.checked=all.checked}); });
+  // Keyboard shortcuts: A=Add, I=Import, E=Export, S=Statistics, / = search.
+  // Ignored while typing in a field or when a dialog is already open.
+  var SHORTCUTS={a:'dlgAdd',i:'dlgImport',e:'dlgExport',s:'dlgStats'};
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey||e.metaKey||e.altKey) return;
+    var t=e.target, tag=(t.tagName||'').toLowerCase();
+    if(tag==='input'||tag==='textarea'||tag==='select'||t.isContentEditable) return;
+    if(document.querySelector('dialog[open]')) return;
+    if(e.key==='/'){
+      var s=document.querySelector('.ct-head input[name=q]');
+      if(s){ e.preventDefault(); s.focus(); }
+      return;
+    }
+    var id=SHORTCUTS[(e.key||'').toLowerCase()];
+    if(id){ var d=document.getElementById(id); if(d){ e.preventDefault(); open(d); } }
+  });
   var edit=document.getElementById('dlgEdit');
   document.querySelectorAll('.js-edit').forEach(function(b){
     b.addEventListener('click',function(){
