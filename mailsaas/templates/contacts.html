@@ -119,26 +119,32 @@
         </div>
       </div>
 
-      {# ---- Toolbar ---- #}
+      {# ---- Toolbar: common actions up front, the rest under ⋮ More ---- #}
       <div class="ct-toolbar">
-        <button type="button" class="tb" data-open="dlgAdd">➕ Add</button>
-        <button type="button" class="tb" data-open="dlgImport">📥 Import</button>
-        <button type="button" class="tb" data-open="dlgExport">📤 Export</button>
-        <button type="button" class="tb" data-open="dlgStats">📊 Statistics</button>
-        <form method="post" class="tb-form" onsubmit="return confirm('Remove duplicate emails{{ ' from this list' if is_list else '' }}?')">
-          <input type="hidden" name="action" value="dedupe"><input type="hidden" name="id" value="{{ sel_list.id if is_list else '' }}">
-          <input type="hidden" name="sel" value="{{ sel }}"><button class="tb">🧹 Remove Duplicates</button></form>
-        {% if is_list %}
-        <button type="button" class="tb" data-open="dlgRename">✏ Rename</button>
-        <form method="post" class="tb-form"><input type="hidden" name="action" value="duplicate_list">
-          <input type="hidden" name="id" value="{{ sel_list.id }}"><input type="hidden" name="sel" value="{{ sel }}">
-          <button class="tb">📋 Duplicate</button></form>
-        <button type="button" class="tb" data-open="dlgMerge">🔀 Merge</button>
-        <button type="button" class="tb" data-open="dlgMove">📂 Move</button>
-        <button type="button" class="tb" data-open="dlgCopy">📄 Copy</button>
-        <button type="button" class="tb danger" data-open="dlgDelContacts">🗑 Delete Contacts</button>
-        <button type="button" class="tb danger" data-open="dlgDelList">❌ Delete List</button>
-        {% endif %}
+        <button type="button" class="tb primary" data-open="dlgAdd">➕ Add</button>
+        <button type="button" class="tb primary" data-open="dlgImport">📥 Import</button>
+        <button type="button" class="tb primary" data-open="dlgExport">📤 Export</button>
+        <button type="button" class="tb primary" data-open="dlgStats">📊 Statistics</button>
+        <details class="tb-more">
+          <summary class="tb">⋮ More</summary>
+          <div class="pop">
+            <form method="post" class="tb-form" onsubmit="return confirm('Remove duplicate emails{{ ' from this list' if is_list else '' }}?')">
+              <input type="hidden" name="action" value="dedupe"><input type="hidden" name="id" value="{{ sel_list.id if is_list else '' }}">
+              <input type="hidden" name="sel" value="{{ sel }}"><button class="tb-item">🧹 Remove Duplicates</button></form>
+            {% if is_list %}
+            <button type="button" class="tb-item" data-open="dlgRename">✏ Rename List</button>
+            <form method="post" class="tb-form"><input type="hidden" name="action" value="duplicate_list">
+              <input type="hidden" name="id" value="{{ sel_list.id }}"><input type="hidden" name="sel" value="{{ sel }}">
+              <button class="tb-item">📋 Duplicate List</button></form>
+            <button type="button" class="tb-item" data-open="dlgMerge">🔀 Merge Lists</button>
+            <button type="button" class="tb-item" data-open="dlgMove">📂 Move Contacts</button>
+            <button type="button" class="tb-item" data-open="dlgCopy">📄 Copy Contacts</button>
+            <div class="tb-sep"></div>
+            <button type="button" class="tb-item danger" data-open="dlgDelContacts">🗑 Delete Contacts</button>
+            <button type="button" class="tb-item danger" data-open="dlgDelList">❌ Delete List</button>
+            {% endif %}
+          </div>
+        </details>
       </div>
 
       {# ---- Status filter ---- #}
@@ -404,12 +410,24 @@
 .ct-sep{height:1px;background:var(--line);margin:6px 4px}
 .ct-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:.82rem;color:var(--muted)}
 .ct-stats b{color:var(--text)}
-.ct-toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.ct-toolbar .tb,.tb-form .tb{background:var(--panel2);border:1px solid var(--line);color:var(--text);
-  border-radius:8px;padding:7px 11px;font-size:.82rem;cursor:pointer;font:inherit}
-.ct-toolbar .tb:hover,.tb-form .tb:hover{border-color:var(--accent)}
-.ct-toolbar .tb.danger{color:var(--bad)}
-.tb-form{display:inline}
+.ct-toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;align-items:center}
+.ct-toolbar .tb{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer;font:inherit}
+.ct-toolbar .tb.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.ct-toolbar .tb:hover{filter:brightness(1.05);border-color:var(--accent)}
+.tb-form{display:block;margin:0}
+/* ⋮ More dropdown */
+.tb-more{position:relative}
+.tb-more>summary{list-style:none}
+.tb-more>summary::-webkit-details-marker{display:none}
+.tb-more .pop{position:absolute;left:0;top:calc(100% + 6px);z-index:40;min-width:210px;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;
+  box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.tb-item{display:block;width:100%;text-align:left;background:none;border:none;color:inherit;
+  font:inherit;font-size:.84rem;padding:8px 10px;border-radius:7px;cursor:pointer}
+.tb-item:hover{background:var(--panel2)}
+.tb-item.danger{color:var(--bad)}
+.tb-sep{height:1px;background:var(--line);margin:5px 4px}
 .ct-summary{border:1px solid var(--good)}
 .ct-imptable{width:100%;max-width:420px;border-collapse:collapse;margin:6px 0}
 .ct-imptable td{padding:7px 6px;border-bottom:1px dashed var(--line)}
@@ -429,7 +447,16 @@
 (function(){
   function open(d){ if(d&&d.showModal) d.showModal(); else if(d) d.setAttribute('open',''); }
   document.querySelectorAll('[data-open]').forEach(function(b){
-    b.addEventListener('click',function(){ open(document.getElementById(b.dataset.open)); });
+    b.addEventListener('click',function(){
+      var m=b.closest('details[open]'); if(m) m.removeAttribute('open');  // close ⋮ More
+      open(document.getElementById(b.dataset.open));
+    });
+  });
+  // Click-away closes the ⋮ More dropdown.
+  document.addEventListener('click',function(e){
+    document.querySelectorAll('.tb-more[open]').forEach(function(d){
+      if(!d.contains(e.target)) d.removeAttribute('open');
+    });
   });
   document.querySelectorAll('.ct-dlg [data-close]').forEach(function(b){
     b.addEventListener('click',function(){ var d=b.closest('dialog'); if(d.close) d.close(); else d.removeAttribute('open'); });
