@@ -136,6 +136,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .b-risky,.b-Scheduled,.b-Warming,.b-suppressed,.b-Paused{background:#33270c;color:#fbbf24;border-color:#5c4514}
 .b-invalid,.b-Failed,.b-bounced,.b-unsubscribed,.b-blocked{background:#34141a;color:#f87171;border-color:#5c2129}
 .b-Running,.b-Draft,.b-unknown{background:#15223f;color:#93b4ff;border-color:#27406e}
+.b-Ready{background:#0e2a33;color:#38bdf8;border-color:#1d4e5e}
 
 /* ---------- Forms & buttons ---------- */
 label{display:block;font-size:.82rem;color:var(--muted);margin:10px 0 5px}

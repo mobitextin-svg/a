@@ -22,6 +22,21 @@ def test_template_step_is_select_only(auth):
     assert "tpl-preview-frame" in html        # preview of the chosen template
 
 
+def test_save_as_ready_sets_ready_status(app, auth):
+    html = auth.get("/campaigns/new").get_data(as_text=True)
+    assert 'data-decision="ready"' in html        # the Save as Ready button
+    auth.post("/campaigns/new", data={
+        "name": "ReadyCamp", "subject": "S",
+        "body": "<p>x {{unsubscribe_url}}</p>", "rcpt_mode": "all",
+        "decision": "ready"}, follow_redirects=True)
+    with app.app_context():
+        st = D.query("SELECT status FROM campaigns WHERE name='ReadyCamp'",
+                     one=True)["status"]
+    assert st == "Ready"
+    # Ready appears as a filter tab on the campaigns list
+    assert "Ready (" in auth.get("/campaigns").get_data(as_text=True)
+
+
 def test_campaign_submits_with_subject_and_body(app, auth):
     auth.post("/campaigns/new", data={
         "name": "FlowTest", "subject": "Hello", "preview_text": "Peek",

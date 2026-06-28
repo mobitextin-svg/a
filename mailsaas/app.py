@@ -2099,6 +2099,8 @@ def register_modules(app):
             if decision == "schedule":
                 scheduled_at = (request.form.get("scheduled_at") or "").strip() or None
                 status = "Scheduled"
+            elif decision == "ready":
+                status = "Ready"
             cid = D.execute(
                 "INSERT INTO campaigns (account_id, name, subject, preview_text, body,"
                 " from_email, status, recipients, list_id, scheduled_at, created_at)"
@@ -2121,6 +2123,10 @@ def register_modules(app):
                 flash(f"📅 '{name}' scheduled for {scheduled_at or 'later'} "
                       f"to {count} recipient(s).", "success")
                 return redirect(url_for("campaigns", status="Scheduled"))
+            if decision == "ready":
+                flash(f"✅ '{name}' is Ready to send ({count} recipient(s)).",
+                      "success")
+                return redirect(url_for("campaigns", status="Ready"))
             flash(f"💾 Draft '{name}' saved with {count} recipient(s).", "success")
             return redirect(url_for("campaigns", status="Draft"))
 

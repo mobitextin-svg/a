@@ -309,12 +309,19 @@
     {# Full Review Summary #}
     <div class="review-summary" id="reviewBox" style="margin-bottom:22px"></div>
 
-    <div class="grid g3" style="margin-top:6px">
-      {# Save Campaign #}
+    <div class="wiz-actions" style="margin-top:6px">
+      {# Save Draft #}
       <div class="card" style="text-align:center">
-        <h3>💾 Save Campaign</h3>
-        <p class="faint small">Only saves the campaign. No emails are sent. Edit &amp; send later.</p>
-        <button type="button" class="btn ghost" data-decision="draft">Save Campaign</button>
+        <h3>💾 Save Draft</h3>
+        <p class="faint small">Work in progress. No emails are sent — edit &amp; finish later.</p>
+        <button type="button" class="btn ghost" data-decision="draft">Save Draft</button>
+      </div>
+
+      {# Save as Ready #}
+      <div class="card" style="text-align:center">
+        <h3>✅ Save as Ready</h3>
+        <p class="faint small">Reviewed and good to go. Marks the campaign Ready to send.</p>
+        <button type="button" class="btn" data-decision="ready" style="margin-top:18px">Save as Ready</button>
       </div>
 
       {# Schedule #}
@@ -387,6 +394,8 @@
 .tpl-pick-use{width:100%;padding:6px;border:none;background:var(--accent,#4f46e5);color:#fff;cursor:pointer;font-size:.82rem;font-weight:600}
 .tpl-pick-use:hover{opacity:.9}
 .tpl-preview-frame{width:100%;height:340px;border:1px solid var(--border);border-radius:8px;background:#fff;margin-top:6px}
+.wiz-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:900px){.wiz-actions{grid-template-columns:repeat(2,1fr)}}
 
 /* ---- Review summary ---- */
 .review-summary{background:var(--panel2,#f5f5f5);border-radius:8px;padding:14px 16px;border:1px solid var(--border)}
