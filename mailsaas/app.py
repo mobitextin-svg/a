@@ -845,6 +845,12 @@ ATTACH_MAX_FILES = 10
 ATTACH_MAX_FILE = 10 * 1024 * 1024     # 10 MB per file
 ATTACH_MAX_TOTAL = 25 * 1024 * 1024    # 25 MB combined (safe Gmail/Outlook limit)
 
+# Brand images: any upload size is accepted and auto-resized to these targets.
+BRAND_SPECS = {
+    "logo":   {"exts": {"png", "svg", "jpg", "jpeg"}, "size": (300, 100)},
+    "header": {"exts": {"jpg", "jpeg", "png", "webp"}, "size": (1200, 400)},
+}
+
 
 def _human_size(n):
     n = n or 0
@@ -3205,12 +3211,18 @@ def register_modules(app):
     @login_required
     def upload_image():
         """Accept an image file, store it under static/uploads/<account>/, and
-        return its public URL as JSON. Used by the Quick Email builder."""
+        return its public URL as JSON. Used by the Quick Email builder.
+
+        With ?kind=logo / kind=header the image is auto-resized & converted to
+        the recommended dimensions (any upload size is accepted)."""
         aid = current_account()["id"]
         up = request.files.get("file")
         if not up or not up.filename:
             return jsonify(error="No file received."), 400
         ext = os.path.splitext(up.filename)[1].lower().lstrip(".")
+        kind = (request.form.get("kind") or "").strip()
+        if kind in BRAND_SPECS:
+            return _process_brand_image(aid, up, kind, ext)
         allowed = {"png", "jpg", "jpeg", "gif", "webp"}
         if ext not in allowed:
             return jsonify(error="Use PNG, JPG, GIF or WebP."), 400
@@ -3221,6 +3233,57 @@ def register_modules(app):
         up.save(os.path.join(sub, fname))
         url = url_for("static", filename="uploads/%d/%s" % (aid, fname))
         return jsonify(url=url)
+
+    def _process_brand_image(aid, up, kind, ext):
+        """Resize/convert a logo or header image to its recommended size.
+
+        Any upload size is accepted — the backend auto-arranges it: a logo is
+        fit (letterboxed) inside 300×100 as a transparent PNG; a header is
+        cover-cropped to exactly 1200×400 as a compact JPEG. SVG logos are kept
+        as-is (vectors scale freely). Without Pillow, the original is stored."""
+        spec = BRAND_SPECS[kind]
+        if ext not in spec["exts"]:
+            return jsonify(error="%s: use %s." % (
+                kind.title(), ", ".join(sorted(e.upper() for e in spec["exts"])))), 400
+        data = up.read()
+        sub = os.path.join(app.config["UPLOAD_DIR"], str(aid))
+        os.makedirs(sub, exist_ok=True)
+        token = secrets.token_hex(6)
+        tw, th = spec["size"]
+        if ext == "svg":
+            fname = "%s-%s.svg" % (kind, token)
+            with open(os.path.join(sub, fname), "wb") as fh:
+                fh.write(data)
+            return jsonify(url=url_for("static", filename="uploads/%d/%s" % (aid, fname)),
+                           note="SVG stored — scales to any size.")
+        try:
+            import io as _io
+            from PIL import Image, ImageOps
+            img = Image.open(_io.BytesIO(data))
+            if kind == "logo":
+                img = ImageOps.contain(img.convert("RGBA"), (tw, th))
+                fname = "logo-%s.png" % token
+                img.save(os.path.join(sub, fname), "PNG", optimize=True)
+            else:
+                img = ImageOps.fit(img.convert("RGB"), (tw, th),
+                                   method=Image.LANCZOS)
+                fname = "header-%s.jpg" % token
+                img.save(os.path.join(sub, fname), "JPEG", quality=85, optimize=True)
+            out = os.path.getsize(os.path.join(sub, fname))
+            return jsonify(
+                url=url_for("static", filename="uploads/%d/%s" % (aid, fname)),
+                width=img.width, height=img.height,
+                note="Auto-resized to %d×%d (%s)." % (img.width, img.height,
+                                                      _human_size(out)))
+        except ImportError:
+            fname = "%s-%s.%s" % (kind, token, ext)
+            with open(os.path.join(sub, fname), "wb") as fh:
+                fh.write(data)
+            return jsonify(
+                url=url_for("static", filename="uploads/%d/%s" % (aid, fname)),
+                note="Stored as-is (recommended %d×%d)." % (tw, th))
+        except Exception:
+            return jsonify(error="Could not read that image."), 400
 
     # ---- Quick Email: a friendly fill-in-the-blanks builder ------------- #
     def _assemble_quick_email(f):

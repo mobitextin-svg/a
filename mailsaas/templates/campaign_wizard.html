@@ -7,8 +7,8 @@
 {# ---- Progress dots ---- #}
 <div class="wiz-steps" id="wizSteps">
   <div class="wiz-dot active"><span class="n">1</span> Campaign Details</div>
-  <div class="wiz-dot"><span class="n">2</span> Recipients</div>
-  <div class="wiz-dot"><span class="n">3</span> Email Template</div>
+  <div class="wiz-dot"><span class="n">2</span> Email Template</div>
+  <div class="wiz-dot"><span class="n">3</span> Recipients</div>
   <div class="wiz-dot"><span class="n">4</span> Attachments</div>
   <div class="wiz-dot"><span class="n">5</span> Sender &amp; Domain</div>
   <div class="wiz-dot"><span class="n">6</span> Inbox Analysis</div>
@@ -20,24 +20,74 @@
   <input type="hidden" name="attach_token" id="attach_token" value="{{ attach_token }}">
 
   {# =========================================================
-     STEP 1 — Campaign Details
+     STEP 1 — Campaign Details (name only)
      ========================================================= #}
   <div class="wiz-step active card">
     <h2>① Campaign Details</h2>
     <label>Campaign Name <span class="faint small">(internal only — subscribers never see this)</span></label>
-    <input name="name" id="f_name" placeholder="June Festival Offer" required>
-    <label style="margin-top:14px">Subject Line <span class="faint small">— what the reader sees in their inbox</span></label>
-    <input name="subject" id="f_subject" placeholder="🎉 Big festival sale — 40% off today!">
-    <label style="margin-top:14px">Preview Text <span class="faint small">(optional) — short line shown after the subject in most inboxes</span></label>
-    <input name="preview_text" id="f_preview" placeholder="Grab the deal before it ends…">
-    <p class="faint small" style="margin-top:8px">A clear subject + preview boost open rates. You can leave them empty for now.</p>
+    <input name="name" id="f_name" placeholder="June Festival Offer" required autofocus>
+    <p class="faint small" style="margin-top:8px">Just a name to find this campaign later. You'll pick the template next.</p>
   </div>
 
   {# =========================================================
-     STEP 2 — Recipients (card-based UI)
+     STEP 2 — Email Template (select only — no editing here)
+     ========================================================= #}
+  <div class="wiz-step card" style="padding:0">
+    <div class="tpl-wiz-layout">
+      {# LEFT sidebar — category tree #}
+      <aside class="tpl-wiz-sidebar">
+        <div class="tpl-wiz-sidebar-head">Categories</div>
+        <div class="tpl-wiz-section-label">🌐 System</div>
+        <button type="button" class="tpl-cat-btn active" data-cat="__all">All Templates</button>
+        {% set sys_cats = sys_categories if sys_categories else ['Marketing','Welcome','Newsletter','Sales','Offers','Events','Transactional'] %}
+        {% for cat in sys_cats %}
+        <button type="button" class="tpl-cat-btn" data-cat="sys:{{ cat }}">{{ cat }}</button>
+        {% endfor %}
+        <div class="tpl-wiz-section-label" style="margin-top:10px">👤 My Categories</div>
+        {% for f in folders %}
+        <button type="button" class="tpl-cat-btn" data-cat="my:{{ f }}">{{ f }}</button>
+        {% endfor %}
+      </aside>
+
+      {# RIGHT — pick a template, then preview + edit subject/preview only #}
+      <div class="tpl-wiz-main">
+        <div class="tpl-wiz-header">
+          <h2 style="margin:0;font-size:1.1rem">② Email Template</h2>
+          <span class="faint small" id="tplCatLabel">All Templates</span>
+        </div>
+
+        <div class="tpl-wiz-cards" id="tplCards">
+          <p class="faint" id="tplCardsEmpty" style="display:none">No templates in this category.</p>
+        </div>
+
+        {# Carried to the backend; set by template selection, never edited here. #}
+        <input type="hidden" name="body" id="f_body">
+
+        <div style="padding:14px 16px;border-top:1px solid var(--border)">
+          <div id="tplChosen" class="faint small" style="margin-bottom:10px">
+            No template selected yet — pick one above. Need a new design?
+            <a href="{{ url_for('templates') }}" target="_blank">build it in the Template Builder</a>.
+          </div>
+          <label>Subject Line <span class="faint small">— what the reader sees in their inbox</span></label>
+          <input name="subject" id="f_subject" placeholder="Select a template to load its subject…">
+          <label style="margin-top:12px">Preview Text <span class="faint small">(optional) — short line shown after the subject</span></label>
+          <input name="preview_text" id="f_preview" placeholder="Grab the deal before it ends…">
+          <p class="faint small" style="margin-top:8px">You can fine-tune the Subject &amp; Preview Text here. The template design itself is edited in the Template Builder, not in the campaign.</p>
+
+          <div id="tplPreviewWrap" style="display:none;margin-top:12px">
+            <label>Template Preview</label>
+            <iframe id="tplPreview" class="tpl-preview-frame" title="Template preview"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# =========================================================
+     STEP 3 — Recipients (card-based UI)
      ========================================================= #}
   <div class="wiz-step card">
-    <h2>② Recipients</h2>
+    <h2>③ Recipients</h2>
     <p class="muted small">Who receives this campaign? Select one option below.</p>
 
     {# Hidden radio inputs — cards update these #}
@@ -169,53 +219,6 @@
       <span>Duplicates: <b id="sumDups">0</b></span>
       <span class="rcpt-sum-sep">|</span>
       <span>Invalid: <b id="sumInvalid">0</b></span>
-    </div>
-  </div>
-
-  {# =========================================================
-     STEP 3 — Email Template (two-column)
-     ========================================================= #}
-  <div class="wiz-step card" style="padding:0">
-    <div class="tpl-wiz-layout">
-
-      {# LEFT sidebar — category tree #}
-      <aside class="tpl-wiz-sidebar">
-        <div class="tpl-wiz-sidebar-head">Categories</div>
-
-        <div class="tpl-wiz-section-label">🌐 System</div>
-        <button type="button" class="tpl-cat-btn active" data-cat="__all">All Templates</button>
-        {% set sys_cats = sys_categories if sys_categories else ['Marketing','Welcome','Newsletter','Sales','Offers','Events','Transactional'] %}
-        {% for cat in sys_cats %}
-        <button type="button" class="tpl-cat-btn" data-cat="sys:{{ cat }}">{{ cat }}</button>
-        {% endfor %}
-
-        <div class="tpl-wiz-section-label" style="margin-top:10px">👤 My Categories</div>
-        {% for f in folders %}
-        <button type="button" class="tpl-cat-btn" data-cat="my:{{ f }}">{{ f }}</button>
-        {% endfor %}
-      </aside>
-
-      {# RIGHT — template cards #}
-      <div class="tpl-wiz-main">
-        <div class="tpl-wiz-header">
-          <h2 style="margin:0;font-size:1.1rem">③ Email Template</h2>
-          <span class="faint small" id="tplCatLabel">All Templates</span>
-        </div>
-
-        <div class="tpl-wiz-cards" id="tplCards">
-          {# Populated by JS from tplData #}
-          <p class="faint" id="tplCardsEmpty" style="display:none">No templates in this category.</p>
-        </div>
-
-        <div style="padding:14px 16px;border-top:1px solid var(--border)">
-          <label style="font-weight:600">Email Body <span class="faint small">— use {{ '{{name}}' }} for personalization</span></label>
-          <textarea name="body" id="f_body" style="min-height:140px;margin-top:6px" placeholder="Write your email here…"></textarea>
-          <div style="margin-top:8px">
-            <a class="btn ghost sm" href="{{ url_for('builder') }}" target="_blank">🎨 Open Visual Builder</a>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
 
@@ -383,6 +386,7 @@
 .tpl-pick-subj{font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .tpl-pick-use{width:100%;padding:6px;border:none;background:var(--accent,#4f46e5);color:#fff;cursor:pointer;font-size:.82rem;font-weight:600}
 .tpl-pick-use:hover{opacity:.9}
+.tpl-preview-frame{width:100%;height:340px;border:1px solid var(--border);border-radius:8px;background:#fff;margin-top:6px}
 
 /* ---- Review summary ---- */
 .review-summary{background:var(--panel2,#f5f5f5);border-radius:8px;padding:14px 16px;border:1px solid var(--border)}
@@ -436,7 +440,7 @@
 
   function valid(i) {
     if (i === 0 && !form.name.value.trim()) { alert('Please enter a campaign name.'); return false; }
-    if (i === 1) {
+    if (i === 2) {   // Recipients (now step 3)
       var m = currentMode();
       if (m === 'single' && !(form.single_email && form.single_email.value.trim())) { alert('Enter an email address.'); return false; }
       if (m === 'paste'  && !(form.paste_emails && form.paste_emails.value.trim())) { alert('Paste at least one email.'); return false; }
@@ -580,8 +584,19 @@
   }
 
   function applyTemplate(t) {
-    if (t.subject && !form.subject.value.trim()) form.subject.value = t.subject;
+    // Selecting a template auto-loads its Subject + Body. The design (body) is
+    // carried hidden and never edited in the campaign; subject/preview stay
+    // editable below.
+    form.subject.value = t.subject || '';
     document.getElementById('f_body').value = t.content || '';
+    var chosen = document.getElementById('tplChosen');
+    if (chosen) chosen.innerHTML = '✅ Selected template: <b>' + (t.name || 'template') + '</b>';
+    var wrap = document.getElementById('tplPreviewWrap');
+    var fr = document.getElementById('tplPreview');
+    if (wrap && fr) {
+      fr.srcdoc = t.content || '<p style="font-family:sans-serif;color:#888;padding:12px">This template has no body.</p>';
+      wrap.style.display = 'block';
+    }
   }
 
   // Category sidebar buttons

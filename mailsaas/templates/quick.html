@@ -198,7 +198,7 @@
   <!-- IMAGES -->
   <div class="card">
     <div class="qe-grid">
-      <div class="f full"><label>Header logo <span class="faint small">— top-left of the email</span></label>
+      <div class="f full"><label>Header logo <span class="faint small">— top-left · PNG/SVG/JPG · any size, auto-fit to 300×100</span></label>
         <div class="btnstyles" id="logoModes">
           {% set lm = fields.logo_mode or 'logo_name' %}
           <label><input type="radio" name="logo_mode" value="logo_name" {{ 'checked' if lm=='logo_name' }}> Logo + company name</label>
@@ -216,7 +216,7 @@
           <input type="file" id="logoFile" accept="image/*" style="display:none">
         </div><span class="faint small" id="logoStatus"></span></div>
 
-      <div class="f full"><label>Header image <span class="faint small">— shown first, full-width (optional)</span></label>
+      <div class="f full"><label>Header image <span class="faint small">— full-width · JPG/PNG/WebP · any size, auto-fit to 1200×400</span></label>
         <div class="imgrow">
           <input name="hero" id="heroUrl" value="{{ fields.hero or '' }}" placeholder="Paste URL, upload, or generate a banner →" style="flex:1;min-width:180px">
           <button type="button" class="btn ghost sm" id="heroBtn">📤 Upload</button>
@@ -353,26 +353,26 @@
     if(!this.checked) document.getElementById('addrBox').value='';
   });
 
-  // ---- image upload ----
-  function uploadImage(fileEl,urlEl,statusEl,thumbEl){
+  // ---- image upload (logo/header auto-resize to the recommended size) ----
+  function uploadImage(fileEl,urlEl,statusEl,thumbEl,kind){
     var f=fileEl.files[0]; if(!f) return;
-    if(f.size>6*1024*1024){ statusEl.textContent='Too large (max 6 MB).'; return; }
+    if(f.size>12*1024*1024){ statusEl.textContent='Too large (max 12 MB).'; return; }
     statusEl.textContent='Uploading…';
-    var fd=new FormData(); fd.append('file',f);
+    var fd=new FormData(); fd.append('file',f); if(kind) fd.append('kind',kind);
     fetch('{{ url_for("upload_image") }}',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
       .then(function(r){ return r.json().then(function(j){return{ok:r.ok,j:j};}); })
       .then(function(res){ if(!res.ok){ statusEl.textContent=res.j.error||'Failed.'; return; }
-        urlEl.value=res.j.url; statusEl.textContent='✓ Uploaded';
+        urlEl.value=res.j.url; statusEl.textContent='✓ '+(res.j.note||'Uploaded');
         if(thumbEl){ thumbEl.src=res.j.url; thumbEl.style.display='block'; } })
       .catch(function(){ statusEl.textContent='Upload failed.'; });
   }
-  function wireUpload(btn,file,url,status,thumb){
+  function wireUpload(btn,file,url,status,thumb,kind){
     document.getElementById(btn).addEventListener('click',function(){ document.getElementById(file).click(); });
     document.getElementById(file).addEventListener('change',function(){
-      uploadImage(this,document.getElementById(url),document.getElementById(status),thumb?document.getElementById(thumb):null); });
+      uploadImage(this,document.getElementById(url),document.getElementById(status),thumb?document.getElementById(thumb):null,kind); });
   }
-  wireUpload('logoBtn','logoFile','logoUrl','logoStatus',null);
-  wireUpload('heroBtn','heroFile','heroUrl','heroStatus','heroThumb');
+  wireUpload('logoBtn','logoFile','logoUrl','logoStatus',null,'logo');
+  wireUpload('heroBtn','heroFile','heroUrl','heroStatus','heroThumb','header');
 
   // ---- image generate (banner / logo) ----
   function genImage(kind,urlEl,statusEl,thumbEl){
