@@ -355,7 +355,7 @@ def execute_list_clean(account_id):
         r = verify_email(c["email"])
         if (r["result"] == "invalid" or not r["checks"].get("disposable", True)
                 or not r["checks"].get("not_role", True)):
-            D.execute("UPDATE contacts SET status='suppressed' WHERE id=?", (c["id"],))
+            D.execute("UPDATE contacts SET status='blocked' WHERE id=?", (c["id"],))
             risky += 1
     D.log_activity(account_id, "system", "Ran automatic list cleaning")
     return {"removed": removed, "suppressed": risky}
@@ -813,13 +813,10 @@ def register_auth(app):
 # --------------------------------------------------------------------------- #
 
 
-def _read_import_payload():
-    """Return (raw_text, filename) for a contact import.
-
-    Handles an uploaded .xlsx (via openpyxl, flattened to comma rows), any
-    text/CSV upload, or pasted textarea content. An uploaded file overrides
-    pasted text."""
-    raw = request.form.get("csv", "")
+def _read_import_rows():
+    """Return (rows, filename) for a contact import, where rows is a list of
+    cell-lists. Handles uploaded .xlsx (openpyxl), CSV/TXT uploads and pasted
+    text. An uploaded file overrides pasted text."""
     up = request.files.get("file")
     fname = ""
     if up and up.filename:
@@ -828,21 +825,108 @@ def _read_import_payload():
             try:
                 import openpyxl  # optional dependency
                 wb = openpyxl.load_workbook(up, read_only=True, data_only=True)
-                lines = []
+                rows = []
                 for row in wb.active.iter_rows(values_only=True):
-                    cells = [str(c).strip() for c in row if c is not None]
-                    if cells:
-                        lines.append(",".join(cells))
-                raw = "\n".join(lines) or raw
+                    rows.append(["" if c is None else str(c) for c in row])
+                return rows, fname
             except Exception:
-                # openpyxl missing or unreadable file — fall back to pasted text.
-                pass
+                pass  # fall through to pasted text
         else:
             try:
-                raw = up.read().decode("utf-8", "ignore") or raw
+                text = up.read().decode("utf-8", "ignore")
+                return _csv_rows(text), fname
             except Exception:
                 pass
-    return raw, fname
+    return _csv_rows(request.form.get("csv", "")), fname
+
+
+def _csv_rows(text):
+    """Parse pasted/CSV text into rows, auto-sniffing comma/semicolon/tab."""
+    text = text or ""
+    delim = ","
+    head = text.splitlines()[0] if text.splitlines() else ""
+    if head.count(";") > head.count(",") and head.count(";") >= head.count("\t"):
+        delim = ";"
+    elif head.count("\t") > head.count(","):
+        delim = "\t"
+    try:
+        return [r for r in csv.reader(io.StringIO(text), delimiter=delim)]
+    except Exception:
+        return [line.split(delim) for line in text.splitlines()]
+
+
+# Synonyms → standard field. Import auto-maps any of these headers (Auto Detect
+# Headers / Auto Map Columns), so no manual column mapping is ever needed.
+HEADER_SYNONYMS = {
+    "email": ["email", "email address", "e-mail", "e mail", "mail", "emailid",
+              "email id", "e-mail address", "mailid"],
+    "name": ["name", "full name", "fullname", "customer name", "contact name",
+             "client name", "person"],
+    "mobile": ["mobile", "phone", "mobile number", "mobile no", "phone number",
+               "contact number", "cell", "cellphone", "whatsapp", "phone no"],
+    "company": ["company", "company name", "organization", "organisation",
+                "org", "business", "firm"],
+    "city": ["city", "district", "location", "town"],
+    "state": ["state", "province", "region"],
+}
+_HEADER_LOOKUP = {syn: field for field, syns in HEADER_SYNONYMS.items()
+                  for syn in syns}
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _normalize_mobile(v):
+    """Keep a leading + and digits only (Normalize Mobile Number)."""
+    v = (v or "").strip()
+    if not v:
+        return ""
+    plus = "+" if v.lstrip().startswith("+") else ""
+    return plus + re.sub(r"\D", "", v)
+
+
+def _parse_contacts(rows):
+    """Map headers, clean and validate rows into standard contact records.
+
+    Applies the default import pipeline: auto detect headers, auto map columns,
+    remove blank rows, trim spaces, validate email, normalize mobile, skip
+    invalid records and create missing optional fields automatically.
+
+    Returns (records, stats) where records is a list of dicts with the standard
+    fields and stats = {blanks, invalid, errors:[(raw_line, reason)]}."""
+    records, blanks, invalid, errors = [], 0, 0, []
+    if not rows:
+        return records, {"blanks": 0, "invalid": 0, "errors": []}
+    header = [str(c or "").strip() for c in rows[0]]
+    mapping = {i: _HEADER_LOOKUP.get(h.lower()) for i, h in enumerate(header)}
+    if "email" in mapping.values():                       # row 0 is a header
+        col = {f: i for i, f in mapping.items() if f}
+        data = rows[1:]
+    else:                                                 # positional fallback
+        order = ["email", "name", "mobile", "company", "city", "state"]
+        col = {f: i for i, f in enumerate(order)}
+        data = rows
+
+    def cell(r, i):
+        return (str(r[i]).strip() if i is not None and i < len(r)
+                and r[i] is not None else "")
+
+    for r in data:
+        if not any((str(x).strip() if x is not None else "") for x in r):
+            blanks += 1                                   # Remove Blank Rows
+            continue
+        email = cell(r, col.get("email")).lower()
+        if not _EMAIL_RE.match(email):                    # Validate Email Address
+            invalid += 1
+            errors.append((",".join(str(x) for x in r), "Invalid email address"))
+            continue                                      # Skip Invalid Records
+        records.append({
+            "email": email,
+            "name": cell(r, col.get("name")),
+            "mobile": _normalize_mobile(cell(r, col.get("mobile"))),
+            "company": cell(r, col.get("company")),
+            "city": cell(r, col.get("city")),
+            "state": cell(r, col.get("state")),
+        })
+    return records, {"blanks": blanks, "invalid": invalid, "errors": errors}
 
 
 def register_modules(app):
@@ -1038,9 +1122,9 @@ def register_modules(app):
         return {
             "total": sum(by.values()),
             "active": by.get("active", 0),
-            "bounced": by.get("bounced", 0),
+            "blocked": by.get("blocked", 0),
             "unsubscribed": by.get("unsubscribed", 0),
-            "suppressed": by.get("suppressed", 0),
+            "bounced": by.get("bounced", 0),
         }
 
     @app.route("/contacts", methods=["GET", "POST"])
@@ -1188,52 +1272,68 @@ def register_modules(app):
             # ---------- Import (de-duplicated, with summary) ---------- #
             elif action == "import":
                 lid = _list_id()
-                rule = request.form.get("rule") or acct["default_import_rule"] or "skip"
-                if rule not in ("skip", "update", "keep"):
-                    rule = "skip"
+                rule = request.form.get("rule") or acct["default_import_rule"] or "remove"
+                if rule not in ("remove", "skip", "update"):
+                    rule = "remove"
                 by_name = acct["dup_check"] == "email_name"
-                raw, fname = _read_import_payload()
+                rows_data, fname = _read_import_rows()
+                records, pstats = _parse_contacts(rows_data)
                 scope = "account_id=?" + (" AND list_id=?" if lid else "")
                 sargs = [aid] + ([lid] if lid else [])
                 existing = {}
                 for r in D.query(f"SELECT id, email, name FROM contacts WHERE {scope}",
                                  sargs):
-                    key = r["email"].lower()
-                    if by_name:
-                        key += "|" + (r["name"] or "").strip().lower()
+                    key = r["email"].lower() + ("|" + (r["name"] or "").strip().lower()
+                                                if by_name else "")
                     existing[key] = r["id"]
-                seen = set()
-                rows = added = updated = skipped = 0
-                for line in raw.splitlines():
-                    parts = [p.strip() for p in re.split(r"[,;\t]", line)]
-                    email = parts[0].lower() if parts else ""
-                    if "@" not in email or email == "email":
-                        continue
-                    name = parts[1] if len(parts) > 1 else ""
-                    rows += 1
-                    key = email + ("|" + name.strip().lower() if by_name else "")
+                # Open the import record first so new rows can be stamped with its id
+                # (powers Undo Import and the per-import error report).
+                imp_id = D.execute(
+                    "INSERT INTO contact_imports (account_id, list_id, filename, rows,"
+                    " added, updated, skipped, invalid, blanks, rule, errors_json,"
+                    " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (aid, lid, fname, len(records), 0, 0, 0, pstats["invalid"],
+                     pstats["blanks"], rule, json.dumps(pstats["errors"][:2000]),
+                     D.now()))
+                seen, total = set(), len(records)
+                added = updated = duplicates = 0
+                for rec in records:
+                    key = rec["email"] + ("|" + rec["name"].strip().lower()
+                                          if by_name else "")
                     dup_id = existing.get(key)
-                    if (dup_id or key in seen) and rule == "skip":
-                        skipped += 1
+                    if dup_id is None and key in seen:
+                        dup_id = -1                       # within-file duplicate
+                    if dup_id is not None:                # a duplicate email
+                        if rule == "update" and dup_id and dup_id > 0:
+                            sets, vals = [], []
+                            for f in ("name", "mobile", "company", "city", "state"):
+                                if rec[f]:
+                                    sets.append(f"{f}=?")
+                                    vals.append(rec[f])
+                            if sets:
+                                D.execute(f"UPDATE contacts SET {','.join(sets)}"
+                                          f" WHERE id=?", vals + [dup_id])
+                            updated += 1
+                        else:
+                            duplicates += 1               # Remove/Skip → not added
                         continue
-                    if dup_id and rule == "update":
-                        if name:
-                            D.execute("UPDATE contacts SET name=? WHERE id=?",
-                                      (name, dup_id))
-                        updated += 1
-                        continue
-                    # rule == keep, or brand-new email
-                    if not dup_id and key not in seen:
-                        seen.add(key)
-                    elif rule != "keep":
-                        skipped += 1
-                        continue
+                    seen.add(key)
                     D.execute(
-                        "INSERT INTO contacts (account_id, list_id, email, name,"
-                        " status, created_at) VALUES (?,?,?,?,?,?)",
-                        (aid, lid, email, name, "active", D.now()))
+                        "INSERT INTO contacts (account_id, list_id, email, name, mobile,"
+                        " company, city, state, status, import_id, created_at)"
+                        " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (aid, lid, rec["email"], rec["name"], rec["mobile"],
+                         rec["company"], rec["city"], rec["state"], "active",
+                         imp_id, D.now()))
                     added += 1
-                if rows:
+                # "Remove Duplicates" also collapses any pre-existing duplicates so
+                # only one record per email survives.
+                if rule == "remove":
+                    D.execute(
+                        f"DELETE FROM contacts WHERE {scope} AND id NOT IN"
+                        f" (SELECT MIN(id) FROM contacts WHERE {scope} GROUP BY email)",
+                        sargs + sargs)
+                if total:
                     D.mark_onboarding(aid, "contacts")
                 list_name = None
                 if lid:
@@ -1242,41 +1342,85 @@ def register_modules(app):
                     list_name = nm["name"] if nm else None
                     D.execute("UPDATE contact_lists SET last_import_at=? WHERE id=?",
                               (D.now(), lid))
-                    D.execute(
-                        "INSERT INTO contact_imports (account_id, list_id, filename,"
-                        " rows, added, updated, skipped, rule, created_at)"
-                        " VALUES (?,?,?,?,?,?,?,?,?)",
-                        (aid, lid, fname, rows, added, updated, skipped, rule, D.now()))
+                D.execute("UPDATE contact_imports SET added=?, updated=?, skipped=?"
+                          " WHERE id=?", (added, updated, duplicates, imp_id))
                 final_count = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {scope}",
                                       sargs, one=True)["c"]
                 session["import_summary"] = {
-                    "rows": rows, "added": added, "updated": updated,
-                    "skipped": skipped, "final": final_count,
+                    "imp_id": imp_id, "filename": fname or "pasted rows",
+                    "total": total, "added": added, "updated": updated,
+                    "duplicates": duplicates, "invalid": pstats["invalid"],
+                    "blanks": pstats["blanks"], "final": final_count,
                     "list_id": lid, "list_name": list_name, "rule": rule,
+                    "has_errors": bool(pstats["errors"]),
                 }
                 sel = str(lid) if lid else "all"
+
+            elif action == "undo_import":
+                # Undo Import: remove only the contacts added by this import batch.
+                imp_id = request.form.get("imp_id")
+                imp = D.query("SELECT * FROM contact_imports WHERE id=? AND"
+                              " account_id=?", (imp_id, aid), one=True) if imp_id else None
+                if imp:
+                    n = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                                " AND import_id=?", (aid, imp_id), one=True)["c"]
+                    D.execute("DELETE FROM contacts WHERE account_id=? AND import_id=?",
+                              (aid, imp_id))
+                    D.execute("DELETE FROM contact_imports WHERE id=? AND account_id=?",
+                              (imp_id, aid))
+                    flash(f"Import undone — {n} contact(s) removed.", "success")
 
             # ---------- Contact-level actions ---------- #
             elif action == "add":
                 D.execute(
                     "INSERT INTO contacts (account_id, list_id, email, name, tags,"
-                    " status, created_at) VALUES (?,?,?,?,?,?,?)",
+                    " mobile, company, city, state, note, status, created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (aid, _list_id(), request.form.get("email", "").strip().lower(),
                      request.form.get("name", "").strip(),
-                     request.form.get("tags", "").strip(), "active", D.now()))
+                     request.form.get("tags", "").strip(),
+                     _normalize_mobile(request.form.get("mobile", "")),
+                     request.form.get("company", "").strip(),
+                     request.form.get("city", "").strip(),
+                     request.form.get("state", "").strip(),
+                     request.form.get("note", "").strip(), "active", D.now()))
                 flash("Contact added.", "success")
             elif action == "edit":
                 cid = request.form.get("id")
                 email = request.form.get("email", "").strip().lower()
                 if cid and "@" in email:
                     D.execute(
-                        "UPDATE contacts SET email=?, name=?, tags=? WHERE id=?"
-                        " AND account_id=?",
+                        "UPDATE contacts SET email=?, name=?, tags=?, mobile=?,"
+                        " company=?, city=?, state=?, note=? WHERE id=? AND account_id=?",
                         (email, request.form.get("name", "").strip(),
-                         request.form.get("tags", "").strip(), cid, aid))
+                         request.form.get("tags", "").strip(),
+                         _normalize_mobile(request.form.get("mobile", "")),
+                         request.form.get("company", "").strip(),
+                         request.form.get("city", "").strip(),
+                         request.form.get("state", "").strip(),
+                         request.form.get("note", "").strip(), cid, aid))
                     flash("Contact updated.", "success")
                 else:
                     flash("Enter a valid email address.", "error")
+            elif action == "tag":
+                # Manage Tags: add/remove a tag across the selected contacts.
+                ids = request.form.getlist("ids")
+                add_t = request.form.get("tag_add", "").strip()
+                del_t = request.form.get("tag_remove", "").strip()
+                for cid in ids:
+                    row = D.query("SELECT tags FROM contacts WHERE id=? AND account_id=?",
+                                  (cid, aid), one=True)
+                    if not row:
+                        continue
+                    tags = [t.strip() for t in (row["tags"] or "").split(",") if t.strip()]
+                    if add_t and add_t not in tags:
+                        tags.append(add_t)
+                    if del_t and del_t in tags:
+                        tags.remove(del_t)
+                    D.execute("UPDATE contacts SET tags=? WHERE id=? AND account_id=?",
+                              (", ".join(tags), cid, aid))
+                if ids:
+                    flash(f"Tags updated on {len(ids)} contact(s).", "success")
             elif action == "assign_list":
                 # Move the selected contacts (checkboxes) to a chosen list.
                 ids = request.form.getlist("ids")
@@ -1292,12 +1436,19 @@ def register_modules(app):
                     D.execute(f"DELETE FROM contacts WHERE account_id=? AND"
                               f" id IN ({qs})", [aid] + ids)
                     flash(f"Deleted {len(ids)} contact(s).", "success")
-            elif action == "suppress":
-                D.execute("UPDATE contacts SET status='suppressed' WHERE id=? AND"
+            elif action == "block_contact":
+                D.execute("UPDATE contacts SET status='blocked' WHERE id=? AND"
                           " account_id=?", (request.form.get("id"), aid))
             elif action == "delete":
                 D.execute("DELETE FROM contacts WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
+            elif action == "fav_list":
+                # Favorite Lists: pin/unpin a list to the top of the rail.
+                lst = _own_list(aid, request.form.get("id"))
+                if lst:
+                    D.execute("UPDATE contact_lists SET favorite=? WHERE id=? AND"
+                              " account_id=?",
+                              (0 if lst["favorite"] else 1, lst["id"], aid))
 
             # ---------- Suppression (account-wide) ---------- #
             elif action == "block":
@@ -1309,7 +1460,7 @@ def register_modules(app):
                               " created_at) VALUES (?,?,?,?)",
                               (aid, email, request.form.get("reason", "").strip(),
                                D.now()))
-                    D.execute("UPDATE contacts SET status='suppressed' WHERE"
+                    D.execute("UPDATE contacts SET status='blocked' WHERE"
                               " account_id=? AND email=?", (aid, email))
                     flash(f"{email} blocked.", "success")
                 else:
@@ -1330,8 +1481,8 @@ def register_modules(app):
             elif action == "save_settings":
                 dup = request.form.get("dup_check", "email")
                 dup = dup if dup in ("email", "email_name") else "email"
-                rule = request.form.get("default_import_rule", "skip")
-                rule = rule if rule in ("skip", "update", "keep") else "skip"
+                rule = request.form.get("default_import_rule", "remove")
+                rule = rule if rule in ("remove", "skip", "update") else "remove"
                 D.execute("UPDATE accounts SET dup_check=?, default_import_rule=?"
                           " WHERE id=?", (dup, rule, aid))
                 flash("Contact settings saved.", "success")
@@ -1355,7 +1506,7 @@ def register_modules(app):
         lists = D.query(
             "SELECT cl.*, (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id"
             " AND c.account_id=cl.account_id) AS n FROM contact_lists cl WHERE"
-            " cl.account_id=? ORDER BY cl.name", (aid,))
+            " cl.account_id=? ORDER BY cl.favorite DESC, cl.name", (aid,))
         sel = (request.args.get("list") or "all").strip()
         sel_list = _own_list(aid, sel) if sel.isdigit() else None
         if sel.isdigit() and not sel_list:
@@ -1386,8 +1537,10 @@ def register_modules(app):
                 where += " AND status=?"
                 args.append(status_filter)
             if q:
-                where += " AND (email LIKE ? OR name LIKE ?)"
-                args += [f"%{q}%", f"%{q}%"]
+                # Search & Filter by email, name, company, city or state.
+                where += (" AND (email LIKE ? OR name LIKE ? OR company LIKE ?"
+                          " OR city LIKE ? OR state LIKE ? OR mobile LIKE ?)")
+                args += [f"%{q}%"] * 6
             per_page = 25
             try:
                 page = max(1, int(request.args.get("page", 1)))
@@ -1405,16 +1558,66 @@ def register_modules(app):
         all_total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?",
                             (aid,), one=True)["c"]
         suppress_count = len(unsub) + len(bounced) + len(complaints) + len(blocked)
+        # Import history (account-wide, most recent first) for the History modal.
+        imports = D.query("SELECT * FROM contact_imports WHERE account_id=?"
+                          " ORDER BY id DESC LIMIT 50", (aid,))
         return render_template(
             "contacts.html", lists=lists, sel=sel, sel_list=sel_list,
             contacts=contacts_rows, q=q, status_filter=status_filter,
             page=page, pages=pages, total=total, stats=stats,
             all_total=all_total, suppress_count=suppress_count,
             unsub=unsub, bounced=bounced, complaints=complaints, blocked=blocked,
-            acct=acct, fields=D.query("SELECT * FROM contact_fields WHERE"
-                                      " account_id=? ORDER BY id", (aid,)),
+            imports=imports, acct=acct,
+            fields=D.query("SELECT * FROM contact_fields WHERE account_id=?"
+                           " ORDER BY id", (aid,)),
             type_icons=LIST_TYPE_ICONS,
             import_summary=session.pop("import_summary", None))
+
+    @app.route("/contacts/import/<int:imp_id>/errors.csv")
+    @login_required
+    def contacts_import_errors(imp_id):
+        """Download the failed (invalid) rows from an import — the Error Report."""
+        aid = current_account()["id"]
+        imp = D.query("SELECT * FROM contact_imports WHERE id=? AND account_id=?",
+                      (imp_id, aid), one=True)
+        if not imp:
+            abort(404)
+        try:
+            errs = json.loads(imp["errors_json"] or "[]")
+        except Exception:
+            errs = []
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["row", "reason"])
+        for row, reason in errs:
+            w.writerow([row, reason])
+        return Response(buf.getvalue(), mimetype="text/csv", headers={
+            "Content-Disposition": f"attachment; filename=import_{imp_id}_errors.csv"})
+
+    @app.route("/contacts/<int:cid>/activity")
+    @login_required
+    def contact_activity(cid):
+        """Email Activity for one contact: opens, clicks, bounces, etc."""
+        aid = current_account()["id"]
+        c = D.query("SELECT * FROM contacts WHERE id=? AND account_id=?",
+                    (cid, aid), one=True)
+        if not c:
+            abort(404)
+        email = c["email"]
+        msgs = D.query("SELECT opened, clicked, status FROM messages WHERE"
+                       " account_id=? AND email=?", (aid, email))
+        comp = D.query("SELECT kind, COUNT(*) c FROM complaints WHERE account_id=?"
+                       " AND email=? GROUP BY kind", (aid, email))
+        ck = {r["kind"]: r["c"] for r in comp}
+        return jsonify({
+            "email": email, "name": c["name"], "status": c["status"],
+            "sent": len(msgs),
+            "opens": sum(1 for m in msgs if m["opened"]),
+            "clicks": sum(1 for m in msgs if m["clicked"]),
+            "bounces": sum(1 for m in msgs if m["status"] == "failed"),
+            "complaints": ck.get("complaint", 0),
+            "unsubscribes": ck.get("unsubscribe", 0),
+        })
 
     @app.route("/contact-lists")
     @login_required

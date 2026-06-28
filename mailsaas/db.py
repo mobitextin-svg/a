@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS contacts (
     email        TEXT NOT NULL,
     name         TEXT,
     tags         TEXT,
-    status       TEXT NOT NULL DEFAULT 'active',  -- active/unsubscribed/suppressed/bounced
+    status       TEXT NOT NULL DEFAULT 'active',  -- active/blocked/unsubscribed/bounced
     created_at   TEXT NOT NULL
 );
 
@@ -457,7 +457,17 @@ _MIGRATIONS = [
     # Contact Settings: how duplicates are detected on import and the default
     # rule applied when none is chosen.
     ("accounts", "dup_check", "TEXT NOT NULL DEFAULT 'email'"),       # email / email_name
-    ("accounts", "default_import_rule", "TEXT NOT NULL DEFAULT 'skip'"),  # skip / update / keep
+    ("accounts", "default_import_rule", "TEXT NOT NULL DEFAULT 'remove'"),  # remove / skip / update
+    # Internal per-contact notes and the contact's standard optional fields are
+    # already present (company/mobile/city/state). Notes are new.
+    ("contacts", "note", "TEXT"),
+    # Pin frequently-used lists to the top of the rail.
+    ("contact_lists", "favorite", "INTEGER NOT NULL DEFAULT 0"),
+    # Import audit: store the invalid/blank counts and the failed rows (JSON) so
+    # the UI can show a summary and offer an error-report download.
+    ("contact_imports", "invalid", "INTEGER NOT NULL DEFAULT 0"),
+    ("contact_imports", "blanks", "INTEGER NOT NULL DEFAULT 0"),
+    ("contact_imports", "errors_json", "TEXT"),
 ]
 
 
@@ -603,7 +613,7 @@ def seed_demo(account_id, user_email):
     sample_contacts = [
         ("sarah.chen@gmail.com", "Sarah Chen", "vip,newsletter", "active"),
         ("mike@acmecorp.com", "Mike Doyle", "lead", "active"),
-        ("info@example.com", "Info Desk", "role", "suppressed"),
+        ("info@example.com", "Info Desk", "role", "blocked"),
         ("jdoe@yahoo.com", "Jane Doe", "newsletter", "active"),
         ("bounced@nodomain.invalid", "Old Address", "", "bounced"),
         ("unsub@gmail.com", "Tom Reed", "", "unsubscribed"),

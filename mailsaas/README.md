@@ -83,16 +83,32 @@ from the left rail and act on it from the toolbar:
 - **🚫 Suppression** — unsubscribed, bounced, complaints, blocked emails (account-wide)
 - **⚙ Settings** — duplicate check, default import rule, custom fields (gear modal)
 
-Imports skip addresses that already exist (matched by email, or email+name if you
-choose), so the same person never receives two copies of a campaign. Each import
-ends with a summary:
+**Standard fields:** Email (required), Name, Mobile, Company, City, State.
+**Automatic header mapping** converts any upload to the standard format — columns
+like *Email Address, Full Name, Phone, Company Name, District, Province* are
+recognised automatically (no manual mapping). The import pipeline auto-detects
+headers, removes blank rows, trims spaces, validates emails, normalises mobile
+numbers, removes duplicate emails and skips invalid records.
+
+**Statuses:** Active · Blocked · Unsubscribed · Bounced (blocked & bounced/unsub
+are excluded from every campaign).
+
+**Duplicate handling** defaults to **Remove Duplicates** (one record per email);
+advanced options are **Skip Duplicates** and **Update Existing Contacts**. There is
+deliberately no "Keep Both" — a professional list never stores an email twice.
+Each import ends with a full summary:
 
 ```
-✅ Import Completed
-Records in File      : 500
-New Contacts Added   : 300
-Duplicate Contacts   : 200 (Skipped)
-Final Contact Count  : 1300
+✅ Import Completed Successfully
+File Name          : customers.xlsx
+Total Records      : 400
+Imported           : 200
+Updated            : 0
+Duplicates Removed  : 200
+Invalid Emails     : 8
+Blank Rows         : 3
+Final Contacts     : 1,200
+[View Contacts] [Download Error Report] [Undo Import]
 ```
 
 ### Tests
