@@ -86,3 +86,20 @@ def test_footer_uses_view_in_browser_not_report_spam(auth, app):
     assert "Report Spam" not in html
     assert "{{view_in_browser_url}}" in html
     assert "{{unsubscribe_url}}" in html
+
+
+def test_signoff_keeps_line_breaks(auth, app):
+    # A multi-line sign-off renders line by line (newlines -> <br>).
+    html = _save(auth, app,
+                 signoff="Best regards,\n\nThe ZyvoMail Team\nReliable Automation")
+    assert "Best regards,<br><br>The ZyvoMail Team<br>Reliable Automation" in html
+
+
+def test_social_icons_use_brand_colours(auth, app):
+    # Social badges use each platform's real brand colour, not the accent.
+    html = _save(auth, app,
+                 soc_facebook="https://fb.com/x",
+                 soc_whatsapp="https://wa.me/123")
+    assert "#1877F2" in html        # Facebook blue
+    assert "#25D366" in html        # WhatsApp green
+    assert "border-radius:12px" in html   # modern rounded-square badge

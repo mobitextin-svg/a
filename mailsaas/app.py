@@ -3442,7 +3442,11 @@ def register_modules(app):
         btn_text = (f.get("btn_text") or "").strip()
         btn_url = (f.get("btn_url") or "#").strip() or "#"
         btn_style = (f.get("btn_style") or "filled").strip()
+        # Sign-off keeps the user's line breaks: each new line becomes its own
+        # row (so "Best regards,\n\nThe ZyvoMail Team\nReliable …" renders line
+        # by line). Existing <br> defaults still work.
         signoff = (f.get("signoff") or "Regards,<br>The Team").strip()
+        signoff = signoff.replace("\r\n", "\n").replace("\n", "<br>")
         address = (f.get("address") or "").strip()
 
         # --- Header: logo only / logo + company name (beside) / name only ---
@@ -3607,31 +3611,31 @@ def register_modules(app):
             address_row = (
                 '<tr><td style="padding:0 28px 18px;color:#777;font-size:12px;'
                 'line-height:1.6">' + address.replace("\n", "<br>") + '</td></tr>')
-        # Social profile links — a centred row of modern circular icon badges
-        # (table-based so the circles survive Outlook's stricter CSS support).
-        # Each badge is the template's own accent color with a self-hosted,
-        # white icon-glyph image on top — so it stays on-brand AND looks like
-        # a real platform icon rather than a plain letter.
+        # Social profile links — a centred row of modern, brand-coloured icon
+        # badges (rounded squares, table-based so they survive Outlook's
+        # stricter CSS). Each badge uses the platform's real brand colour with a
+        # self-hosted white icon-glyph on top, so the icons look current and
+        # instantly recognisable rather than plain monochrome circles.
         icon_base = request.host_url.rstrip("/") + "/static/icons/"
         social = [
-            ("Facebook", "facebook.png", (f.get("soc_facebook") or "").strip()),
-            ("Instagram", "instagram.png", (f.get("soc_instagram") or "").strip()),
-            ("X", "x.png", (f.get("soc_twitter") or "").strip()),
-            ("LinkedIn", "linkedin.png", (f.get("soc_linkedin") or "").strip()),
-            ("YouTube", "youtube.png", (f.get("soc_youtube") or "").strip()),
-            ("WhatsApp", "whatsapp.png", (f.get("soc_whatsapp") or "").strip()),
+            ("Facebook", "facebook.png", "#1877F2", (f.get("soc_facebook") or "").strip()),
+            ("Instagram", "instagram.png", "#E4405F", (f.get("soc_instagram") or "").strip()),
+            ("X", "x.png", "#000000", (f.get("soc_twitter") or "").strip()),
+            ("LinkedIn", "linkedin.png", "#0A66C2", (f.get("soc_linkedin") or "").strip()),
+            ("YouTube", "youtube.png", "#FF0000", (f.get("soc_youtube") or "").strip()),
+            ("WhatsApp", "whatsapp.png", "#25D366", (f.get("soc_whatsapp") or "").strip()),
         ]
         social_links = "".join(
-            '<a href="%s" title="%s" style="display:inline-block;margin:0 5px;'
+            '<a href="%s" title="%s" style="display:inline-block;margin:0 6px;'
             'text-decoration:none"><table cellpadding="0" cellspacing="0" '
-            'role="presentation" style="border-collapse:collapse"><tr>'
-            '<td align="center" valign="middle" width="36" height="36" bgcolor="%s" '
-            'style="width:36px;height:36px;background:%s;border-radius:50%%">'
-            '<img src="%s%s" width="18" height="18" alt="%s" '
-            'style="display:block;margin:9px auto;border:0">'
+            'role="presentation" style="border-collapse:separate"><tr>'
+            '<td align="center" valign="middle" width="40" height="40" bgcolor="%s" '
+            'style="width:40px;height:40px;background:%s;border-radius:12px">'
+            '<img src="%s%s" width="20" height="20" alt="%s" '
+            'style="display:block;margin:10px auto;border:0">'
             '</td></tr></table></a>'
-            % (url, label, accent, accent, icon_base, icon_file, label)
-            for label, icon_file, url in social if url)
+            % (url, label, brand, brand, icon_base, icon_file, label)
+            for label, icon_file, brand, url in social if url)
         social_row = ""
         if social_links:
             social_row = (

@@ -378,8 +378,8 @@
   <!-- SIGN-OFF + ADDRESS + SOCIAL -->
   <div class="card">
     <div class="qe-grid">
-      <div class="f full"><label>Sign-off</label>
-        <input name="signoff" value="{{ fields.signoff or '' }}" placeholder="Regards, Team BankBazaar"></div>
+      <div class="f full"><label>Sign-off <span class="faint small">— each line shows on its own line in the email</span></label>
+        <textarea name="signoff" style="min-height:90px" placeholder="Best regards,&#10;&#10;The ZyvoMail Team&#10;Reliable Email Marketing &amp; Automation">{{ (fields.signoff or '')|replace('<br>', '\n')|replace('<br/>', '\n')|replace('<br />', '\n') }}</textarea></div>
       <div class="f full"><label>🔗 Social links <span class="faint small">— shown as icons in the footer (leave blank to hide)</span></label>
         <div class="qe-grid" style="gap:8px">
           <input name="soc_facebook"  value="{{ fields.soc_facebook or '' }}"  placeholder="📘 Facebook URL">
@@ -658,9 +658,9 @@
     var heroRow=heroImg?('<div style="padding:20px 0 0">'+(heroUrl?('<a href="'+heroUrl+'">'+heroImg+'</a>'):heroImg)+'</div>'):'';
     // Social icons row (matches the saved footer) — solid circle badges in
     // the chosen accent color with the real icon glyph on top.
-    var socDefs=[['facebook.png','Facebook',form.soc_facebook.value],['instagram.png','Instagram',form.soc_instagram.value],['x.png','X',form.soc_twitter.value],['linkedin.png','LinkedIn',form.soc_linkedin.value],['youtube.png','YouTube',form.soc_youtube.value],['whatsapp.png','WhatsApp',form.soc_whatsapp.value]];
-    var socRow=socDefs.filter(function(s){return (s[2]||'').trim();})
-      .map(function(s){return '<a href="'+s[2].trim()+'" title="'+s[1]+'" style="display:inline-block;margin:0 5px;text-decoration:none"><table cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse"><tr><td align="center" valign="middle" width="36" height="36" bgcolor="'+accent+'" style="width:36px;height:36px;background:'+accent+';border-radius:50%"><img src="/static/icons/'+s[0]+'" width="18" height="18" alt="'+s[1]+'" style="display:block;margin:9px auto;border:0"></td></tr></table></a>';}).join('');
+    var socDefs=[['facebook.png','Facebook','#1877F2',form.soc_facebook.value],['instagram.png','Instagram','#E4405F',form.soc_instagram.value],['x.png','X','#000000',form.soc_twitter.value],['linkedin.png','LinkedIn','#0A66C2',form.soc_linkedin.value],['youtube.png','YouTube','#FF0000',form.soc_youtube.value],['whatsapp.png','WhatsApp','#25D366',form.soc_whatsapp.value]];
+    var socRow=socDefs.filter(function(s){return (s[3]||'').trim();})
+      .map(function(s){return '<a href="'+s[3].trim()+'" title="'+s[1]+'" style="display:inline-block;margin:0 6px;text-decoration:none"><table cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:separate"><tr><td align="center" valign="middle" width="40" height="40" bgcolor="'+s[2]+'" style="width:40px;height:40px;background:'+s[2]+';border-radius:12px"><img src="/static/icons/'+s[0]+'" width="20" height="20" alt="'+s[1]+'" style="display:block;margin:10px auto;border:0"></td></tr></table></a>';}).join('');
     socRow=socRow?('<div style="text-align:center;padding:16px 28px 4px">'+socRow+'</div>'):'';
     var button=bt?('<div style="text-align:center;padding:26px"><a href="'+bu+'" style="'+bcss+';text-decoration:none;font-weight:bold;display:inline-block">'+bt+'</a></div>'):'';
     var addr=document.getElementById('addrBox').value.trim();
@@ -670,7 +670,7 @@
     box.innerHTML='<div style="background:#e7e7e7;padding:18px"><div style="max-width:600px;margin:0 auto">'+preLine+'<div style="background:#fff;border-radius:4px;font-family:Arial">'+
       '<div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div>'+logoCell+'</div><div style="font-size:12px"><a href="#" style="color:#888;text-decoration:none">View in browser</a></div></div><div style="height:4px;background:'+accent+'"></div>'+heroRow+
       '<div style="padding:24px 28px;color:#222;font-size:15px;line-height:1.6"><p>Hi Mariappan,</p>'+bodyHtml().replace(/\{\{name[^}]*\}\}/g,'Mariappan').replace(/\{\{company[^}]*\}\}/g,comp).replace(/\{\{city[^}]*\}\}/g,'Chennai').replace(/\{\{state[^}]*\}\}/g,'Tamil Nadu')+'</div>'+previewBlocks(accent)+button+
-      '<div style="padding:8px 28px 18px;color:#222;font-size:14px">'+(form.signoff.value||'Regards')+'</div>'+socRow+addrRow+
+      '<div style="padding:8px 28px 18px;color:#222;font-size:14px">'+((form.signoff.value||'Regards').replace(/\r\n/g,"\n").replace(/\n/g,'<br>'))+'</div>'+socRow+addrRow+
       '<div style="padding:18px 28px;border-top:1px solid #e5e5e5;color:#999;font-size:11px;text-align:center">This is an auto-generated email. Please do not reply.<br><a href="#" style="color:'+accent+'">Unsubscribe</a> | <a href="#" style="color:'+accent+'">View in browser</a></div>'+
       '</div></div></div>';
     box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'nearest'});
