@@ -9,5 +9,10 @@ from mailsaas.app import app  # noqa: E402
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5005))
-    print(f"\n  MailSaaS running →  http://127.0.0.1:{port}\n")
-    app.run(host="127.0.0.1", port=port, debug=True, threaded=True)
+    # Debug (Werkzeug reloader + interactive console) is OFF by default — the
+    # console is a remote-code-execution risk if ever exposed. Opt in for local
+    # development with MAILSAAS_DEBUG=1.
+    debug = os.environ.get("MAILSAAS_DEBUG") == "1"
+    print(f"\n  MailSaaS running →  http://127.0.0.1:{port}"
+          f"  (debug={'on' if debug else 'off'})\n")
+    app.run(host="127.0.0.1", port=port, debug=debug, threaded=True)

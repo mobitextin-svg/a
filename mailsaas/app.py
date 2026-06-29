@@ -479,10 +479,34 @@ INDUSTRY_PRESETS = [
 # --------------------------------------------------------------------------- #
 
 
+IS_PRODUCTION = os.environ.get("MAILSAAS_ENV", "").lower() == "production"
+
+
+def _resolve_secret_key():
+    """Return the session signing key.
+
+    In production (MAILSAAS_ENV=production) a stable MAILSAAS_SECRET is
+    mandatory — fail fast rather than sign sessions with a per-process random
+    key (which silently logs everyone out on restart and differs per gunicorn
+    worker). In development we fall back to a fixed dev key so local sessions
+    survive reloads."""
+    secret = os.environ.get("MAILSAAS_SECRET")
+    if secret:
+        return secret
+    if IS_PRODUCTION:
+        raise RuntimeError(
+            "MAILSAAS_SECRET must be set in production. Generate one with "
+            "`python -c \"import secrets; print(secrets.token_hex(32))\"`.")
+    return "dev-insecure-key-set-MAILSAAS_SECRET-in-production"
+
+
 def create_app():
     app = Flask(__name__)
     app.config.update(
-        SECRET_KEY=os.environ.get("MAILSAAS_SECRET", secrets.token_hex(16)),
+        SECRET_KEY=_resolve_secret_key(),
+        # Only send the session cookie over HTTPS in production (would block
+        # local http:// development otherwise).
+        SESSION_COOKIE_SECURE=IS_PRODUCTION,
         DATABASE=os.environ.get(
             "MAILSAAS_DB",
             os.path.join(os.path.dirname(__file__), "mailsaas.sqlite3"),
@@ -518,7 +542,16 @@ def create_app():
 # always reachable with a known login; the password can be changed afterwards
 # from Settings → Security. Override via env for production deployments.
 DEFAULT_ADMIN_EMAIL = os.environ.get("MAILSAAS_ADMIN_EMAIL", "admin@gmail.com")
-DEFAULT_ADMIN_PASSWORD = os.environ.get("MAILSAAS_ADMIN_PASSWORD", "admin1234")
+# Never ship a known default password in production. If MAILSAAS_ADMIN_PASSWORD
+# isn't provided there, generate a strong random one (printed once when the
+# admin is seeded). Development keeps the convenient fixed login.
+_ADMIN_PW_FROM_ENV = bool(os.environ.get("MAILSAAS_ADMIN_PASSWORD"))
+if _ADMIN_PW_FROM_ENV:
+    DEFAULT_ADMIN_PASSWORD = os.environ["MAILSAAS_ADMIN_PASSWORD"]
+elif IS_PRODUCTION:
+    DEFAULT_ADMIN_PASSWORD = secrets.token_urlsafe(18)
+else:
+    DEFAULT_ADMIN_PASSWORD = "admin1234"
 
 
 def _ensure_default_admin():
@@ -538,6 +571,14 @@ def _ensure_default_admin():
         "INSERT INTO users (account_id, email, name, pw_hash, role, created_at,"
         " last_login, verified) VALUES (?,?,?,?,?,?,?,?)",
         (acct_id, email, "Administrator", pw_hash, "Super Admin", D.now(), None, 1))
+    # Surface an auto-generated production admin password once, so the operator
+    # can log in and change it. (Dev uses the fixed, well-known default.)
+    if IS_PRODUCTION and not _ADMIN_PW_FROM_ENV:
+        print("\n" + "=" * 64 +
+              "\n  Default admin created: %s" % email +
+              "\n  Temporary password:    %s" % DEFAULT_ADMIN_PASSWORD +
+              "\n  Log in and change it now (Settings → Security).\n" +
+              "=" * 64 + "\n")
     # Realistic sample data so every screen has something to show.
     D.seed_demo(acct_id, email)
     # seed_demo only flags account #1 as admin; make sure this one is too.
@@ -5040,4 +5081,7 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5005, debug=True, threaded=True)
+    # Debug is opt-in (MAILSAAS_DEBUG=1) — the interactive debugger is an RCE
+    # risk if exposed. Production should run via gunicorn (mailsaas.wsgi:app).
+    app.run(host="127.0.0.1", port=5005,
+            debug=os.environ.get("MAILSAAS_DEBUG") == "1", threaded=True)
