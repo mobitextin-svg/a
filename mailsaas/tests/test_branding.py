@@ -34,16 +34,19 @@ def _open(app, url):
 
 def test_logo_fits_within_box(auth, app, upload_dir):
     j = _post(auth, "logo", _img(2000, 2000, "PNG"), "big.png").get_json()
-    assert "Auto-resized" in j["note"]
+    assert "Full image kept" in j["note"]
     im = _open(app, j["url"])
     assert im.width <= 300 and im.height <= 100      # letterboxed inside 300x100
     assert j["url"].endswith(".png")                 # converted to PNG
 
 
-def test_header_cover_crops_to_exact_size(auth, app, upload_dir):
+def test_header_keeps_full_image_without_cropping(auth, app, upload_dir):
+    # A 3000x500 banner (6:1) must keep its full content: scaled to width 1200
+    # with the aspect ratio preserved (no cover-crop to a forced 3:1 box).
     j = _post(auth, "header", _img(3000, 500, "JPEG"), "wide.jpg").get_json()
     im = _open(app, j["url"])
-    assert (im.width, im.height) == (1200, 400)      # exact recommended size
+    assert im.width == 1200                          # width capped at 1200
+    assert im.height == 200                          # 6:1 ratio preserved (not 400)
     assert j["url"].endswith(".jpg")
 
 

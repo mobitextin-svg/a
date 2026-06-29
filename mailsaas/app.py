@@ -3367,9 +3367,10 @@ def register_modules(app):
         """Resize/convert a logo or header image to its recommended size.
 
         Any upload size is accepted — the backend auto-arranges it: a logo is
-        fit (letterboxed) inside 300×100 as a transparent PNG; a header is
-        cover-cropped to exactly 1200×400 as a compact JPEG. SVG logos are kept
-        as-is (vectors scale freely). Without Pillow, the original is stored."""
+        fit (letterboxed) inside 300×100 as a transparent PNG; a header keeps
+        the WHOLE image (no cropping), scaled so its width is at most 1200 with
+        the natural aspect ratio preserved. SVG logos are kept as-is (vectors
+        scale freely). Without Pillow, the original is stored."""
         spec = BRAND_SPECS[kind]
         if ext not in spec["exts"]:
             return jsonify(error="%s: use %s." % (
@@ -3390,20 +3391,31 @@ def register_modules(app):
             from PIL import Image, ImageOps
             img = Image.open(_io.BytesIO(data))
             if kind == "logo":
+                # Keep the WHOLE logo (no cropping): fit it inside the box and
+                # preserve transparency so it sits cleanly on any background.
                 img = ImageOps.contain(img.convert("RGBA"), (tw, th))
                 fname = "logo-%s.png" % token
                 img.save(os.path.join(sub, fname), "PNG", optimize=True)
             else:
-                img = ImageOps.fit(img.convert("RGB"), (tw, th),
-                                   method=Image.LANCZOS)
-                fname = "header-%s.jpg" % token
-                img.save(os.path.join(sub, fname), "JPEG", quality=85, optimize=True)
+                # Header / banner: keep the WHOLE image — never crop. Scale it
+                # down so its width is at most tw, preserving the natural aspect
+                # ratio (tall banners are capped too). The email renders it at
+                # width:100%, so the full banner is always visible.
+                img = img.convert("RGBA")
+                img.thumbnail((tw, tw), Image.LANCZOS)
+                if img.getchannel("A").getextrema()[0] < 255:
+                    fname = "header-%s.png" % token
+                    img.save(os.path.join(sub, fname), "PNG", optimize=True)
+                else:
+                    fname = "header-%s.jpg" % token
+                    img.convert("RGB").save(os.path.join(sub, fname),
+                                            "JPEG", quality=85, optimize=True)
             out = os.path.getsize(os.path.join(sub, fname))
             return jsonify(
                 url=url_for("static", filename="uploads/%d/%s" % (aid, fname)),
                 width=img.width, height=img.height,
-                note="Auto-resized to %d×%d (%s)." % (img.width, img.height,
-                                                      _human_size(out)))
+                note="Full image kept — fit to %d×%d (%s)." % (
+                    img.width, img.height, _human_size(out)))
         except ImportError:
             fname = "%s-%s.%s" % (kind, token, ext)
             with open(os.path.join(sub, fname), "wb") as fh:
