@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Email Sending Rotation{% endblock %}
+{% block content %}
+<h1>🔄 Email Sending — Advanced Smart Rotation</h1>
+<p class="muted">Independent engine for normal campaigns. Always checks warm-up, IP &amp; bounce health.</p>
+
+<div class="card" style="margin-top:14px">
+  <h3>Pipeline</h3>
+  <div class="row" style="flex-wrap:wrap;gap:6px">
+    {% for s in ['Campaign','Queue','Plan limit','SMTP health','IP health','Warm-up','Bounce','Load balance','Round robin','Auto-skip','Retry','Send','Reports'] %}
+      <span class="tag">{{ s }}</span>{% if not loop.last %}<span class="faint">→</span>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h3>Simulate a campaign</h3>
+  <p class="muted small">Plan limit for your <b>{{ account.plan }}</b> plan: {{ '{:,}'.format(plan_limit) }}/day.</p>
+  <form method="post" class="row" style="align-items:flex-end">
+    <div style="flex:2"><label>Campaign size (emails)</label><input name="size" type="number" value="15000" required></div>
+    <div style="flex:0"><button class="btn">Plan rotation</button></div>
+  </form>
+</div>
+
+{% if result %}
+<div class="card">
+  <div class="section-head"><h3>Allocation</h3>
+    <span class="pill">Assigned <b>{{ '{:,}'.format(result.assigned_total) }}</b> · Queued <b>{{ '{:,}'.format(result.queued) }}</b> · Retry reserve <b>{{ '{:,}'.format(result.retries_reserved) }}</b></span></div>
+  {% for w in result.warnings %}<div class="flash error">⚠ {{ w }}</div>{% endfor %}
+  <table>
+    <thead><tr><th>Relay</th><th>IP</th><th class="num">Assigned</th></tr></thead>
+    <tbody>
+    {% for n, c in result.assigned %}
+      <tr><td><b>{{ n.name }}</b></td><td class="faint small">{{ n.ip }}</td><td class="num">{{ '{:,}'.format(c) }}</td></tr>
+    {% else %}<tr><td colspan="3" class="empty">No eligible relays.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if result.skipped %}
+  <h4 style="margin-top:14px">Auto-skipped relays</h4>
+  {% for n, why in result.skipped %}
+    <div class="kv"><span>{{ n.name }} <span class="faint small">({{ n.ip }})</span></span>
+      <span class="badge b-invalid">{{ why|join(', ') }}</span></div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

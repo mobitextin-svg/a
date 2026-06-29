@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Visual Builder{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/grapesjs/grapes.min.css') }}">
+<style>
+  .bld-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:10px 0}
+  .bld-meta .f{display:flex;flex-direction:column;gap:2px}
+  .bld-meta input,.bld-meta select{min-width:150px}
+  .bld-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+  #gjs{border:1px solid var(--line2);border-radius:10px;min-height:560px;background:#fff}
+  .gjs-block{min-height:auto}
+  #codeWrap{display:none;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin-top:8px}
+  #monaco{height:420px;width:100%}
+  .bld-fallback{display:none}
+</style>
+
+<h1>🎨 Visual Template Builder
+  <span class="badge {{ 'b-risky' if target=='system' else 'b-Running' }}">{{ 'System (all users)' if target=='system' else 'My Templates' }}</span></h1>
+<p class="muted">Drag &amp; drop blocks, switch to code, preview on mobile, then save.
+  Saved as {{ 'a System Template available to every user.' if target=='system' else 'one of your personal templates.' }}</p>
+<p class="faint small">Tip: drag the <b>📩 Footer</b> block in — it carries
+  <code>{{ '{{unsubscribe_url}}' }}</code> and <code>{{ '{{view_in_browser_url}}' }}</code>,
+  which the system fills with working links for each recipient at send time.</p>
+
+<form method="post" id="saveForm" action="{{ url_for('builder', target=target) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="content" id="contentField">
+  {% if edit and edit.id %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+  <div class="bld-meta">
+    <div class="f"><label class="small">Template name</label>
+      <input name="name" value="{{ edit.name if edit else '' }}" placeholder="Admission Open" required></div>
+    <div class="f"><label class="small">Subject</label>
+      <input name="subject" value="{{ edit.subject if edit else '' }}" placeholder="Admissions are now open!"></div>
+    <div class="f"><label class="small">Preview Text <span class="faint">(default)</span></label>
+      <input name="preview_text" value="{{ edit.preview_text if edit else '' }}" placeholder="Limited-time offer ends tonight."></div>
+    {% if target=='system' %}
+    <div class="f"><label class="small">Category</label>
+      <input name="category" list="cats" value="{{ edit.category if edit else '' }}" placeholder="Education" required>
+      <datalist id="cats">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist></div>
+    <div class="f"><label class="small">Published</label>
+      <label style="display:flex;align-items:center;gap:6px;height:38px"><input type="checkbox" name="published" checked style="width:auto"> Visible to all</label></div>
+    {% else %}
+    <div class="f"><label class="small">Folder</label>
+      <select name="folder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="bld-toolbar">
+  <button class="btn" id="btnSave">💾 Save</button>
+  <button class="btn ghost" id="btnPreview" type="button">👁 Preview</button>
+  <button class="btn ghost" id="btnDesktop" type="button">🖥 Desktop</button>
+  <button class="btn ghost" id="btnMobile" type="button">📱 Mobile</button>
+  <button class="btn ghost" id="btnCode" type="button">&lt;/&gt; Code</button>
+  <button class="btn ghost" id="btnUndo" type="button">↩ Undo</button>
+  <button class="btn ghost" id="btnRedo" type="button">↪ Redo</button>
+  <button class="btn ghost" id="btnImport" type="button">📥 Import</button>
+  <button class="btn ghost" id="btnVars" type="button">🏷 Variables</button>
+  <a class="btn ghost" id="btnCancel" href="{{ url_for('admin_templates') if target=='system' else url_for('templates', tab='mine') }}">Cancel</a>
+</div>
+
+<div id="gjs"></div>
+<div id="codeWrap"><div id="monaco"></div>
+  <div style="padding:8px;display:flex;gap:8px;background:var(--panel)">
+    <button class="btn sm" id="btnApplyCode" type="button">Apply code to canvas</button>
+    <span class="faint small">Edit raw HTML here (Monaco — the same editor as VS Code).</span></div>
+</div>
+
+{# Graceful fallback if the CDN is blocked: a plain HTML editor that still saves. #}
+<div class="bld-fallback card" id="fallback">
+  <h3>HTML editor</h3>
+  <textarea id="fallbackArea" style="font-family:ui-monospace,monospace;min-height:300px"></textarea>
+</div>
+
+{# ===== Variable insertion panel ===== #}
+<div id="varsPanel" style="display:none;position:fixed;z-index:9999;top:50%;left:50%;
+  transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:18px 20px;width:min(440px,92vw);
+  box-shadow:0 16px 48px rgba(0,0,0,.5)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h3 style="margin:0">🏷 Variables</h3>
+    <button id="varsClose" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text)">✕</button>
+  </div>
+  <p class="faint small" style="margin-bottom:10px">Click a variable to insert it at the cursor / selected text in the editor.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% set VARS = ['first_name','last_name','email','mobile','company','city','state','country','custom_field_1','custom_field_2'] %}
+    {% for v in VARS %}
+    <button class="btn ghost sm var-chip" data-var="{{ '{{' + v + '}}' }}"
+      style="font-family:ui-monospace,monospace;font-size:.82rem">{{ '{{' + v + '}}' }}</button>
+    {% endfor %}
+  </div>
+  <p class="faint small" style="margin-top:12px">Tip: also works in Subject and Preview Text fields above the editor.</p>
+</div>
+<div id="varsOverlay" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.4)"></div>
+
+<script type="application/json" id="initData">{{ {'html': (edit.content if edit else '') } | tojson }}</script>
+<script src="{{ url_for('static', filename='vendor/grapesjs/grapes.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/grapesjs/grapesjs-preset-newsletter.min.js') }}"></script>
+<script>
+(function(){
+  var INIT=(JSON.parse(document.getElementById('initData').textContent).html)||
+    '<table style="width:100%"><tr><td style="padding:24px;font-family:Arial">'
+    +'<h1>Hello {{ "{{name}}" }}</h1><p>Start designing your email…</p></td></tr></table>';
+  var form=document.getElementById('saveForm');
+  var contentField=document.getElementById('contentField');
+  var editor=null;
+
+  function bootFallback(){
+    document.getElementById('gjs').style.display='none';
+    document.getElementById('fallback').style.display='block';
+    document.getElementById('fallbackArea').value=INIT;
+  }
+
+  // A small, friendly block palette on top of the preset — keeps it simple.
+  function addSimpleBlocks(ed){
+    var bm=ed.BlockManager, C='⭐ Simple blocks';
+    function blk(id,label,content){ bm.add(id,{label:label,category:C,content:content}); }
+    blk('s-logo','🖼 Logo / Header',
+      '<table width="100%"><tr><td style="background:#0b2a6b;padding:18px 24px;color:#fff;font-family:Arial;font-size:18px;font-weight:bold">Your Company</td></tr></table>');
+    blk('s-text','📝 Text',
+      '<p style="font-family:Arial;font-size:14px;color:#222;line-height:1.6;padding:0 24px">Write your message here. Use {{name}} to personalise.</p>');
+    blk('s-button','🔘 Button (CTA)',
+      '<table width="100%"><tr><td align="center" style="padding:18px"><a href="#" style="background:#0b2a6b;color:#fff;padding:12px 28px;border-radius:4px;text-decoration:none;font-family:Arial">View Details</a></td></tr></table>');
+    blk('s-bullets','• Bullet list',
+      '<ul style="font-family:Arial;font-size:14px;color:#222;line-height:1.7;padding:0 40px"><li>First point</li><li>Second point</li><li>Third point</li></ul>');
+    blk('s-image','🖼 Image',
+      '<table width="100%"><tr><td align="center" style="padding:12px"><img src="https://via.placeholder.com/560x180?text=Image" style="max-width:100%"></td></tr></table>');
+    blk('s-divider','➖ Divider','<hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 24px">');
+    blk('s-2col','▤ 2 columns',
+      '<table width="100%" style="font-family:Arial"><tr><td width="50%" style="padding:12px;vertical-align:top">Left column</td><td width="50%" style="padding:12px;vertical-align:top">Right column</td></tr></table>');
+    // The important one — compliant footer with auto-filled tokens.
+    blk('s-footer','📩 Footer (Unsubscribe + View)',
+      '<table width="100%"><tr><td style="background:#0b2a6b;padding:14px 24px;color:#cdd7ee;font-size:11px;text-align:center;font-family:Arial">'
+      +'You received this email because you opted in.<br>'
+      +'<a href="{{view_in_browser_url}}" style="color:#cdd7ee">View in browser</a> &middot; '
+      +'<a href="{{unsubscribe_url}}" style="color:#cdd7ee">Unsubscribe</a></td></tr></table>');
+  }
+
+  if(!window.grapesjs){ bootFallback(); }
+  else {
+    try{
+      editor=grapesjs.init({container:'#gjs',height:'600px',fromElement:false,
+        storageManager:false,
+        plugins:['grapesjs-preset-newsletter'],
+        pluginsOpts:{'grapesjs-preset-newsletter':{modalTitleImport:'Import HTML template'}}});
+      editor.setComponents(INIT);
+      addSimpleBlocks(editor);
+    }catch(e){ bootFallback(); }
+  }
+
+  function currentHtml(){
+    if(editor){
+      try{ return editor.runCommand('gjs-get-inlined-html'); }
+      catch(e){ return editor.getHtml()+'<style>'+editor.getCss()+'</style>'; }
+    }
+    return document.getElementById('fallbackArea').value;
+  }
+
+  // Save → serialize into the hidden field, submit the meta form.
+  document.getElementById('btnSave').addEventListener('click',function(ev){
+    ev.preventDefault();
+    if(!form.name.value.trim()){ alert('Please give the template a name.'); form.name.focus(); return; }
+    contentField.value=currentHtml();
+    form.submit();
+  });
+
+  // Toolbar commands (no-ops in fallback mode).
+  function cmd(run){ if(editor){ try{ editor.runCommand(run); }catch(e){} } }
+  document.getElementById('btnPreview').addEventListener('click',function(){ cmd('preview'); });
+  document.getElementById('btnDesktop').addEventListener('click',function(){ if(editor) editor.setDevice('Desktop'); });
+  document.getElementById('btnMobile').addEventListener('click',function(){ if(editor) editor.setDevice('Mobile'); });
+  document.getElementById('btnUndo').addEventListener('click',function(){ if(editor) editor.UndoManager.undo(); });
+  document.getElementById('btnRedo').addEventListener('click',function(){ if(editor) editor.UndoManager.redo(); });
+  document.getElementById('btnImport').addEventListener('click',function(){ cmd('gjs-open-import-template'); });
+
+  // ---- Variable insertion ----
+  var varsPanel = document.getElementById('varsPanel');
+  var varsOverlay = document.getElementById('varsOverlay');
+  function openVars(){ varsPanel.style.display=''; varsOverlay.style.display=''; }
+  function closeVars(){ varsPanel.style.display='none'; varsOverlay.style.display='none'; }
+  document.getElementById('btnVars').addEventListener('click', openVars);
+  document.getElementById('varsClose').addEventListener('click', closeVars);
+  varsOverlay.addEventListener('click', closeVars);
+
+  document.querySelectorAll('.var-chip').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      var v = chip.getAttribute('data-var');
+      // Try to inject into GrapesJS focused rich text
+      if(editor && editor.RichTextEditor && editor.RichTextEditor.actionbar){
+        try{ document.execCommand('insertText', false, v); } catch(e){}
+      }
+      // Fallback: if a bld-meta input is focused, insert there
+      var active = document.activeElement;
+      if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')){
+        var s = active.selectionStart, e2 = active.selectionEnd;
+        active.value = active.value.slice(0,s) + v + active.value.slice(e2);
+        active.selectionStart = active.selectionEnd = s + v.length;
+        active.dispatchEvent(new Event('input'));
+      } else {
+        // inject into GrapesJS canvas via execCommand (works when canvas has focus)
+        try{ document.execCommand('insertText', false, v); } catch(e){}
+      }
+      closeVars();
+    });
+  });
+
+  // Monaco code editor toggle.
+  var monaco=null, mInst=null;
+  document.getElementById('btnCode').addEventListener('click',function(){
+    var w=document.getElementById('codeWrap');
+    var showing=w.style.display==='block';
+    if(showing){ w.style.display='none'; return; }
+    w.style.display='block';
+    if(mInst){ mInst.setValue(currentHtml()); return; }
+    var loader=document.createElement('script');
+    loader.src='https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.js';
+    loader.onload=function(){
+      require.config({paths:{vs:'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'}});
+      require(['vs/editor/editor.main'],function(){
+        monaco=window.monaco;
+        mInst=monaco.editor.create(document.getElementById('monaco'),
+          {value:currentHtml(),language:'html',theme:'vs-dark',automaticLayout:true,minimap:{enabled:false}});
+      });
+    };
+    loader.onerror=function(){ document.getElementById('monaco').innerHTML=
+      '<textarea id="monacoFallback" style="width:100%;height:100%;font-family:monospace">'+
+      currentHtml().replace(/</g,'&lt;')+'</textarea>'; };
+    document.body.appendChild(loader);
+  });
+  document.getElementById('btnApplyCode').addEventListener('click',function(){
+    var html=mInst?mInst.getValue():(document.getElementById('monacoFallback')||{}).value||'';
+    if(editor){ editor.setComponents(html); }
+    else { document.getElementById('fallbackArea').value=html; }
+    document.getElementById('codeWrap').style.display='none';
+  });
+})();
+</script>
+{% endblock %}

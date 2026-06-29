@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Marketplace{% endblock %}
+{% block content %}
+<h1>🛍️ Template Marketplace</h1>
+<p class="muted">Email, automation &amp; landing-page templates — install to your workspace with one click.</p>
+
+<div class="tabs" style="margin-top:14px">
+  <a class="tab {{ 'active' if not cat }}" href="{{ url_for('marketplace') }}">All</a>
+  {% for c in cats %}
+  <a class="tab {{ 'active' if cat==c }}" href="{{ url_for('marketplace', cat=c) }}">{{ c }}</a>
+  {% endfor %}
+</div>
+
+<div class="feature-grid">
+  {% for id, category, name, blurb, subject, html in items %}
+  <div class="feature" style="display:flex;flex-direction:column;gap:8px">
+    <div class="section-head" style="margin:0">
+      <h4 style="margin:0">{{ name }}</h4>
+      <span class="badge b-Running">{{ category }}</span>
+    </div>
+    <p style="margin:0;flex:1">{{ blurb }}</p>
+    {% if subject %}<div class="faint small">Subject: {{ subject }}</div>{% endif %}
+    <form method="post" style="margin-top:4px">
+      <input type="hidden" name="id" value="{{ id }}">
+      <button class="btn sm" style="width:100%">⬇ Install</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+<p class="faint small" style="margin-top:14px">Installed items appear under
+  <a href="{{ url_for('templates') }}">Templates</a> (emails) or can seed automations &amp; landing pages.</p>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Deliverability AI{% endblock %}
+{% block content %}
+<h1>🧠 Deliverability AI</h1>
+{% if admin %}
+<p class="muted">Predicted inbox placement across all accounts — worst first.</p>
+<div class="card" style="margin-top:14px">
+  <table>
+    <thead><tr><th>Account</th><th class="num">Predicted score</th><th>Band</th><th class="num">Bounce</th><th class="num">Complaint</th><th>Auth</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td><b>{{ r.acct.name }}</b> <span class="faint small">#{{ r.acct.id }}</span></td>
+        <td class="num"><b style="color:{{ 'var(--good)' if r.score>=75 else ('var(--warn)' if r.score>=55 else 'var(--bad)') }}">{{ r.score }}</b></td>
+        <td><span class="badge {{ 'b-valid' if r.score>=75 else ('b-risky' if r.score>=55 else 'b-invalid') }}">{{ r.band }}</span></td>
+        <td class="num">{{ r.sig.bounce_rate }}%</td><td class="num">{{ r.sig.complaint_rate }}%</td>
+        <td>{{ '✅' if r.sig.auth_ok else '❌' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="muted">A forecast of where your mail will land, with prioritised fixes.</p>
+<div class="grid g2" style="margin-top:14px">
+  <div class="card" style="text-align:center">
+    <h2>Predicted inbox placement</h2>
+    <div class="score-ring" style="font-size:3rem;color:{{ 'var(--good)' if pred.score>=75 else ('var(--warn)' if pred.score>=55 else 'var(--bad)') }}">{{ pred.score }}</div>
+    <div><span class="badge {{ 'b-valid' if pred.score>=75 else ('b-risky' if pred.score>=55 else 'b-invalid') }}">{{ pred.band }}</span></div>
+    <form method="post" style="margin-top:14px"><input type="hidden" name="action" value="autoclean">
+      <button class="btn">🧹 Auto-clean my list</button></form>
+    {% if cleaned %}<p class="faint small" style="margin-top:8px">Removed {{ cleaned.removed }}, suppressed {{ cleaned.suppressed }}.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>What's affecting your score</h2>
+    {% for f in pred.factors %}
+      <div class="kv"><span>{{ f.name }} <span class="faint small">— {{ f.note }}</span></span>
+        <span style="color:{{ 'var(--good)' if f.impact>=0 else 'var(--bad)' }}">{{ '+' if f.impact>=0 }}{{ f.impact }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+<div class="card">
+  <h2>AI recommendations</h2>
+  {% for r in recs %}
+    <div class="kv"><span>{{ {'critical':'🔴','warning':'🟠','tip':'🟢'}[r.severity] }} <b>{{ r.title }}</b> — <span class="muted">{{ r.detail }}</span></span></div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

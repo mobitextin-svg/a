@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}White Label{% endblock %}
+{% block content %}
+<h1>🏷️ White Label</h1>
+<p class="muted">Make the platform yours — custom logo, domain, sending identity &amp; client branding.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>Branding</h2>
+    <form method="post">
+      <label>Brand name</label><input value="{{ account.name }}" name="brand">
+      <label>Logo URL</label><input placeholder="https://cdn.yourbrand.com/logo.svg">
+      <label>Primary colour</label><input value="#5b8cff">
+      <label>Custom app domain</label><input placeholder="app.yourbrand.com">
+      <div style="margin-top:12px"><button class="btn">Save branding</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Sending identity</h2>
+    <div class="kv"><span>SMTP branding</span><span class="dot-ok">✔ mail.yourbrand.com</span></div>
+    <div class="kv"><span>Custom email footer</span><span class="dot-ok">✔ configured</span></div>
+    <div class="kv"><span>Remove "Powered by"</span><span class="dot-ok">✔ removed</span></div>
+    <div class="kv"><span>Per-client themes</span><span class="dot-ok">✔ enabled</span></div>
+    <div class="kv"><span>Custom login page</span><span class="dot-ok">✔ active</span></div>
+    <hr style="border-color:var(--line);margin:14px 0">
+    <p class="muted small">White-label is included on Business &amp; Enterprise plans and works with the multi-tenant architecture — each client gets an isolated, branded workspace.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Client workspaces</h2>
+  <table>
+    <thead><tr><th>Client</th><th>Domain</th><th>Plan</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Acme Agency</td><td>mail.acme-agency.com</td><td><span class="badge b-Running">Business</span></td><td><span class="badge b-valid">Active</span></td></tr>
+      <tr><td>Bright Media</td><td>send.brightmedia.io</td><td><span class="badge b-Running">Pro</span></td><td><span class="badge b-valid">Active</span></td></tr>
+      <tr><td>NorthStar Co</td><td>mailer.northstar.co</td><td><span class="badge b-Running">Enterprise</span></td><td><span class="badge b-valid">Active</span></td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}

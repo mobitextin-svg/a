@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}SMTP Servers{% endblock %}
+{% block content %}
+<h1>SMTP Servers</h1>
+<p class="muted">Relays, dedicated IPs, rotation, health monitoring, warm-up &amp; sending limits.</p>
+
+<div class="card" style="margin-top:14px">
+  <h2>Add SMTP server</h2>
+  <form method="post">
+    <div class="row"><input name="name" placeholder="Friendly name" required>
+      <input name="host" placeholder="smtp.provider.com" required>
+      <input name="port" type="number" placeholder="587" value="587" style="max-width:90px"></div>
+    <div class="row" style="margin-top:10px"><input name="username" placeholder="Username">
+      <input name="password" type="password" placeholder="Password (enables real sending)">
+      <input name="dedicated_ip" placeholder="Dedicated IP (optional)"></div>
+    <div class="row" style="margin-top:10px">
+      <input name="daily_limit" type="number" placeholder="Daily limit" value="10000">
+      <label style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" name="use_tls" checked style="width:auto"> Use STARTTLS</label>
+    </div>
+    <div style="margin-top:12px"><button class="btn">Add server</button></div>
+    <p class="faint small">Leave password blank to keep it in simulation mode. With credentials (or the global <code>MAILSAAS_SMTP_*</code> env), campaigns send for real.</p>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-head"><h2>Your relays</h2><span class="pill">Rotation <b>enabled</b></span></div>
+  <table>
+    <thead><tr><th>Server</th><th>Dedicated IP</th><th>Health</th><th>Warm-up</th><th>Usage today</th></tr></thead>
+    <tbody>
+    {% for s in servers %}
+      {% set pct = (100 * s.sent_today / s.daily_limit)|round(0,'floor')|int if s.daily_limit else 0 %}
+      <tr>
+        <td><b>{{ s.name }}</b><div class="faint small">{{ s.host }}:{{ s.port }}</div></td>
+        <td>{{ s.dedicated_ip or '—' }}</td>
+        <td><span class="badge b-{{ s.health }}">{{ s.health }}</span></td>
+        <td class="small">{{ s.warmup }}</td>
+        <td style="width:200px">
+          <div class="small faint">{{ '{:,}'.format(s.sent_today) }} / {{ '{:,}'.format(s.daily_limit) }}</div>
+          <div class="meter"><i style="width:{{ pct }}%"></i></div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No SMTP servers yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% for s in servers %}
+{% set h = health[s.id] %}
+<div class="card">
+  <div class="section-head"><h2 style="display:inline">{{ s.name }} — live health</h2>
+    <span class="pill">Inbox <b>{{ h.inbox }}%</b></span></div>
+  <div class="grid g4">
+    <div class="stat"><div class="k">IP score</div><div class="v" style="color:{{ 'var(--good)' if h.ip_score>=80 else 'var(--warn)' }}">{{ h.ip_score }}<span class="unit">/100</span></div></div>
+    <div class="stat"><div class="k">Latency</div><div class="v">{{ h.latency }}<span class="unit">ms</span></div></div>
+    <div class="stat"><div class="k">Inbox placement</div><div class="v">{{ h.inbox }}<span class="unit">%</span></div></div>
+    <div class="stat"><div class="k">RBL</div><div class="v" style="font-size:1.1rem;color:{{ 'var(--good)' if h.rbl=='pass' else 'var(--bad)' }}">{{ 'Clean' if h.rbl=='pass' else 'Listed' }}</div></div>
+  </div>
+  <div style="margin-top:10px">
+    {% for label in ['dns','ptr','spf','dkim','dmarc','tls','rbl'] %}
+      <span class="tag" style="border-color:{{ 'var(--good)' if h[label]=='pass' else 'var(--bad)' }};color:{{ '#4ade80' if h[label]=='pass' else '#f87171' }}">
+        {{ '✔' if h[label]=='pass' else '✗' }} {{ label|upper }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
