@@ -1,0 +1,693 @@
+{% extends "base.html" %}
+{% block title %}Create Email Template{% endblock %}
+{% block content %}
+{% set fields = (edit.fields if edit else {}) or {} %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/quill/quill.snow.css') }}">
+<style>
+  .qe-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+  .qe-grid .f{display:flex;flex-direction:column;gap:3px}
+  .qe-grid .full{grid-column:1 / -1}
+  #qeEditor{background:#fff;color:#111;min-height:190px;border-radius:0 0 8px 8px}
+  .ql-toolbar.ql-snow{border-radius:8px 8px 0 0}
+  .qe-vars{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
+  .qe-preview{display:none;border:1px solid var(--line2);border-radius:10px;margin-top:12px;overflow:auto;max-height:820px}
+  .qe-fallback{display:none}
+  input[type=color]{height:38px;width:60px;padding:2px}
+  .mode-tabs{display:flex;gap:6px;margin:10px 0}
+  .mode-tabs button{flex:1;padding:12px;border:1px solid var(--line2);background:var(--panel);
+    color:var(--ink);border-radius:10px;cursor:pointer;font-weight:600}
+  .mode-tabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .imgrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .btnstyles{display:flex;gap:6px;flex-wrap:wrap}
+  .btnstyles label{display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--line2);
+    border-radius:8px;cursor:pointer;font-size:13px}
+  .chip{display:inline-block;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;
+    padding:2px 8px;font-size:12px;cursor:pointer}
+  .chip:hover{background:var(--brand);color:#fff}
+  /* ── Category Picker ── */
+  .cat-group-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    opacity:.6;margin-bottom:8px}
+  .cat-picker-grid{display:flex;flex-wrap:wrap;gap:8px}
+  .cat-pick-btn{padding:8px 14px;border:2px solid rgba(255,255,255,0.18);border-radius:8px;
+    background:rgba(255,255,255,0.06);color:#fff !important;cursor:pointer;font-size:.9rem;
+    transition:border-color .15s,background .15s}
+  .cat-pick-btn:hover{border-color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.1)}
+  .cat-pick-btn.selected{border-color:var(--brand,#3b4edb);background:var(--brand,#3b4edb);color:#fff !important;font-weight:600}
+  .cat-group-label{color:rgba(255,255,255,0.55) !important}
+  .cat-manager summary{color:var(--muted,#888);font-size:.9rem}
+  .cat-manager summary:hover{color:var(--ink)}
+  /* ── Industry presets ── */
+  .preset-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .preset-btn{display:flex;align-items:center;gap:8px;padding:8px 12px;border:2px solid var(--line2);
+    background:var(--panel);color:var(--ink);border-radius:10px;cursor:pointer;font-weight:600;font-size:.9rem;
+    transition:border-color .15s,transform .05s}
+  .preset-btn:hover{border-color:var(--brand,#3b4edb)}
+  .preset-btn.selected{border-color:var(--brand,#3b4edb);box-shadow:0 0 0 2px rgba(59,78,219,.2)}
+  .preset-ic{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+    border-radius:50%;color:#fff;font-size:14px}
+  /* ── Block toggles ── */
+  .blk-head{display:flex;align-items:center;gap:8px;cursor:pointer}
+  .feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .feat-card{border:1px solid var(--line2);border-radius:8px;padding:10px;background:var(--panel2,rgba(255,255,255,.03))}
+  @media(max-width:640px){.feat-grid{grid-template-columns:1fr}}
+</style>
+
+<div class="section-head">
+  <h1>📧 Create Email Template
+    <span class="badge {{ 'b-risky' if target=='system' else 'b-Running' }}">{{ 'System (all users)' if target=='system' else 'My Templates' }}</span></h1>
+  <a class="btn ghost" href="{{ url_for('builder', target=target) }}">🎨 Advanced builder</a>
+</div>
+
+{% if target != 'system' %}
+{# ── Step 0: Category Picker ───────────────────────────────────────────────── #}
+<div class="card" id="catPickerBox" style="margin-bottom:14px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div>
+      <h2 style="margin:0">① Choose a Category</h2>
+      <p class="faint small" style="margin:4px 0 0">Select which category this template belongs to before designing it.</p>
+    </div>
+    <span id="catPickedBadge" class="badge b-Running" style="display:none"></span>
+  </div>
+
+  {# System Categories — read-only #}
+  <div class="cat-group-label">🌐 System Categories <span class="faint small">(built-in, cannot delete)</span></div>
+  <div class="cat-picker-grid" id="sysCatGrid">
+    {% set sys_icons = {'Marketing':'📣','Welcome':'👋','Newsletter':'📰','Sales':'💰','Offers':'🎁','Events':'📅','Transactional':'🔔'} %}
+    {% for cat in sys_cat_names %}
+    <button type="button" class="cat-pick-btn" data-cat="{{ cat }}" data-type="system"
+            onclick="pickCategory('{{ cat }}','system',this)">
+      {{ sys_icons.get(cat,'📂') }} {{ cat }}
+    </button>
+    {% endfor %}
+  </div>
+
+  {# My Categories — user-managed #}
+  <div class="cat-group-label" style="margin-top:14px">👤 My Categories <span class="faint small">(your own categories)</span></div>
+  <div class="cat-picker-grid" id="myCatGrid">
+    {% for f in folders %}
+    {% if f != 'General' %}
+    <button type="button" class="cat-pick-btn" data-cat="{{ f }}" data-type="my"
+            onclick="pickCategory('{{ f }}','my',this)">📁 {{ f }}</button>
+    {% endif %}
+    {% endfor %}
+    <button type="button" class="cat-pick-btn" data-cat="General" data-type="my"
+            onclick="pickCategory('General','my',this)">📁 General</button>
+  </div>
+
+  {# Category Manager — Add is always visible; existing-category edit/delete stays tucked away #}
+  <div style="margin-top:16px">
+    <div style="font-weight:600">⚙️ Manage My Categories</div>
+    <form method="post" action="{{ url_for('templates') }}" class="row" style="gap:6px;margin-top:10px" onsubmit="return catMgrSubmit(this)">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="new_folder">
+      <input type="hidden" name="tab" value="mine">
+      <input name="folder_name" placeholder="New category name…" style="flex:1" required>
+      <button class="btn sm">➕ Add</button>
+    </form>
+
+    {% if folders %}
+    <details class="cat-manager" style="margin-top:10px">
+      <summary style="cursor:pointer">✏️ Rename or delete an existing category ({{ folders|length }})</summary>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+        {% for f in folders %}
+        <div class="row" style="gap:6px;align-items:center">
+          <span style="flex:1;padding:6px 10px;background:var(--panel2,#f5f5f5);border-radius:6px">📁 {{ f }}</span>
+          <form method="post" action="{{ url_for('templates') }}" class="row" style="gap:4px;margin:0" onsubmit="return catMgrSubmit(this)">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="rename_folder">
+            <input type="hidden" name="tab" value="mine">
+            <input type="hidden" name="old" value="{{ f }}">
+            <input name="folder_name" placeholder="New name" style="width:130px">
+            <button class="btn ghost sm">✏️</button>
+          </form>
+          {% if f != 'General' %}
+          <form method="post" action="{{ url_for('templates') }}" style="margin:0" onsubmit="return confirm('Delete category «{{ f }}»? Templates will move to General.')&&catMgrSubmit(this)">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="delete_folder">
+            <input type="hidden" name="tab" value="mine">
+            <input type="hidden" name="folder_name" value="{{ f }}">
+            <button class="btn ghost sm" style="color:var(--bad)">🗑</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+</div>
+
+{% endif %}
+
+<!-- MODE SWITCH -->
+<div class="mode-tabs" id="templateFormSection" style="{{ 'display:none' if not edit and target != 'system' else '' }}">
+  <button type="button" id="modeManual" class="on" onclick="setMode('manual')">✍️ Manual — I'll write it</button>
+  <button type="button" id="modeAuto" onclick="setMode('auto')">🤖 Auto — AI writes it for me</button>
+</div>
+
+<form method="post" id="qeForm" action="{{ url_for('quick_builder', target=target) }}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" id="qeAction" value="save">
+  <input type="hidden" name="body_html" id="qeBodyField">
+  <input type="hidden" name="btn_style" id="qeBtnStyle" value="{{ fields.btn_style or 'filled' }}">
+  {% if target != 'system' %}{# Folder set by the category picker above — must live INSIDE the form #}
+  <input type="hidden" name="folder" id="qeFolderHidden" value="{{ edit.folder if edit else '' }}">{% endif %}
+  {% if edit and edit.id %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+
+  <!-- INDUSTRY PRESETS -->
+  <div class="card" id="presetCard">
+    <label><b>🏭 Industry preset</b> <span class="faint small">— one click prefills the colour, copy &amp; feature cards. Then swap the logo/image and edit any text. One master template, every industry.</span></label>
+    <div class="preset-grid">
+      {% for p in presets %}
+      <button type="button" class="preset-btn" data-key="{{ p.key }}" onclick="applyPreset('{{ p.key }}')">
+        <span class="preset-ic" style="background:{{ p.accent }}">{{ p.icon }}</span>{{ p.label }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  <script type="application/json" id="presetData">{{ presets|tojson }}</script>
+
+  <!-- AUTO PANEL (hidden in manual mode) -->
+  <div class="card" id="autoPanel" style="display:none;background:var(--panel2);border:1px dashed var(--brand)">
+    <label><b>🤖 Describe your email — one click writes everything</b></label>
+    <p class="faint small" style="margin:4px 0 8px">e.g. “BPCL SBI credit card offer, 2,000 bonus points, for Chennai customers”. AI fills the name, subject, body, button &amp; sign-off below — then you edit anything.</p>
+    <textarea name="ai_topic" id="aiTopic" style="min-height:60px" placeholder="Describe the offer or message…"></textarea>
+    <div class="row" style="gap:8px;align-items:flex-end;margin-top:8px">
+      <div style="flex:1"><label class="small">Tone</label>
+        <select name="tone"><option value="friendly">Friendly</option>
+          <option value="professional">Professional</option>
+          <option value="urgent">Urgent</option></select></div>
+      <button class="btn" type="button" id="qeAiBtn" style="flex:0 0 auto">✨ Generate everything</button>
+    </div>
+    <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+      <span class="faint small">Quick start:</span>
+      {% for p in ['Festival offer','Welcome email','Payment reminder','Site visit invite','Follow-up'] %}
+        <span class="chip" onclick="document.getElementById('aiTopic').value='{{ p }}';">{{ p }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <!-- BASICS -->
+  <div class="card">
+    <div class="qe-grid">
+      <div class="f"><label>Template name</label>
+        <input name="name" value="{{ edit.name if edit else '' }}" placeholder="BPCL SBI Card Offer" required></div>
+      {% if target=='system' %}
+      <div class="f"><label>Category</label>
+        <input name="category" list="cats" value="{{ edit.category if edit else '' }}" placeholder="Finance" required>
+        <datalist id="cats">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist></div>
+      {% else %}
+      {# folder is submitted via the hidden #qeFolderHidden set by the category picker above #}
+      {% endif %}
+
+      <div class="f full"><label>Email subject</label>
+        <input name="subject" id="subjField" value="{{ edit.subject if edit else '' }}" placeholder="2,000 bonus points on the BPCL SBI Card">
+        <div class="qe-vars"><span class="faint small">Insert:</span>
+          {% for key,lbl in subject_vars %}<span class="chip" onclick="insertField('subjField','{{ '{{' ~ key ~ '}}' }}')">{{ lbl }}</span>{% endfor %}</div></div>
+
+      <div class="f full"><label>Preview text <span class="faint small">— the grey line shown in the inbox next to the subject</span></label>
+        <input name="preheader" id="preField" value="{{ fields.preheader or '' }}" placeholder="Plus 13x rewards on fuel — apply before 27 Jun.">
+        <div class="qe-vars"><span class="faint small">Insert:</span>
+          {% for key,lbl in subject_vars %}<span class="chip" onclick="insertField('preField','{{ '{{' ~ key ~ '}}' }}')">{{ lbl }}</span>{% endfor %}</div></div>
+
+      {% if target=='system' %}
+      <div class="f"><label>Published</label>
+        <label style="display:flex;align-items:center;gap:6px;height:38px">
+          <input type="checkbox" name="published" {{ 'checked' if (not edit) }} style="width:auto"> Visible to all users</label></div>
+      {% endif %}
+      <div class="f full"><label>Colour theme</label>
+        <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap">
+          {% for lbl,hexc in themes %}
+          <span class="chip" style="background:{{ hexc }};color:#fff;border-color:{{ hexc }}" onclick="setTheme('{{ hexc }}')">{{ lbl }}</span>{% endfor %}
+          <span class="faint small">or custom →</span>
+          <input type="color" name="accent" id="accentField" value="{{ fields.accent or '#3b4edb' }}">
+        </div></div>
+    </div>
+  </div>
+
+  <input type="hidden" name="company" id="companyField" value="{{ company }}">
+
+  <!-- IMAGES -->
+  <div class="card">
+    <div class="qe-grid">
+      <div class="f full"><label>Header logo <span class="faint small">— top-left · PNG/SVG/JPG · any size, auto-fit to 300×100</span></label>
+        <div class="btnstyles" id="logoModes">
+          {% set lm = fields.logo_mode or 'logo_name' %}
+          <label><input type="radio" name="logo_mode" value="logo_name" {{ 'checked' if lm=='logo_name' }}> Logo + company name</label>
+          <label><input type="radio" name="logo_mode" value="logo" {{ 'checked' if lm=='logo' }}> Logo only</label>
+          <label><input type="radio" name="logo_mode" value="name" {{ 'checked' if lm=='name' }}> Company name only</label>
+        </div>
+        <input id="companyVisible" value="{{ company }}" placeholder="Company name shown in header"
+               style="margin-top:6px" oninput="document.getElementById('companyField').value=this.value"></div>
+
+      <div class="f full"><label>Logo image <span class="faint small">(upload or generate — skipped if “Company name only”)</span></label>
+        <div class="imgrow">
+          <input name="logo" id="logoUrl" value="{{ fields.logo or '' }}" placeholder="Paste URL, upload, or generate →" style="flex:1;min-width:180px">
+          <button type="button" class="btn ghost sm" id="logoBtn">📤 Upload</button>
+          <button type="button" class="btn ghost sm" id="logoGen">🎨 Generate</button>
+          <input type="file" id="logoFile" accept="image/*" style="display:none">
+        </div><span class="faint small" id="logoStatus"></span></div>
+
+      <div class="f full"><label>Header image <span class="faint small">— full-width · JPG/PNG/WebP · any size, auto-fit to 1200×400</span></label>
+        <div class="imgrow">
+          <input name="hero" id="heroUrl" value="{{ fields.hero or '' }}" placeholder="Paste URL, upload, or generate a banner →" style="flex:1;min-width:180px">
+          <button type="button" class="btn ghost sm" id="heroBtn">📤 Upload</button>
+          <button type="button" class="btn ghost sm" id="heroGen">🎨 Generate banner</button>
+          <input type="file" id="heroFile" accept="image/*" style="display:none">
+        </div><span class="faint small" id="heroStatus"></span>
+        <img id="heroThumb" src="{{ fields.hero or '' }}" style="max-height:90px;border-radius:6px;margin-top:6px;{{ '' if fields.hero else 'display:none' }}"></div>
+      <div class="f full"><label>Header image link <span class="faint small">— make the banner clickable (optional)</span></label>
+        <input name="hero_url" value="{{ fields.hero_url or '' }}" placeholder="https://example.com/landing"></div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="card">
+    <label>Message body</label>
+    <p class="faint small" style="margin:2px 0 8px">Greeting <b>“Hi {{ '{{name}}' }},”</b> is added for you. Write the rest below.</p>
+    <div class="qe-vars">
+      <span class="faint small">Insert variable:</span>
+      {% for key,lbl in variables %}
+        <span class="chip" onclick="insertVar('{{ '{{' ~ key ~ '}}' }}')">{{ lbl }}</span>
+      {% endfor %}
+      <span class="faint small">— tip: <code>{{ '{{city | your area}}' }}</code> shows a fallback if empty.</span>
+    </div>
+    {% set body0 = fields.body_html or '' %}
+    <div id="qeEditor">{{ body0|safe }}</div>
+    <div class="qe-fallback" id="qeFallback">
+      <textarea id="qeFallbackArea" style="font-family:ui-monospace,monospace;min-height:190px;width:100%">{{ body0 }}</textarea>
+    </div>
+  </div>
+
+  <!-- FEATURE CARDS -->
+  <div class="card">
+    <label class="blk-head">
+      <input type="checkbox" name="blk_features" value="1" id="blkFeatures" style="width:auto" {{ 'checked' if fields.blk_features }}>
+      <b>⭐ Feature cards</b> <span class="faint small">— up to 6 highlights, shown as icon · title · text</span>
+    </label>
+    <div id="featuresBox" style="margin-top:10px;{{ '' if fields.blk_features else 'display:none' }}">
+      <div class="feat-grid">
+        {% for i in range(1,7) %}
+        <div class="feat-card">
+          <div class="imgrow" style="gap:6px">
+            <input name="feat{{ i }}_icon" value="{{ fields['feat' ~ i ~ '_icon'] or '' }}" placeholder="⭐" style="width:54px;text-align:center;font-size:16px">
+            <input name="feat{{ i }}_title" value="{{ fields['feat' ~ i ~ '_title'] or '' }}" placeholder="Card {{ i }} title" style="flex:1">
+          </div>
+          <input name="feat{{ i }}_text" value="{{ fields['feat' ~ i ~ '_text'] or '' }}" placeholder="Short description" style="margin-top:6px;width:100%">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- IMAGE BLOCK -->
+  <div class="card">
+    <label class="blk-head">
+      <input type="checkbox" name="blk_image" value="1" id="blkImage" style="width:auto" {{ 'checked' if fields.blk_image }}>
+      <b>🖼 Image block</b> <span class="faint small">— a standalone image inside the body (separate from the header banner)</span>
+    </label>
+    <div id="imageBox" style="margin-top:10px;{{ '' if fields.blk_image else 'display:none' }}">
+      <div class="imgrow">
+        <input name="img_url" id="imgUrl" value="{{ fields.img_url or '' }}" placeholder="Paste URL or upload →" style="flex:1;min-width:180px">
+        <button type="button" class="btn ghost sm" id="imgBtn">📤 Upload</button>
+        <input type="file" id="imgFile" accept="image/*" style="display:none">
+      </div><span class="faint small" id="imgStatus"></span>
+      <div class="qe-grid" style="margin-top:8px">
+        <input name="img_link" value="{{ fields.img_link or '' }}" placeholder="Link when clicked (optional)">
+        <input name="img_caption" value="{{ fields.img_caption or '' }}" placeholder="Caption (optional)">
+      </div>
+    </div>
+  </div>
+
+  <!-- OFFER BLOCK -->
+  <div class="card">
+    <label class="blk-head">
+      <input type="checkbox" name="blk_offer" value="1" id="blkOffer" style="width:auto" {{ 'checked' if fields.blk_offer }}>
+      <b>🎁 Offer block</b> <span class="faint small">— a bold highlighted offer panel with an optional promo code</span>
+    </label>
+    <div id="offerBox" style="margin-top:10px;{{ '' if fields.blk_offer else 'display:none' }}">
+      <div class="qe-grid">
+        <input class="full" name="offer_headline" value="{{ fields.offer_headline or '' }}" placeholder="50% OFF Everything">
+        <input name="offer_sub" value="{{ fields.offer_sub or '' }}" placeholder="Ends Sunday midnight">
+        <input name="offer_code" value="{{ fields.offer_code or '' }}" placeholder="Promo code e.g. SAVE50 (optional)">
+      </div>
+    </div>
+  </div>
+
+  <!-- TESTIMONIAL BLOCK -->
+  <div class="card">
+    <label class="blk-head">
+      <input type="checkbox" name="blk_testimonial" value="1" id="blkTesti" style="width:auto" {{ 'checked' if fields.blk_testimonial }}>
+      <b>💬 Testimonial</b> <span class="faint small">— a customer quote to build trust</span>
+    </label>
+    <div id="testiBox" style="margin-top:10px;{{ '' if fields.blk_testimonial else 'display:none' }}">
+      <textarea name="quote" placeholder="What your customer said…" style="width:100%;min-height:64px">{{ fields.quote or '' }}</textarea>
+      <div class="qe-grid" style="margin-top:8px">
+        <input name="quote_author" value="{{ fields.quote_author or '' }}" placeholder="Customer name">
+        <input name="quote_role" value="{{ fields.quote_role or '' }}" placeholder="Role / company (optional)">
+      </div>
+    </div>
+  </div>
+
+  <!-- BUTTON -->
+  <div class="card">
+    <label>Button <span class="faint small">(leave text empty for no button)</span></label>
+    <div class="qe-grid">
+      <div class="f"><label class="small">Button text</label>
+        <div class="imgrow">
+          <input name="btn_text" id="btnText" value="{{ fields.btn_text or '' }}" placeholder="View Offer >>" style="flex:1">
+          <button type="button" class="btn ghost sm" id="btnSuggest">✨ Suggest</button>
+        </div></div>
+      <div class="f"><label class="small">Button link</label>
+        <input name="btn_url" value="{{ fields.btn_url or '' }}" placeholder="https://example.com/offer"></div>
+      <div class="f full"><label class="small">Button style</label>
+        <div class="btnstyles" id="btnStyles">
+          {% for v,lbl in [('filled','Filled'),('outline','Outline'),('pill','Pill'),('link','Text link')] %}
+          <label><input type="radio" name="btn_style_r" value="{{ v }}" {{ 'checked' if (fields.btn_style or 'filled')==v }}> {{ lbl }}</label>
+          {% endfor %}
+        </div></div>
+    </div>
+  </div>
+
+  <!-- SIGN-OFF + ADDRESS + SOCIAL -->
+  <div class="card">
+    <div class="qe-grid">
+      <div class="f full"><label>Sign-off</label>
+        <input name="signoff" value="{{ fields.signoff or '' }}" placeholder="Regards, Team BankBazaar"></div>
+      <div class="f full"><label>🔗 Social links <span class="faint small">— shown as icons in the footer (leave blank to hide)</span></label>
+        <div class="qe-grid" style="gap:8px">
+          <input name="soc_facebook"  value="{{ fields.soc_facebook or '' }}"  placeholder="📘 Facebook URL">
+          <input name="soc_instagram" value="{{ fields.soc_instagram or '' }}" placeholder="📸 Instagram URL">
+          <input name="soc_twitter"   value="{{ fields.soc_twitter or '' }}"   placeholder="🐦 X / Twitter URL">
+          <input name="soc_linkedin"  value="{{ fields.soc_linkedin or '' }}"  placeholder="💼 LinkedIn URL">
+          <input name="soc_youtube"   value="{{ fields.soc_youtube or '' }}"   placeholder="▶️ YouTube URL">
+          <input name="soc_whatsapp"  value="{{ fields.soc_whatsapp or '' }}"  placeholder="💬 WhatsApp URL">
+        </div></div>
+      <div class="f full">
+        <label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="addrToggle" style="width:auto" {{ 'checked' if fields.address }}>
+          Add business address in footer <span class="faint small">(builds trust + good for compliance)</span></label>
+        <textarea name="address" id="addrBox" placeholder="Zyvo Tools, Tambaram, Chennai 600045&#10;+91 92949 69697 · hello@zyvo.in"
+          style="margin-top:6px;min-height:64px;{{ '' if fields.address else 'display:none' }}">{{ fields.address or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="gap:8px;margin-top:4px">
+    <button class="btn" type="button" id="qeSaveBtn">💾 Save template</button>
+    <button class="btn ghost" type="button" id="qePreviewBtn">👁 Preview</button>
+    <a class="btn ghost" href="{{ url_for('admin_templates') if target=='system' else url_for('templates', tab='mine') }}">Cancel</a>
+  </div>
+</form>
+
+<div class="qe-preview card" id="qePreview"></div>
+
+<script src="{{ url_for('static', filename='vendor/quill/quill.min.js') }}"></script>
+<script>
+(function(){
+  var form=document.getElementById('qeForm');
+  var bodyField=document.getElementById('qeBodyField');
+  var quill=null;
+  var COMPANY={{ company|tojson }};
+  var csrf=form.csrf_token.value;
+
+  // ---- mode switch ----
+  window.setMode=function(m){
+    var auto=m==='auto';
+    document.getElementById('autoPanel').style.display=auto?'block':'none';
+    document.getElementById('modeAuto').classList.toggle('on',auto);
+    document.getElementById('modeManual').classList.toggle('on',!auto);
+  };
+
+  // ---- Quill rich text ----
+  function bootFallback(){
+    document.getElementById('qeEditor').style.display='none';
+    document.getElementById('qeFallback').style.display='block';
+  }
+  if(window.Quill){
+    try{ quill=new Quill('#qeEditor',{theme:'snow',modules:{toolbar:[
+      ['bold','italic'],[{list:'bullet'},{list:'ordered'}],['link'],['clean']]}}); }
+    catch(e){ bootFallback(); }
+  } else { bootFallback(); }
+
+  window.insertVar=function(tok){
+    if(quill){ var r=quill.getSelection(true); quill.insertText(r?r.index:quill.getLength(), tok, 'user'); }
+    else { var ta=document.getElementById('qeFallbackArea'); var p=ta.selectionStart||ta.value.length;
+      ta.value=ta.value.slice(0,p)+tok+ta.value.slice(p); }
+  };
+  // Insert a variable into a plain text input (subject / preview text).
+  window.insertField=function(id,tok){
+    var el=document.getElementById(id); var p=el.selectionStart!=null?el.selectionStart:el.value.length;
+    el.value=el.value.slice(0,p)+tok+el.value.slice(p); el.focus();
+  };
+  // One-click colour theme → set the accent everywhere.
+  window.setTheme=function(hex){ document.getElementById('accentField').value=hex; };
+  function bodyHtml(){ return quill?quill.root.innerHTML:document.getElementById('qeFallbackArea').value; }
+
+  // ---- button style radios → hidden field ----
+  document.getElementById('btnStyles').addEventListener('change',function(e){
+    if(e.target.name==='btn_style_r') document.getElementById('qeBtnStyle').value=e.target.value;
+  });
+
+  // ---- address toggle ----
+  document.getElementById('addrToggle').addEventListener('change',function(){
+    document.getElementById('addrBox').style.display=this.checked?'block':'none';
+    if(!this.checked) document.getElementById('addrBox').value='';
+  });
+
+  // ---- image upload (logo/header auto-resize to the recommended size) ----
+  function uploadImage(fileEl,urlEl,statusEl,thumbEl,kind){
+    var f=fileEl.files[0]; if(!f) return;
+    if(f.size>12*1024*1024){ statusEl.textContent='Too large (max 12 MB).'; return; }
+    statusEl.textContent='Uploading…';
+    var fd=new FormData(); fd.append('file',f); if(kind) fd.append('kind',kind);
+    fetch('{{ url_for("upload_image") }}',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+      .then(function(r){ return r.json().then(function(j){return{ok:r.ok,j:j};}); })
+      .then(function(res){ if(!res.ok){ statusEl.textContent=res.j.error||'Failed.'; return; }
+        urlEl.value=res.j.url; statusEl.textContent='✓ '+(res.j.note||'Uploaded');
+        if(thumbEl){ thumbEl.src=res.j.url; thumbEl.style.display='block'; } })
+      .catch(function(){ statusEl.textContent='Upload failed.'; });
+  }
+  function wireUpload(btn,file,url,status,thumb,kind){
+    document.getElementById(btn).addEventListener('click',function(){ document.getElementById(file).click(); });
+    document.getElementById(file).addEventListener('change',function(){
+      uploadImage(this,document.getElementById(url),document.getElementById(status),thumb?document.getElementById(thumb):null,kind); });
+  }
+  wireUpload('logoBtn','logoFile','logoUrl','logoStatus',null,'logo');
+  wireUpload('heroBtn','heroFile','heroUrl','heroStatus','heroThumb','header');
+  wireUpload('imgBtn','imgFile','imgUrl','imgStatus',null,'header');
+
+  // ---- optional block toggles (show/hide each block's fields) ----
+  function wireToggle(cbId,boxId){
+    var cb=document.getElementById(cbId), box=document.getElementById(boxId);
+    if(!cb||!box) return;
+    cb.addEventListener('change',function(){ box.style.display=cb.checked?'':'none'; });
+  }
+  wireToggle('blkFeatures','featuresBox');
+  wireToggle('blkImage','imageBox');
+  wireToggle('blkOffer','offerBox');
+  wireToggle('blkTesti','testiBox');
+
+  // ---- industry presets — prefill colour, copy & feature cards in one click.
+  // Only fills empty fields, so it never clobbers what the user already wrote.
+  window.applyPreset=function(key){
+    var data=JSON.parse(document.getElementById('presetData').textContent);
+    var p=data.filter(function(x){return x.key===key;})[0];
+    if(!p) return;
+    document.getElementById('accentField').value=p.accent;
+    var subj=document.getElementById('subjField'); if(subj&&!subj.value.trim()) subj.value=p.subject;
+    var pre=document.getElementById('preField'); if(pre&&!pre.value.trim()) pre.value=p.preheader;
+    var bodyEmpty=quill?(quill.getText().trim()===''):(!document.getElementById('qeFallbackArea').value.trim());
+    if(bodyEmpty){
+      if(quill){ quill.clipboard.dangerouslyPasteHTML(p.body); }
+      else { document.getElementById('qeFallbackArea').value=p.body; }
+    }
+    var bt=document.getElementById('btnText'); if(bt&&!bt.value.trim()) bt.value=p.btn_text;
+    if(p.features&&p.features.length){
+      var cb=document.getElementById('blkFeatures');
+      cb.checked=true; document.getElementById('featuresBox').style.display='';
+      p.features.forEach(function(fc,idx){
+        var n=idx+1;
+        var ic=document.querySelector('[name=feat'+n+'_icon]');
+        var ti=document.querySelector('[name=feat'+n+'_title]');
+        var tx=document.querySelector('[name=feat'+n+'_text]');
+        if(ic&&!ic.value.trim()) ic.value=fc[0];
+        if(ti&&!ti.value.trim()) ti.value=fc[1];
+        if(tx&&!tx.value.trim()) tx.value=fc[2];
+      });
+    }
+    document.querySelectorAll('.preset-btn').forEach(function(b){ b.classList.toggle('selected',b.dataset.key===key); });
+    var formSec=document.getElementById('templateFormSection'); if(formSec) formSec.style.display='';
+  };
+
+  // ---- image generate (banner / logo) ----
+  function genImage(kind,urlEl,statusEl,thumbEl){
+    statusEl.textContent='Generating…';
+    var fd=new FormData();
+    fd.append('kind',kind);
+    fd.append('accent',document.getElementById('accentField').value);
+    fd.append('company',COMPANY||'Your Company');
+    fd.append('headline',document.getElementById('subjField').value||'');
+    fetch('{{ url_for("generate_image") }}',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j.url){ urlEl.value=j.url; statusEl.textContent='✓ Generated';
+        if(thumbEl){ thumbEl.src=j.url; thumbEl.style.display='block'; } } else statusEl.textContent='Failed.'; })
+      .catch(function(){ statusEl.textContent='Generate failed.'; });
+  }
+  document.getElementById('heroGen').addEventListener('click',function(){
+    genImage('banner',document.getElementById('heroUrl'),document.getElementById('heroStatus'),document.getElementById('heroThumb')); });
+  document.getElementById('logoGen').addEventListener('click',function(){
+    genImage('logo',document.getElementById('logoUrl'),document.getElementById('logoStatus'),null); });
+
+  // ---- AI suggest button text ----
+  document.getElementById('btnSuggest').addEventListener('click',function(){
+    var opts=['View Offer >>','Claim Now','Book Site Visit','Get Started','Apply Today','See Details'];
+    document.getElementById('btnText').value=opts[Math.floor(Math.random()*opts.length)]; });
+
+  // ---- submit actions ----
+  function sync(){ bodyField.value=bodyHtml(); }
+  document.getElementById('qeSaveBtn').addEventListener('click',function(){
+    if(!form.name.value.trim()){ alert('Please give the template a name.'); form.name.focus(); return; }
+    var fh=document.getElementById('qeFolderHidden');
+    if(fh && !fh.value){ alert('Please choose a category at the top before saving.');
+      var box=document.getElementById('catPickerBox'); if(box) box.scrollIntoView({behavior:'smooth'}); return; }
+    document.getElementById('qeAction').value='save'; sync(); form.submit(); });
+  document.getElementById('qeAiBtn').addEventListener('click',function(){
+    if(!document.getElementById('aiTopic').value.trim()){ alert('Describe the email first.'); return; }
+    document.getElementById('qeAction').value='ai'; sync(); form.submit(); });
+
+  // If we just came back from AI generation, keep Auto mode open.
+  {% if edit and fields.body_html %}{% endif %}
+
+  // ---- optional blocks for the live preview (mirrors the server render) ----
+  function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function previewBlocks(accent){
+    var html='';
+    // Feature cards, in rows of up to three.
+    if(document.getElementById('blkFeatures').checked){
+      var cards=[];
+      for(var i=1;i<=6;i++){
+        var t=(document.querySelector('[name=feat'+i+'_title]').value||'').trim();
+        if(!t) continue;
+        cards.push([(document.querySelector('[name=feat'+i+'_icon]').value||'⭐').trim(),t,
+          (document.querySelector('[name=feat'+i+'_text]').value||'').trim()]);
+      }
+      if(cards.length){
+        var rows='';
+        for(var j=0;j<cards.length;j+=3){
+          var grp=cards.slice(j,j+3), w=Math.floor(100/grp.length), cells='';
+          grp.forEach(function(c){ cells+='<td valign="top" width="'+w+'%" style="padding:12px 10px;text-align:center"><div style="font-size:30px">'+esc(c[0])+'</div><div style="font-weight:bold;color:#222;margin:8px 0 4px">'+esc(c[1])+'</div><div style="font-size:13px;color:#555">'+esc(c[2])+'</div></td>'; });
+          rows+='<tr>'+cells+'</tr>';
+        }
+        html+='<div style="padding:6px 18px 12px"><table width="100%" style="border-collapse:collapse">'+rows+'</table></div>';
+      }
+    }
+    // Standalone image block.
+    if(document.getElementById('blkImage').checked){
+      var iu=document.getElementById('imgUrl').value.trim();
+      if(iu){
+        var cap=(form.img_caption.value||'').trim();
+        html+='<div style="padding:8px 28px 14px"><img src="'+iu+'" style="width:100%;display:block;border-radius:6px">'+
+          (cap?'<div style="font-size:12px;color:#888;text-align:center;padding:8px 0 0">'+esc(cap)+'</div>':'')+'</div>';
+      }
+    }
+    // Highlighted offer panel.
+    if(document.getElementById('blkOffer').checked){
+      var oh=(form.offer_headline.value||'').trim(), os=(form.offer_sub.value||'').trim(), oc=(form.offer_code.value||'').trim();
+      if(oh||oc){
+        html+='<div style="padding:8px 28px 16px"><div style="background:'+accent+';border-radius:10px;padding:26px 20px;text-align:center">'+
+          (oh?'<div style="font-size:26px;font-weight:800;color:#fff">'+esc(oh)+'</div>':'')+
+          (os?'<div style="font-size:14px;color:#eef2ff;margin-top:6px">'+esc(os)+'</div>':'')+
+          (oc?'<div style="margin-top:14px"><span style="display:inline-block;border:2px dashed #fff;border-radius:6px;padding:8px 18px;font-weight:bold;letter-spacing:2px;color:#fff">'+esc(oc)+'</span></div>':'')+
+          '</div></div>';
+      }
+    }
+    // Testimonial / quote.
+    if(document.getElementById('blkTesti').checked){
+      var q=(form.quote.value||'').trim();
+      if(q){
+        var who=esc((form.quote_author.value||'').trim()), role=(form.quote_role.value||'').trim();
+        if(role) who+=' <span style="color:#888;font-weight:normal">· '+esc(role)+'</span>';
+        html+='<div style="padding:8px 28px 16px"><div style="background:#f6f7fb;border-left:4px solid '+accent+';border-radius:6px;padding:18px 22px"><div style="font-style:italic;color:#333;line-height:1.6">&ldquo;'+esc(q)+'&rdquo;</div><div style="font-weight:bold;color:#222;margin-top:10px;font-size:13px">'+who+'</div></div></div>';
+      }
+    }
+    return html;
+  }
+
+  // ---- live preview ----
+  document.getElementById('qePreviewBtn').addEventListener('click',function(){
+    var box=document.getElementById('qePreview');
+    if(box.style.display==='block'){ box.style.display='none'; return; }
+    var accent=document.getElementById('accentField').value||'#3b4edb';
+    var logo=document.getElementById('logoUrl').value.trim();
+    var hero=document.getElementById('heroUrl').value.trim();
+    var bt=document.getElementById('btnText').value.trim(), bu=form.btn_url.value.trim()||'#';
+    var st=document.getElementById('qeBtnStyle').value;
+    var bcss=st==='outline'?('background:#fff;color:'+accent+';border:2px solid '+accent+';padding:12px 34px;border-radius:6px')
+      :st==='pill'?('background:'+accent+';color:#fff;padding:14px 40px;border-radius:999px')
+      :st==='link'?('color:'+accent+';text-decoration:underline')
+      :('background:'+accent+';color:#fff;padding:14px 36px;border-radius:6px');
+    var logoMode=(document.querySelector('input[name=logo_mode]:checked')||{}).value||'logo_name';
+    var comp=document.getElementById('companyField').value||COMPANY||'Your Company';
+    var nameSpan='<span style="font-size:18px;font-weight:bold;color:#222;vertical-align:middle">'+comp+'</span>';
+    var imgTag=logo?('<img src="'+logo+'" style="height:38px;vertical-align:middle">'):'';
+    var logoCell = (logoMode==='name'||(logoMode!=='logo'&&!logo)) ? nameSpan
+      : (logoMode==='logo'&&logo) ? imgTag
+      : (logo ? imgTag+'<span style="display:inline-block;width:10px"></span>'+nameSpan : nameSpan);
+    var heroUrl=(form.hero_url.value||'').trim();
+    var heroImg=hero?('<img src="'+hero+'" style="width:100%;display:block">'):'';
+    var heroRow=heroImg?('<div style="padding:20px 0 0">'+(heroUrl?('<a href="'+heroUrl+'">'+heroImg+'</a>'):heroImg)+'</div>'):'';
+    // Social icons row (matches the saved footer) — solid circle badges in
+    // the chosen accent color with the real icon glyph on top.
+    var socDefs=[['facebook.png','Facebook',form.soc_facebook.value],['instagram.png','Instagram',form.soc_instagram.value],['x.png','X',form.soc_twitter.value],['linkedin.png','LinkedIn',form.soc_linkedin.value],['youtube.png','YouTube',form.soc_youtube.value],['whatsapp.png','WhatsApp',form.soc_whatsapp.value]];
+    var socRow=socDefs.filter(function(s){return (s[2]||'').trim();})
+      .map(function(s){return '<a href="'+s[2].trim()+'" title="'+s[1]+'" style="display:inline-block;margin:0 5px;text-decoration:none"><table cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse"><tr><td align="center" valign="middle" width="36" height="36" bgcolor="'+accent+'" style="width:36px;height:36px;background:'+accent+';border-radius:50%"><img src="/static/icons/'+s[0]+'" width="18" height="18" alt="'+s[1]+'" style="display:block;margin:9px auto;border:0"></td></tr></table></a>';}).join('');
+    socRow=socRow?('<div style="text-align:center;padding:16px 28px 4px">'+socRow+'</div>'):'';
+    var button=bt?('<div style="text-align:center;padding:26px"><a href="'+bu+'" style="'+bcss+';text-decoration:none;font-weight:bold;display:inline-block">'+bt+'</a></div>'):'';
+    var addr=document.getElementById('addrBox').value.trim();
+    var addrRow=addr?('<div style="padding:0 28px 18px;color:#777;font-size:12px">'+addr.replace(/\n/g,'<br>')+'</div>'):'';
+    var pre=document.getElementById('preField').value.trim();
+    var preLine=pre?('<div style="font-size:11px;color:#aaa;padding:2px 8px 6px">Inbox preview: '+pre+'</div>'):'';
+    box.innerHTML='<div style="background:#e7e7e7;padding:18px"><div style="max-width:600px;margin:0 auto">'+preLine+'<div style="background:#fff;border-radius:4px;font-family:Arial">'+
+      '<div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div>'+logoCell+'</div><div style="font-size:12px"><a href="#" style="color:#888;text-decoration:none">View in browser</a></div></div><div style="height:4px;background:'+accent+'"></div>'+heroRow+
+      '<div style="padding:24px 28px;color:#222;font-size:15px;line-height:1.6"><p>Hi Mariappan,</p>'+bodyHtml().replace(/\{\{name[^}]*\}\}/g,'Mariappan').replace(/\{\{company[^}]*\}\}/g,comp).replace(/\{\{city[^}]*\}\}/g,'Chennai').replace(/\{\{state[^}]*\}\}/g,'Tamil Nadu')+'</div>'+previewBlocks(accent)+button+
+      '<div style="padding:8px 28px 18px;color:#222;font-size:14px">'+(form.signoff.value||'Regards')+'</div>'+socRow+addrRow+
+      '<div style="padding:18px 28px;border-top:1px solid #e5e5e5;color:#999;font-size:11px;text-align:center">This is an auto-generated email. Please do not reply.<br><a href="#" style="color:'+accent+'">Unsubscribe</a> | <a href="#" style="color:'+accent+'">View in browser</a></div>'+
+      '</div></div></div>';
+    box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  });
+})();
+
+/* ── Category Picker logic ── */
+window.pickCategory = function(cat, type, btn) {
+  // Highlight selected button
+  document.querySelectorAll('.cat-pick-btn').forEach(function(b){ b.classList.remove('selected'); });
+  btn.classList.add('selected');
+  // Set the hidden folder field
+  var h = document.getElementById('qeFolderHidden');
+  if (h) h.value = cat;
+  // Show badge
+  var badge = document.getElementById('catPickedBadge');
+  if (badge) { badge.textContent = (type==='system'?'🌐 ':'📁 ') + cat; badge.style.display=''; }
+  // Reveal the form
+  var formSec = document.getElementById('templateFormSection');
+  if (formSec) { formSec.style.display=''; formSec.scrollIntoView({behavior:'smooth',block:'start'}); }
+};
+
+/* Redirect cat-manager forms back to this page after save */
+window.catMgrSubmit = function(f) {
+  var base = f.getAttribute('action');
+  f.setAttribute('action', base + '?_next=' + encodeURIComponent(window.location.href));
+  return true;
+};
+
+/* Auto-select folder only when EDITING an existing template (value set server-side) */
+(function(){
+  var existingFolder = document.getElementById('qeFolderHidden');
+  var isEdit = {% if edit and edit.folder %}'{{ edit.folder }}'{% else %}''{% endif %};
+  if (isEdit && existingFolder && existingFolder.value) {
+    var btn = document.querySelector('.cat-pick-btn[data-cat="'+existingFolder.value+'"]');
+    if (btn) pickCategory(existingFolder.value, btn.dataset.type || 'my', btn);
+  }
+})();
+</script>
+{% endblock %}

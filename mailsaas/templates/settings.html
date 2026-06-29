@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="muted">Profile, security, 2FA, branding, time zone &amp; audit logs.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>Profile</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="profile">
+      <label>Full name</label><input name="name" value="{{ user.name }}">
+      <label>Company / workspace</label><input name="company" value="{{ account.name }}">
+      <label>Time zone</label>
+      <select name="timezone">{% for tz in timezones %}
+        <option {{ 'selected' if tz==user.timezone }}>{{ tz }}</option>{% endfor %}</select>
+      <div style="margin-top:12px"><button class="btn">Save profile</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Security</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="password">
+      <label>Current password</label><input type="password" name="current">
+      <label>New password</label><input type="password" name="new" placeholder="6+ characters">
+      <div style="margin-top:12px"><button class="btn">Change password</button></div>
+    </form>
+    <hr style="border-color:var(--line);margin:18px 0">
+    <div class="section-head">
+      <div><b>Two-factor authentication</b>
+        <div class="faint small">{{ 'Enabled 🔒' if user.twofa else ('Setup in progress' if setup_uri else 'Disabled') }}</div></div>
+      {% if user.twofa %}
+        <form class="inline-form" method="post"><input type="hidden" name="action" value="twofa_disable">
+          <button class="btn danger sm">Disable 2FA</button></form>
+      {% elif not setup_uri %}
+        <form class="inline-form" method="post"><input type="hidden" name="action" value="twofa_setup">
+          <button class="btn sm">Enable 2FA</button></form>
+      {% endif %}
+    </div>
+    {% if setup_uri %}
+      <div class="card tight" style="background:var(--panel2);margin-top:12px">
+        <p class="small">1. Add this key to Google Authenticator / Authy / 1Password:</p>
+        <div class="code" style="text-align:center;font-size:1.05rem;letter-spacing:.15em">{{ totp_secret }}</div>
+        <p class="small" style="margin-top:8px">2. Or scan this QR:</p>
+        <div style="text-align:center">
+          <img alt="2FA QR" width="150" height="150"
+               src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ setup_uri|urlencode }}">
+          <div class="faint small">(offline? use the key above)</div>
+        </div>
+        <form method="post" style="margin-top:10px">
+          <input type="hidden" name="action" value="twofa_enable">
+          <label>3. Enter the 6-digit code to finish</label>
+          <div class="row"><input name="code" placeholder="123456" maxlength="6" style="flex:2">
+            <button class="btn" style="flex:1">Verify &amp; enable</button></div>
+        </form>
+      </div>
+    {% endif %}
+    <hr style="border-color:var(--line);margin:18px 0">
+    <div class="section-head">
+      <div><b>Active sessions</b><div class="faint small">Sliding 30-min timeout · HttpOnly cookies</div></div>
+      <form class="inline-form" method="post"><input type="hidden" name="action" value="signout_all">
+        <button class="btn ghost sm">Sign out everywhere</button></form>
+    </div>
+    <hr style="border-color:var(--line);margin:18px 0">
+    <form method="post">
+      <input type="hidden" name="action" value="ipallow">
+      <label>IP restrictions <span class="faint">(comma-separated IPs / CIDRs — blank = allow all)</span></label>
+      <input name="ip_allowlist" value="{{ account.ip_allowlist or '' }}" placeholder="203.0.113.4, 10.0.0.0/24">
+      <div class="faint small" style="margin:6px 0">Your current IP: <code>{{ request.remote_addr }}</code> — it must be included or the save is rejected.</div>
+      <button class="btn sm">Save IP restrictions</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Device sessions &amp; login history</h2>
+  <table>
+    <thead><tr><th>User</th><th>IP</th><th>Device</th><th>Result</th><th>When</th></tr></thead>
+    <tbody>
+    {% for l in logins %}
+      <tr><td class="small">{{ l.user_email }}</td><td class="faint small">{{ l.ip }}</td>
+        <td class="faint small">{{ (l.agent or '—')[:40] }}</td>
+        <td><span class="badge {{ 'b-valid' if l.ok else 'b-invalid' }}">{{ 'success' if l.ok else 'failed' }}</span></td>
+        <td class="faint small">{{ l.created_at }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No logins recorded.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Branding</h2>
+    <label>Brand colour</label><input type="text" value="#5b8cff" placeholder="#5b8cff">
+    <label>Logo URL</label><input placeholder="https://…/logo.png">
+    <div class="faint small" style="margin-top:8px">White-label is available on Business &amp; Enterprise plans.</div>
+  </div>
+  <div class="card">
+    <h2>Audit logs</h2>
+    <div style="max-height:240px;overflow:auto">
+    {% for a in audit %}
+      <div class="kv"><span class="small">{{ a.action }}</span><span class="faint small">{{ a.created_at }}</span></div>
+    {% else %}
+      <div class="empty">No audit events.</div>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

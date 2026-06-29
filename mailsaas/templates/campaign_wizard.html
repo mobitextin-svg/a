@@ -1,0 +1,833 @@
+{% extends "base.html" %}
+{% block title %}New Campaign{% endblock %}
+{% block content %}
+<div class="section-head"><h1>🚀 New Campaign</h1>
+  <a class="btn ghost sm" href="{{ url_for('campaigns') }}">← All campaigns</a></div>
+
+{# ---- Progress dots ---- #}
+<div class="wiz-steps" id="wizSteps">
+  <div class="wiz-dot active"><span class="n">1</span> Campaign Details</div>
+  <div class="wiz-dot"><span class="n">2</span> Email Template</div>
+  <div class="wiz-dot"><span class="n">3</span> Recipients</div>
+  <div class="wiz-dot"><span class="n">4</span> Attachments</div>
+  <div class="wiz-dot"><span class="n">5</span> Sender &amp; Domain</div>
+  <div class="wiz-dot"><span class="n">6</span> Inbox Analysis</div>
+  <div class="wiz-dot"><span class="n">7</span> Send</div>
+</div>
+
+<form method="post" id="wizForm" enctype="multipart/form-data">
+  <input type="hidden" name="decision" id="decision" value="draft">
+  <input type="hidden" name="attach_token" id="attach_token" value="{{ attach_token }}">
+
+  {# =========================================================
+     STEP 1 — Campaign Details (name only)
+     ========================================================= #}
+  <div class="wiz-step active card">
+    <h2>① Campaign Details</h2>
+    <label>Campaign Name <span class="faint small">(internal only — subscribers never see this)</span></label>
+    <input name="name" id="f_name" placeholder="June Festival Offer" required autofocus>
+    <p class="faint small" style="margin-top:8px">Just a name to find this campaign later. You'll pick the template next.</p>
+  </div>
+
+  {# =========================================================
+     STEP 2 — Email Template (select only — no editing here)
+     ========================================================= #}
+  <div class="wiz-step card" style="padding:0">
+    <div class="tpl-wiz-layout">
+      {# LEFT sidebar — category tree #}
+      <aside class="tpl-wiz-sidebar">
+        <div class="tpl-wiz-sidebar-head">Categories</div>
+        <div class="tpl-wiz-section-label">🌐 System</div>
+        <button type="button" class="tpl-cat-btn active" data-cat="__all">All Templates</button>
+        {% set sys_cats = sys_categories if sys_categories else ['Marketing','Welcome','Newsletter','Sales','Offers','Events','Transactional'] %}
+        {% for cat in sys_cats %}
+        <button type="button" class="tpl-cat-btn" data-cat="sys:{{ cat }}">{{ cat }}</button>
+        {% endfor %}
+        <div class="tpl-wiz-section-label" style="margin-top:10px">👤 My Categories</div>
+        {% for f in folders %}
+        <button type="button" class="tpl-cat-btn" data-cat="my:{{ f }}">{{ f }}</button>
+        {% endfor %}
+      </aside>
+
+      {# RIGHT — pick a template, then preview + edit subject/preview only #}
+      <div class="tpl-wiz-main">
+        <div class="tpl-wiz-header">
+          <h2 style="margin:0;font-size:1.1rem">② Email Template</h2>
+          <span class="faint small" id="tplCatLabel">All Templates</span>
+        </div>
+
+        <div class="tpl-wiz-cards" id="tplCards">
+          <p class="faint" id="tplCardsEmpty" style="display:none">No templates in this category.</p>
+        </div>
+
+        {# Carried to the backend; set by template selection, never edited here. #}
+        <input type="hidden" name="body" id="f_body">
+
+        <div style="padding:14px 16px;border-top:1px solid var(--border)">
+          <div id="tplChosen" class="faint small" style="margin-bottom:10px">
+            No template selected yet — pick one above. Need a new design?
+            <a href="{{ url_for('templates') }}" target="_blank">build it in the Template Builder</a>.
+          </div>
+          <label>Subject Line <span class="faint small">— what the reader sees in their inbox</span></label>
+          <input name="subject" id="f_subject" placeholder="Select a template to load its subject…">
+          <label style="margin-top:12px">Preview Text <span class="faint small">(optional) — short line shown after the subject</span></label>
+          <input name="preview_text" id="f_preview" placeholder="Grab the deal before it ends…">
+          <p class="faint small" style="margin-top:8px">You can fine-tune the Subject &amp; Preview Text here. The template design itself is edited in the Template Builder, not in the campaign.</p>
+
+          <div id="tplPreviewWrap" style="display:none;margin-top:12px">
+            <label>Template Preview</label>
+            <iframe id="tplPreview" class="tpl-preview-frame" title="Template preview"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# =========================================================
+     STEP 3 — Recipients (card-based UI)
+     ========================================================= #}
+  <div class="wiz-step card">
+    <h2>③ Recipients</h2>
+    <p class="muted small">Who receives this campaign? Select one option below.</p>
+
+    {# Hidden radio inputs — cards update these #}
+    <input type="radio" name="rcpt_mode" value="all"   id="rm_all"   checked style="display:none">
+    <input type="radio" name="rcpt_mode" value="list"  id="rm_list"  style="display:none">
+    <input type="radio" name="rcpt_mode" value="single" id="rm_single" style="display:none">
+    <input type="radio" name="rcpt_mode" value="paste" id="rm_paste" style="display:none">
+    <input type="radio" name="rcpt_mode" value="txt"   id="rm_txt"   style="display:none">
+    <input type="radio" name="rcpt_mode" value="excel" id="rm_excel" style="display:none">
+
+    <div class="rcpt-cards">
+
+      {# --- All Active Contacts --- #}
+      <div class="rcpt-card selected" data-mode="all">
+        <div class="rcpt-card-icon">📂</div>
+        <div class="rcpt-card-body">
+          <div class="rcpt-card-title">All Active Contacts</div>
+          <div class="rcpt-card-desc faint small">{{ all_active }} contacts in your account</div>
+        </div>
+        <button type="button" class="btn sm rcpt-select-btn">Select</button>
+      </div>
+
+      <div class="rcpt-divider"></div>
+
+      {# --- Existing Contact Lists --- #}
+      <div class="rcpt-card" data-mode="list">
+        <div class="rcpt-card-icon">📋</div>
+        <div class="rcpt-card-body">
+          <div class="rcpt-card-title">Existing Contact Lists</div>
+          <div class="rcpt-card-desc faint small">{{ rcpt_lists|length }} lists · {{ rcpt_lists|sum(attribute='n') }} contacts</div>
+        </div>
+        <button type="button" class="btn sm rcpt-select-btn">Select List</button>
+      </div>
+      <div class="rcpt-expand" data-for="list" style="display:none">
+        {% if rcpt_lists %}
+        <div class="list-check-grid">
+          {% for l in rcpt_lists %}
+          <label class="list-check-item">
+            <input type="checkbox" name="list_ids" value="{{ l.id }}">
+            <span class="list-check-label">
+              <b>{{ l.name }}</b>
+              <span class="faint small">{{ l.n }} contacts</span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="faint small">No lists yet — <a href="{{ url_for('contacts') }}">create one in Contacts</a>.</p>
+        {% endif %}
+      </div>
+
+      <div class="rcpt-divider"></div>
+
+      {# --- Add Single Contact --- #}
+      <div class="rcpt-card" data-mode="single">
+        <div class="rcpt-card-icon">✉️</div>
+        <div class="rcpt-card-body">
+          <div class="rcpt-card-title">Add Single Contact</div>
+          <div class="rcpt-card-desc faint small">Send to one specific recipient</div>
+        </div>
+        <button type="button" class="btn sm rcpt-select-btn">Select</button>
+      </div>
+      <div class="rcpt-expand" data-for="single" style="display:none">
+        <div class="row" style="gap:8px;margin-top:8px">
+          <input name="single_email" placeholder="person@example.com" style="flex:2">
+          <input name="single_name"  placeholder="Name (optional)"    style="flex:1">
+        </div>
+      </div>
+
+      <div class="rcpt-divider"></div>
+
+      {# --- Copy & Paste --- #}
+      <div class="rcpt-card" data-mode="paste">
+        <div class="rcpt-card-icon">📋</div>
+        <div class="rcpt-card-body">
+          <div class="rcpt-card-title">Copy &amp; Paste Emails</div>
+          <div class="rcpt-card-desc faint small">Paste a list of addresses directly</div>
+        </div>
+        <button type="button" class="btn sm rcpt-select-btn">Select</button>
+      </div>
+      <div class="rcpt-expand" data-for="paste" style="display:none">
+        <textarea name="paste_emails" style="min-height:100px;margin-top:8px"
+          placeholder="jane@acme.com, Jane Doe&#10;bob@acme.com&#10;raj@x.com, Raj"></textarea>
+        <div class="row" style="gap:8px;align-items:center;margin-top:6px">
+          <span class="faint small">One per line. Optional name after a comma.</span>
+          <button type="button" class="btn sm">Import</button>
+        </div>
+      </div>
+
+      <div class="rcpt-divider"></div>
+
+      {# --- CSV / TXT --- #}
+      <div class="rcpt-card" data-mode="txt">
+        <div class="rcpt-card-icon">📄</div>
+        <div class="rcpt-card-body">
+          <div class="rcpt-card-title">Import CSV / TXT</div>
+          <div class="rcpt-card-desc faint small">Upload a .csv or .txt file</div>
+        </div>
+        <button type="button" class="btn sm rcpt-select-btn">Browse</button>
+      </div>
+      <div class="rcpt-expand" data-for="txt" style="display:none;margin-top:8px">
+        <input type="file" name="rcpt_file" id="rcpt_file_txt" accept=".csv,.txt,.tsv">
+      </div>
+
+      <div class="rcpt-divider"></div>
+
+      {# --- Excel --- #}
+      <div class="rcpt-card" data-mode="excel">
+        <div class="rcpt-card-icon">📊</div>
+        <div class="rcpt-card-body">
+          <div class="rcpt-card-title">Import Excel</div>
+          <div class="rcpt-card-desc faint small">Upload a .xlsx or .xls file</div>
+        </div>
+        <button type="button" class="btn sm rcpt-select-btn">Browse</button>
+      </div>
+      <div class="rcpt-expand" data-for="excel" style="display:none;margin-top:8px">
+        <input type="file" name="rcpt_file" id="rcpt_file_excel" accept=".xlsx,.xls">
+        <span class="faint small">Emails are detected automatically from any column.</span>
+      </div>
+
+    </div>{# /rcpt-cards #}
+
+    {# Recipient Summary #}
+    <div class="rcpt-summary" id="rcptSummary">
+      <span>Total Contacts: <b id="sumTotal">{{ all_active }}</b></span>
+      <span class="rcpt-sum-sep">|</span>
+      <span>Estimated Valid: <b id="sumValid">{{ all_active }}</b></span>
+      <span class="rcpt-sum-sep">|</span>
+      <span>Duplicates: <b id="sumDups">0</b></span>
+      <span class="rcpt-sum-sep">|</span>
+      <span>Invalid: <b id="sumInvalid">0</b></span>
+    </div>
+  </div>
+
+  {# =========================================================
+     STEP 4 — Attachments 📎
+     ========================================================= #}
+  <div class="wiz-step card">
+    <h2>④ Attachments 📎</h2>
+    <p class="muted small">Attach files to this campaign. Optional — click <b>Next</b> to skip.</p>
+
+    <div id="attDrop" class="att-drop">
+      <div style="font-size:1.6rem">📤</div>
+      <div>Drag &amp; drop files here</div>
+      <div class="faint small">or</div>
+      <button type="button" class="btn sm" id="attPick">Upload Files</button>
+      <input type="file" id="attInput" multiple style="display:none"
+             accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.jpg,.jpeg,.png,.gif,.webp">
+      <div class="faint small" style="margin-top:8px">PDF · Office · Images · ZIP · CSV · TXT — max 10 MB/file, 25 MB total, 10 files</div>
+    </div>
+
+    <div id="attProg" class="att-prog" style="display:none"><div id="attBar" class="att-bar"></div></div>
+    <div id="attMsg" class="att-msg" style="display:none"></div>
+
+    <div id="attList" class="att-list"></div>
+
+    <div class="att-foot">
+      <span id="attCount">Files: 0 / 10</span>
+      <span id="attTotal">Total Size: 0 B / 25 MB</span>
+    </div>
+  </div>
+
+  {# =========================================================
+     STEP 5 — Sender & Domain
+     ========================================================= #}
+  <div class="wiz-step card">
+    <h2>⑤ Sender &amp; Domain</h2>
+    <div class="row" style="gap:12px">
+      <div style="flex:1">
+        <label>Sender Name</label>
+        <input name="from_name" id="f_fromname" placeholder="Acme Store">
+      </div>
+      <div style="flex:1">
+        <label>Sender Email</label>
+        {% if domains %}
+        <div class="row" style="gap:6px">
+          <input name="from_user" id="f_fromuser" placeholder="hello" style="flex:1">
+          <span style="align-self:center">@</span>
+          <select name="from_domain" id="f_fromdomain" style="flex:1">
+            {% for d in domains %}<option>{{ d.domain }}</option>{% endfor %}
+          </select>
+        </div>
+        <input type="hidden" name="from_email" id="f_fromemail">
+        {% else %}
+        <input name="from_email" id="f_fromemail" value="{{ default_from }}" placeholder="you@yourdomain.com">
+        <span class="faint small">Tip: add a domain in <a href="{{ url_for('domains') }}" target="_blank">Domains</a> for better delivery.</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# =========================================================
+     STEP 6 — Inbox Analysis
+     ========================================================= #}
+  <div class="wiz-step card">
+    <div class="section-head">
+      <h2>⑥ 📊 Inbox Analysis <span class="badge b-Running">⭐ Recommended</span></h2>
+      <button type="button" class="btn ghost sm" id="reAnalyze" style="display:none">↻ Re-check</button>
+    </div>
+    <p class="muted small">Run checks before sending. This step is optional — click <b>Skip</b> to continue.</p>
+    <div class="ana-check-list">
+      <span class="faint small">✓ Spam Score &nbsp;·&nbsp; ✓ Authentication (SPF, DKIM, DMARC) &nbsp;·&nbsp; ✓ Broken Links &nbsp;·&nbsp; ✓ Image Ratio &nbsp;·&nbsp; ✓ Subject Analysis</span>
+    </div>
+    <div id="anaBox" style="margin-top:14px">
+      <p class="faint">Click <b>Analyze</b> to run checks, or <b>Skip</b> to continue to the next step.</p>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button type="button" class="btn" id="runAnalyzeBtn">Analyze</button>
+      <button type="button" class="btn ghost" id="skipAnalyze">Skip →</button>
+    </div>
+  </div>
+
+  {# =========================================================
+     STEP 7 — Review / Send Now / Schedule
+     ========================================================= #}
+  <div class="wiz-step card wiz-review">
+    <h2>⑦ Review &amp; Send</h2>
+
+    {# Full Review Summary #}
+    <div class="review-summary" id="reviewBox" style="margin-bottom:22px"></div>
+
+    <div class="wiz-actions" style="margin-top:6px">
+      {# Save Draft #}
+      <div class="card" style="text-align:center">
+        <h3>💾 Save Draft</h3>
+        <p class="faint small">Work in progress. No emails are sent — edit &amp; finish later.</p>
+        <button type="button" class="btn ghost" data-decision="draft">Save Draft</button>
+      </div>
+
+      {# Save as Ready #}
+      <div class="card" style="text-align:center">
+        <h3>✅ Save as Ready</h3>
+        <p class="faint small">Reviewed and good to go. Marks the campaign Ready to send.</p>
+        <button type="button" class="btn" data-decision="ready" style="margin-top:18px">Save as Ready</button>
+      </div>
+
+      {# Schedule #}
+      <div class="card" style="text-align:center">
+        <h3>📅 Schedule</h3>
+        <p class="faint small">Send automatically at a chosen time.</p>
+        <label class="small" style="display:block;margin-bottom:4px;text-align:left">Date</label>
+        <input type="date" name="sched_date" id="f_scheddate" style="margin-bottom:8px;width:100%">
+        <label class="small" style="display:block;margin-bottom:4px;text-align:left">Time</label>
+        <input type="time" name="sched_time" id="f_schedtime" style="margin-bottom:10px;width:100%">
+        <input type="hidden" name="scheduled_at" id="f_schedat">
+        <button type="button" class="btn" data-decision="schedule">Save Schedule</button>
+      </div>
+
+      {# Send Now #}
+      <div class="card" style="text-align:center;border-color:var(--good)">
+        <h3>📤 Send Now</h3>
+        <p class="faint small">Immediately starts sending to all selected recipients.</p>
+        <button type="button" class="btn" data-decision="send" style="background:var(--good);margin-top:28px">Send Now</button>
+      </div>
+    </div>
+  </div>
+
+  {# ---- Nav ---- #}
+  <div class="wiz-nav">
+    <button type="button" class="btn ghost" id="wizBack" style="visibility:hidden">← Back</button>
+    <button type="button" class="btn" id="wizNext">Next →</button>
+  </div>
+</form>
+
+<style>
+/* ---- Recipient cards ---- */
+.rcpt-cards{display:flex;flex-direction:column;gap:0}
+.rcpt-card{display:flex;align-items:center;gap:14px;padding:14px 12px;border:2px solid transparent;border-radius:8px;cursor:pointer;transition:border-color .15s,background .15s}
+.rcpt-card:hover{background:var(--panel2,#f5f5f5)}
+.rcpt-card.selected{border-color:var(--accent,#4f46e5);background:color-mix(in srgb,var(--accent,#4f46e5) 6%,transparent)}
+.rcpt-card-icon{font-size:1.6rem;flex-shrink:0;width:36px;text-align:center}
+.rcpt-card-body{flex:1}
+.rcpt-card-title{font-weight:700;font-size:.95rem}
+.rcpt-card-desc{margin-top:2px}
+.rcpt-divider{height:1px;background:var(--border,#e2e8f0);margin:4px 0}
+.rcpt-expand{padding:10px 12px 4px 60px}
+.rcpt-summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;background:var(--panel2,#f5f5f5);border-radius:8px;border:1px solid var(--border,#e2e8f0);font-size:.9rem}
+.rcpt-sum-sep{color:var(--muted,#999)}
+.list-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:8px}
+.list-check-item{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:border-color .15s}
+.list-check-item:hover{border-color:var(--accent)}
+.list-check-label{display:flex;flex-direction:column;gap:2px}
+
+/* ---- Template step two-column ---- */
+.tpl-wiz-layout{display:flex;min-height:520px}
+.tpl-wiz-sidebar{width:200px;min-width:160px;border-right:1px solid var(--border);padding:12px 0;display:flex;flex-direction:column;flex-shrink:0}
+.tpl-wiz-sidebar-head{font-weight:700;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:0 14px 8px}
+.tpl-wiz-section-label{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 14px 3px}
+.tpl-cat-btn{display:flex;align-items:center;gap:6px;width:100%;padding:7px 14px;background:none;border:none;cursor:pointer;text-align:left;font-size:.88rem;border-radius:0;transition:background .12s;color:inherit}
+.tpl-cat-btn:hover{background:var(--panel2)}
+.tpl-cat-btn.active{background:color-mix(in srgb,var(--accent,#4f46e5) 10%,transparent);color:var(--accent,#4f46e5);font-weight:600}
+.tpl-wiz-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.tpl-wiz-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+.tpl-wiz-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;padding:14px 16px;overflow-y:auto;max-height:300px}
+.tpl-pick-card{border:2px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.tpl-pick-card:hover{border-color:var(--accent)}
+.tpl-pick-card.selected{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#4f46e5) 20%,transparent)}
+.tpl-pick-thumb{height:175px;background:var(--panel2);overflow:hidden;position:relative}
+.tpl-pick-thumb iframe{width:600px;height:700px;border:none;transform:scale(.25);transform-origin:0 0;pointer-events:none}
+.tpl-pick-thumb .ph{display:flex;align-items:center;justify-content:center;height:100%;font-size:2rem;color:var(--muted)}
+.tpl-pick-info{padding:8px 10px}
+.tpl-pick-name{font-weight:700;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tpl-pick-subj{font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.tpl-pick-use{width:100%;padding:6px;border:none;background:var(--accent,#4f46e5);color:#fff;cursor:pointer;font-size:.82rem;font-weight:600}
+.tpl-pick-use:hover{opacity:.9}
+.tpl-preview-frame{width:100%;height:480px;border:1px solid var(--border);border-radius:8px;background:#fff;margin-top:6px}
+.wiz-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:900px){.wiz-actions{grid-template-columns:repeat(2,1fr)}}
+
+/* ---- Review summary ---- */
+.review-summary{background:var(--panel2,#f5f5f5);border-radius:8px;padding:14px 16px;border:1px solid var(--border)}
+.review-summary .kv{display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--border)}
+.review-summary .kv:last-child{border-bottom:none}
+.review-summary .kv span:first-child{width:130px;color:var(--muted);flex-shrink:0}
+/* ---- Attachments step ---- */
+.att-drop{border:2px dashed var(--border);border-radius:12px;padding:26px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:6px;transition:.15s;background:var(--panel2)}
+.att-drop.over{border-color:var(--accent);background:rgba(80,130,255,.08)}
+.att-prog{height:8px;background:var(--panel2);border-radius:6px;margin-top:12px;overflow:hidden}
+.att-bar{height:100%;width:0;background:var(--accent);transition:width .15s}
+.att-msg{margin-top:12px;padding:9px 12px;border-radius:8px;font-size:.86rem}
+.att-msg.ok{background:#0f2e22;color:#4ade80}
+.att-msg.err{background:#34141a;color:#f87171}
+.att-list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.att-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);
+  border-radius:9px;background:var(--panel2)}
+.att-ico{font-size:1.1rem}
+.att-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att-size{color:var(--muted);font-size:.84rem;font-variant-numeric:tabular-nums}
+.att-rm{background:none;border:none;color:var(--bad);cursor:pointer;font-size:.82rem}
+.att-foot{display:flex;justify-content:space-between;margin-top:14px;padding-top:10px;
+  border-top:1px solid var(--border);font-size:.86rem;color:var(--muted);font-variant-numeric:tabular-nums}
+</style>
+
+<script type="application/json" id="tplData">{{ tpl_picker | tojson }}</script>
+<script>
+(function(){
+  var form  = document.getElementById('wizForm');
+  var steps = Array.prototype.slice.call(document.querySelectorAll('.wiz-step'));
+  var dots  = Array.prototype.slice.call(document.querySelectorAll('.wiz-dot'));
+  var cur   = 0;
+  var back  = document.getElementById('wizBack');
+  var next  = document.getElementById('wizNext');
+  var csrf  = (document.querySelector('meta[name=csrf-token]') || {}).content || '';
+
+  /* ---- Step navigation ---- */
+  function show(i) {
+    cur = i;
+    steps.forEach(function(s, idx){ s.classList.toggle('active', idx === i); });
+    dots.forEach(function(d, idx){
+      d.classList.toggle('active', idx === i);
+      d.classList.toggle('done', idx < i);
+    });
+    back.style.visibility = i === 0 ? 'hidden' : 'visible';
+    next.style.display = i === steps.length - 1 ? 'none' : '';
+    if (i === steps.length - 1) buildReview();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+
+  function valid(i) {
+    if (i === 0 && !form.name.value.trim()) { alert('Please enter a campaign name.'); return false; }
+    if (i === 2) {   // Recipients (now step 3)
+      var m = currentMode();
+      if (m === 'single' && !(form.single_email && form.single_email.value.trim())) { alert('Enter an email address.'); return false; }
+      if (m === 'paste'  && !(form.paste_emails && form.paste_emails.value.trim())) { alert('Paste at least one email.'); return false; }
+      if (m === 'list') {
+        if (!document.querySelectorAll('input[name=list_ids]:checked').length) { alert('Select at least one contact list.'); return false; }
+      }
+    }
+    return true;
+  }
+
+  next.addEventListener('click', function(){ if (valid(cur)) show(Math.min(cur + 1, steps.length - 1)); });
+  back.addEventListener('click', function(){ show(Math.max(cur - 1, 0)); });
+
+  /* ---- Recipient card selection ---- */
+  var allActive = {{ all_active|int }};
+  var listCounts = {};
+  {% for l in rcpt_lists %}listCounts[{{ l.id }}] = {{ l.n|int }};{% endfor %}
+
+  function currentMode() {
+    var r = document.querySelector('input[name=rcpt_mode]:checked');
+    return r ? r.value : 'all';
+  }
+
+  function updateSummary() {
+    var m = currentMode();
+    var total = 0;
+    if (m === 'all') {
+      total = allActive;
+    } else if (m === 'list') {
+      document.querySelectorAll('input[name=list_ids]:checked').forEach(function(cb) {
+        total += (listCounts[cb.value] || 0);
+      });
+    } else if (m === 'single') {
+      total = (form.single_email && form.single_email.value.trim()) ? 1 : 0;
+    } else {
+      total = 1; // placeholder for paste/file
+    }
+    document.getElementById('sumTotal').textContent = total;
+    document.getElementById('sumValid').textContent = total;
+  }
+
+  function activateMode(mode) {
+    // Update hidden radio
+    var radio = document.getElementById('rm_' + mode);
+    if (radio) radio.checked = true;
+
+    // Update card highlight
+    document.querySelectorAll('.rcpt-card').forEach(function(c) {
+      c.classList.toggle('selected', c.dataset.mode === mode);
+    });
+
+    // Show/hide expand panels
+    document.querySelectorAll('.rcpt-expand').forEach(function(p) {
+      p.style.display = (p.dataset.for === mode) ? '' : 'none';
+    });
+
+    updateSummary();
+  }
+
+  // Wire up cards
+  document.querySelectorAll('.rcpt-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      activateMode(card.dataset.mode);
+    });
+    var btn = card.querySelector('.rcpt-select-btn');
+    if (btn) btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      activateMode(card.dataset.mode);
+    });
+  });
+
+  // Update summary on list checkbox change
+  document.querySelectorAll('input[name=list_ids]').forEach(function(cb) {
+    cb.addEventListener('change', updateSummary);
+  });
+
+  // Init: show all-active selected
+  activateMode('all');
+
+  /* ---- Template data & filtering ---- */
+  var tplData = [];
+  try { tplData = JSON.parse(document.getElementById('tplData').textContent); } catch(e) {}
+
+  var activeCat = '__all';
+
+  function renderTemplates(cat) {
+    var container = document.getElementById('tplCards');
+    var emptyMsg  = document.getElementById('tplCardsEmpty');
+    // Remove old cards (keep emptyMsg)
+    var oldCards = container.querySelectorAll('.tpl-pick-card');
+    oldCards.forEach(function(c){ c.remove(); });
+
+    var label = 'All Templates';
+    var filtered = tplData.filter(function(t) {
+      if (cat === '__all') return true;
+      if (cat.indexOf('sys:') === 0) {
+        var catName = cat.slice(4);
+        label = catName;
+        return t.group && t.group.indexOf('⭐') !== -1 && t.group.toLowerCase().indexOf(catName.toLowerCase()) !== -1;
+      }
+      if (cat.indexOf('my:') === 0) {
+        var folder = cat.slice(3);
+        label = folder;
+        return t.group && t.group.indexOf('📁') !== -1 && t.group.indexOf(folder) !== -1;
+      }
+      return false;
+    });
+
+    document.getElementById('tplCatLabel').textContent = label;
+    emptyMsg.style.display = filtered.length ? 'none' : '';
+
+    filtered.forEach(function(t) {
+      var card = document.createElement('div');
+      card.className = 'tpl-pick-card';
+      card.dataset.gid = t.gid;
+      var thumbHTML = t.content
+        ? '<iframe sandbox srcdoc="' + t.content.replace(/"/g, '&quot;') + '"></iframe>'
+        : '<div class="ph">📄</div>';
+      card.innerHTML =
+        '<div class="tpl-pick-thumb">' + thumbHTML + '</div>' +
+        '<div class="tpl-pick-info">' +
+          '<div class="tpl-pick-name">' + (t.name || '') + '</div>' +
+          '<div class="tpl-pick-subj">' + (t.subject || '—') + '</div>' +
+        '</div>' +
+        '<button type="button" class="tpl-pick-use">Use</button>';
+
+      card.querySelector('.tpl-pick-use').addEventListener('click', function(e) {
+        e.stopPropagation();
+        applyTemplate(t);
+        container.querySelectorAll('.tpl-pick-card').forEach(function(c){ c.classList.remove('selected'); });
+        card.classList.add('selected');
+      });
+      card.addEventListener('click', function() {
+        applyTemplate(t);
+        container.querySelectorAll('.tpl-pick-card').forEach(function(c){ c.classList.remove('selected'); });
+        card.classList.add('selected');
+      });
+
+      container.insertBefore(card, emptyMsg);
+    });
+  }
+
+  function applyTemplate(t) {
+    // Selecting a template auto-loads its Subject + Preview Text + Body. The
+    // design (body) is carried hidden and never edited in the campaign;
+    // subject/preview stay editable below as per-campaign overrides.
+    form.subject.value = t.subject || '';
+    var prevField = document.getElementById('f_preview');
+    if (prevField) prevField.value = t.preview_text || '';
+    document.getElementById('f_body').value = t.content || '';
+    var chosen = document.getElementById('tplChosen');
+    if (chosen) chosen.innerHTML = '✅ Selected template: <b>' + (t.name || 'template') + '</b>';
+    var wrap = document.getElementById('tplPreviewWrap');
+    var fr = document.getElementById('tplPreview');
+    if (wrap && fr) {
+      fr.srcdoc = t.content || '<p style="font-family:sans-serif;color:#888;padding:12px">This template has no body.</p>';
+      wrap.style.display = 'block';
+    }
+  }
+
+  // Category sidebar buttons
+  document.querySelectorAll('.tpl-cat-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tpl-cat-btn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      activeCat = btn.dataset.cat;
+      renderTemplates(activeCat);
+    });
+  });
+
+  // Initial render
+  renderTemplates('__all');
+
+  /* ---- Sender email assembly (domain mode) ---- */
+  function syncFrom() {
+    var u = document.getElementById('f_fromuser');
+    var d = document.getElementById('f_fromdomain');
+    var h = document.getElementById('f_fromemail');
+    if (u && d && h) h.value = (u.value.trim() || 'hello') + '@' + d.value;
+  }
+  ['f_fromuser', 'f_fromdomain'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.addEventListener('input', syncFrom); el.addEventListener('change', syncFrom); }
+  });
+  syncFrom();
+
+  /* ---- Step 5 — Inbox Analysis ---- */
+  function runAnalysis() {
+    var box = document.getElementById('anaBox');
+    box.innerHTML = '<p class="faint">Analyzing…</p>';
+    document.getElementById('reAnalyze').style.display = '';
+    var fd = new FormData();
+    fd.append('subject', form.subject.value);
+    fd.append('body', form.body.value);
+    fetch('{{ url_for("campaign_analyze") }}', {method:'POST', headers:{'X-CSRFToken': csrf}, body: fd})
+      .then(function(r){ return r.json(); })
+      .then(function(j) {
+        var col = j.overall >= 85 ? 'var(--good)' : (j.overall >= 65 ? 'var(--warn)' : 'var(--bad)');
+        var rows = (j.rows || []).map(function(r){
+          return '<div class="kv"><span>' + r.label + '</span><span style="color:' +
+            (r.ok ? 'var(--good)' : 'var(--bad)') + '">' + (r.ok ? '✅ ' : '⚠️ ') + r.value + '</span></div>';
+        }).join('');
+        var issues = (j.issues || []).length
+          ? '<h3 style="margin-top:12px">🤖 Suggestions</h3>' + j.issues.map(function(i){
+              return '<div class="kv"><span>🟠 <b>' + i.label + '</b> — <span class="muted">' + i.fix + '</span></span></div>';
+            }).join('')
+          : '<p class="faint" style="margin-top:10px">🎉 No content issues found.</p>';
+        box.innerHTML =
+          '<div class="grid g3" style="align-items:center">' +
+          '<div style="text-align:center"><div class="score-ring" style="font-size:2.6rem;color:' + col + '">' + j.overall +
+          '<span style="font-size:1rem;color:var(--muted)">/100</span></div>' +
+          '<span class="badge ' + (j.level==='good'?'b-valid':(j.level==='warn'?'b-risky':'b-invalid')) + '">' + j.verdict + '</span></div>' +
+          '<div class="kv"><span>📥 Inbox score</span><b>' + j.content + '%</b></div>' +
+          '<div class="kv"><span>🚨 Spam risk</span><b>' + j.spam_risk + '/100</b></div></div>' +
+          '<div style="margin-top:10px">' + rows + '</div>' + issues;
+      })
+      .catch(function() { box.innerHTML = '<p class="faint">Could not analyze right now — you can still continue.</p>'; });
+  }
+
+  document.getElementById('runAnalyzeBtn').addEventListener('click', runAnalysis);
+  document.getElementById('reAnalyze').addEventListener('click', runAnalysis);
+  document.getElementById('skipAnalyze').addEventListener('click', function() {
+    show(Math.min(cur + 1, steps.length - 1));
+  });
+
+  /* ---- Step 6 — Review summary ---- */
+  function buildReview() {
+    var m = currentMode();
+    var rcptLabel = {all:'All active contacts', list:'Selected contact lists', single:'Single email', paste:'Pasted emails', txt:'CSV/TXT file', excel:'Excel file'}[m] || m;
+    if (m === 'all') rcptLabel = 'All active contacts (' + allActive + ')';
+    if (m === 'list') {
+      var names = [];
+      document.querySelectorAll('input[name=list_ids]:checked').forEach(function(cb) {
+        var item = cb.closest('.list-check-item');
+        if (item) { var b = item.querySelector('b'); if (b) names.push(b.textContent); }
+      });
+      if (names.length) rcptLabel = names.join(', ');
+    }
+    syncFrom();
+    var fromEl = document.getElementById('f_fromemail');
+    var fromVal = (fromEl ? fromEl.value : '') || (form.from_email ? form.from_email.value : '') || '';
+    var fn = (form.from_name || {}).value || '';
+    if (fn.trim()) fromVal = fn.trim() + ' <' + fromVal + '>';
+
+    var rows = [
+      ['Campaign',     (form.name.value || '—')],
+      ['Subject',      (form.subject.value || '(none)')],
+      ['Preview Text', (document.getElementById('f_preview') || {}).value || '(none)'],
+      ['Recipients',   rcptLabel],
+      ['Sender',       fromVal || '—'],
+      ['Attachments',  ATT.length ? (ATT.length + ' file(s) · ' + humanSize(ATT.reduce(function(a,b){return a+b.size;},0))) : 'None'],
+    ];
+    document.getElementById('reviewBox').innerHTML =
+      '<div class="review-summary">' +
+      rows.map(function(r){
+        return '<div class="kv"><span>' + r[0] + '</span><b>' + r[1] + '</b></div>';
+      }).join('') +
+      '</div>';
+  }
+
+  /* ---- Schedule sync ---- */
+  function syncSched() {
+    var d = document.getElementById('f_scheddate');
+    var t = document.getElementById('f_schedtime');
+    var h = document.getElementById('f_schedat');
+    if (d && t && h) h.value = (d.value && t.value) ? d.value + 'T' + t.value : '';
+  }
+  ['f_scheddate', 'f_schedtime'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', syncSched);
+  });
+
+  /* ---- Action buttons (step 6) ---- */
+  document.querySelectorAll('[data-decision]').forEach(function(b) {
+    b.addEventListener('click', function() {
+      syncFrom();
+      syncSched();
+      var dec = b.dataset.decision;
+      if (dec === 'schedule') {
+        var h = document.getElementById('f_schedat');
+        if (!h || !h.value) { alert('Please select a date and time before scheduling.'); return; }
+      }
+      if (dec === 'send' && !confirm('Send this campaign now to all selected recipients?')) return;
+      document.getElementById('decision').value = dec;
+      form.submit();
+    });
+  });
+
+  /* ---- Step 4 — Attachments 📎 ---- */
+  var ATT = [];                                   // {id,name,size}
+  var ATT_TOKEN = document.getElementById('attach_token').value;
+  var MAX_FILES = 10, MAX_FILE = 10*1024*1024, MAX_TOTAL = 25*1024*1024;
+  var ALLOWED = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','zip','jpg','jpeg','png','gif','webp'];
+  function humanSize(b){
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(b<10240?1:0) + ' KB';
+    return (b/1048576).toFixed(2) + ' MB';
+  }
+  function iconFor(name){
+    var e = (name.split('.').pop()||'').toLowerCase();
+    if (e==='pdf') return '📕';
+    if (e==='doc'||e==='docx') return '📘';
+    if (e==='xls'||e==='xlsx'||e==='csv') return '📊';
+    if (e==='ppt'||e==='pptx') return '📙';
+    if (e==='zip') return '🗜️';
+    if (['jpg','jpeg','png','gif','webp'].indexOf(e)>=0) return '🖼️';
+    if (e==='txt') return '📄';
+    return '📎';
+  }
+  function attMsg(text, ok){
+    var m = document.getElementById('attMsg');
+    if (!text){ m.style.display='none'; return; }
+    m.style.display='block'; m.className = 'att-msg ' + (ok?'ok':'err');
+    m.textContent = (ok?'✅ ':'❌ ') + text;
+  }
+  function attTotal(){ return ATT.reduce(function(a,b){return a+b.size;},0); }
+  function renderAtt(){
+    var list = document.getElementById('attList');
+    list.innerHTML = ATT.map(function(f){
+      return '<div class="att-item"><span class="att-ico">'+iconFor(f.name)+'</span>'+
+        '<span class="att-name">'+f.name+'</span>'+
+        '<span class="att-size">'+humanSize(f.size)+'</span>'+
+        '<button type="button" class="att-rm" data-id="'+f.id+'">❌ Remove</button></div>';
+    }).join('');
+    document.getElementById('attCount').textContent = 'Files: ' + ATT.length + ' / ' + MAX_FILES;
+    var t = attTotal();
+    var tot = document.getElementById('attTotal');
+    tot.textContent = 'Total Size: ' + humanSize(t) + ' / 25 MB';
+    tot.style.color = t > MAX_TOTAL*0.9 ? 'var(--warn)' : '';
+    list.querySelectorAll('.att-rm').forEach(function(b){
+      b.addEventListener('click', function(){ removeAtt(b.dataset.id); });
+    });
+  }
+  function uploadOne(file, cb){
+    var ext = (file.name.split('.').pop()||'').toLowerCase();
+    if (ALLOWED.indexOf(ext) < 0){ attMsg('File type not supported: '+file.name, false); return cb(); }
+    if (file.size > MAX_FILE){ attMsg(file.name+' exceeds 10 MB.', false); return cb(); }
+    if (ATT.length >= MAX_FILES){ attMsg('Maximum '+MAX_FILES+' files.', false); return cb(); }
+    if (attTotal() + file.size > MAX_TOTAL){ attMsg('Total attachment size exceeds 25 MB.', false); return cb(); }
+    var fd = new FormData();
+    fd.append('token', ATT_TOKEN); fd.append('file', file);
+    var bar = document.getElementById('attBar'), wrap = document.getElementById('attProg');
+    wrap.style.display='block'; bar.style.width='0%';
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '{{ url_for("campaign_attach_upload") }}');
+    xhr.setRequestHeader('X-CSRFToken', csrf);
+    xhr.upload.onprogress = function(e){ if (e.lengthComputable) bar.style.width = Math.round(e.loaded/e.total*100)+'%'; };
+    xhr.onload = function(){
+      wrap.style.display='none';
+      try { var j = JSON.parse(xhr.responseText); } catch(_){ j = {error:'Upload failed.'}; }
+      if (j.error){ attMsg(j.error, false); }
+      else { ATT.push({id:j.id, name:j.name, size:j.size}); renderAtt(); attMsg('Upload successful: '+j.name, true); }
+      cb();
+    };
+    xhr.onerror = function(){ wrap.style.display='none'; attMsg('Upload failed: '+file.name, false); cb(); };
+    xhr.send(fd);
+  }
+  function uploadFiles(files){
+    var arr = Array.prototype.slice.call(files), i = 0;
+    (function nxt(){ if (i >= arr.length) return; uploadOne(arr[i++], nxt); })();
+  }
+  function removeAtt(id){
+    var fd = new FormData(); fd.append('id', id); fd.append('token', ATT_TOKEN);
+    fetch('{{ url_for("campaign_attach_delete") }}', {method:'POST', headers:{'X-CSRFToken':csrf}, body:fd})
+      .then(function(r){return r.json();}).then(function(){
+        ATT = ATT.filter(function(f){ return String(f.id)!==String(id); }); renderAtt(); attMsg('', true);
+      });
+  }
+  var drop = document.getElementById('attDrop'), input = document.getElementById('attInput');
+  if (drop){
+    document.getElementById('attPick').addEventListener('click', function(){ input.click(); });
+    input.addEventListener('change', function(){ uploadFiles(input.files); input.value=''; });
+    ['dragenter','dragover'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); }); });
+    ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); }); });
+    drop.addEventListener('drop', function(e){ if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files); });
+    renderAtt();
+  }
+
+})();
+</script>
+{% endblock %}

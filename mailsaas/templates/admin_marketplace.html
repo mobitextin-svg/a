@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Marketplace Management{% endblock %}
+{% block content %}
+<h1>🛍️ Marketplace Management</h1>
+<p class="muted">The template catalog offered to users, with install counts.</p>
+<div class="card" style="margin-top:14px">
+  <table>
+    <thead><tr><th>Template</th><th>Category</th><th class="num">Installs</th></tr></thead>
+    <tbody>
+    {% for id, category, name, blurb, subject, html in catalog %}
+      <tr><td><b>{{ name }}</b><div class="faint small">{{ blurb }}</div></td>
+        <td><span class="badge b-Running">{{ category }}</span></td>
+        <td class="num">{{ installs.get(name, 0) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

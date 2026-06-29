@@ -1,0 +1,11 @@
+Flask>=3.0
+bcrypt>=4.0
+# Optional: enables real MX record lookups in the verification engine.
+# Falls back to heuristics automatically if not installed.
+dnspython>=2.4
+# Optional: enables Excel (.xlsx) recipient import in the campaign wizard.
+# Other recipient types (single / paste / CSV / TXT) work without it.
+openpyxl>=3.1
+# Optional: auto-resizes/converts uploaded logo & header images to the
+# recommended dimensions. Falls back to storing the original if not installed.
+Pillow>=10.0
