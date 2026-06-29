@@ -282,9 +282,10 @@
   <div class="card">
     <label class="blk-head">
       <input type="checkbox" name="blk_features" value="1" id="blkFeatures" style="width:auto" {{ 'checked' if fields.blk_features }}>
-      <b>⭐ Feature cards</b> <span class="faint small">— up to 6 highlights, shown as icon · title · text</span>
+      <b>⭐ Feature cards</b> <span class="faint small">— up to 6 highlights, shown as icon/logo · title · text</span>
     </label>
     <div id="featuresBox" style="margin-top:10px;{{ '' if fields.blk_features else 'display:none' }}">
+      <p class="faint small" style="margin:0 0 8px">Each card shows a <b>logo image</b> if you add one, otherwise the emoji icon. Leave a card's title empty to skip it.</p>
       <div class="feat-grid">
         {% for i in range(1,7) %}
         <div class="feat-card">
@@ -293,6 +294,12 @@
             <input name="feat{{ i }}_title" value="{{ fields['feat' ~ i ~ '_title'] or '' }}" placeholder="Card {{ i }} title" style="flex:1">
           </div>
           <input name="feat{{ i }}_text" value="{{ fields['feat' ~ i ~ '_text'] or '' }}" placeholder="Short description" style="margin-top:6px;width:100%">
+          <div class="imgrow" style="gap:6px;margin-top:6px">
+            <input name="feat{{ i }}_img" id="feat{{ i }}Img" value="{{ fields['feat' ~ i ~ '_img'] or '' }}" placeholder="Logo image URL (optional — overrides the emoji)" style="flex:1;min-width:120px">
+            <button type="button" class="btn ghost sm feat-up" data-i="{{ i }}">📤 Logo</button>
+            <input type="file" id="feat{{ i }}File" accept="image/*" style="display:none">
+          </div>
+          <span class="faint small feat-status" id="feat{{ i }}Status"></span>
         </div>
         {% endfor %}
       </div>
@@ -487,6 +494,17 @@
   wireToggle('blkOffer','offerBox');
   wireToggle('blkTesti','testiBox');
 
+  // ---- per-card logo upload (each feature card can carry its own image) ----
+  document.querySelectorAll('.feat-up').forEach(function(btn){
+    var i=btn.getAttribute('data-i');
+    var file=document.getElementById('feat'+i+'File');
+    btn.addEventListener('click',function(){ file.click(); });
+    file.addEventListener('change',function(){
+      uploadImage(this,document.getElementById('feat'+i+'Img'),
+                  document.getElementById('feat'+i+'Status'),null,'logo');
+    });
+  });
+
   // ---- industry presets — prefill colour, copy & feature cards in one click.
   // Only fills empty fields, so it never clobbers what the user already wrote.
   window.applyPreset=function(key){
@@ -568,14 +586,16 @@
       for(var i=1;i<=6;i++){
         var t=(document.querySelector('[name=feat'+i+'_title]').value||'').trim();
         if(!t) continue;
-        cards.push([(document.querySelector('[name=feat'+i+'_icon]').value||'⭐').trim(),t,
-          (document.querySelector('[name=feat'+i+'_text]').value||'').trim()]);
+        var im=(document.querySelector('[name=feat'+i+'_img]').value||'').trim();
+        var vis=im?('<img src="'+im+'" width="48" height="48" style="width:48px;height:48px;object-fit:contain">')
+                  :('<div style="font-size:30px">'+esc((document.querySelector('[name=feat'+i+'_icon]').value||'⭐').trim())+'</div>');
+        cards.push([vis,t,(document.querySelector('[name=feat'+i+'_text]').value||'').trim()]);
       }
       if(cards.length){
         var rows='';
         for(var j=0;j<cards.length;j+=3){
           var grp=cards.slice(j,j+3), w=Math.floor(100/grp.length), cells='';
-          grp.forEach(function(c){ cells+='<td valign="top" width="'+w+'%" style="padding:12px 10px;text-align:center"><div style="font-size:30px">'+esc(c[0])+'</div><div style="font-weight:bold;color:#222;margin:8px 0 4px">'+esc(c[1])+'</div><div style="font-size:13px;color:#555">'+esc(c[2])+'</div></td>'; });
+          grp.forEach(function(c){ cells+='<td valign="top" width="'+w+'%" style="padding:12px 10px;text-align:center">'+c[0]+'<div style="font-weight:bold;color:#222;margin:8px 0 4px">'+esc(c[1])+'</div><div style="font-size:13px;color:#555">'+esc(c[2])+'</div></td>'; });
           rows+='<tr>'+cells+'</tr>';
         }
         html+='<div style="padding:6px 18px 12px"><table width="100%" style="border-collapse:collapse">'+rows+'</table></div>';

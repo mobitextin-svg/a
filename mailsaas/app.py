@@ -3495,8 +3495,19 @@ def register_modules(app):
                 title = (f.get("feat%d_title" % i) or "").strip()
                 if not title:
                     continue
+                # A card shows its logo image when one is set, otherwise the
+                # emoji icon — so users can brand each card with a real logo.
+                img = (f.get("feat%d_img" % i) or "").strip()
+                if img:
+                    visual = ('<img src="%s" alt="%s" width="48" height="48" '
+                              'style="display:inline-block;width:48px;height:48px;'
+                              'object-fit:contain;border:0">' % (img, title))
+                else:
+                    visual = ('<div style="font-size:30px;line-height:1">%s</div>'
+                              % _h.escape((f.get("feat%d_icon" % i) or "").strip()
+                                          or "⭐"))
                 cards.append((
-                    (f.get("feat%d_icon" % i) or "").strip() or "⭐",
+                    visual,
                     _h.escape(title),
                     _h.escape((f.get("feat%d_text" % i) or "").strip()),
                 ))
@@ -3508,12 +3519,12 @@ def register_modules(app):
                     cells = "".join(
                         '<td valign="top" width="%d%%" style="padding:12px 10px;'
                         'text-align:center;font-family:Arial,sans-serif">'
-                        '<div style="font-size:30px;line-height:1">%s</div>'
+                        '%s'
                         '<div style="font-size:15px;font-weight:bold;color:#222;'
                         'margin:8px 0 4px">%s</div>'
                         '<div style="font-size:13px;color:#555;line-height:1.5">%s</div>'
-                        '</td>' % (cw, _h.escape(icon), title, text)
-                        for icon, title, text in group)
+                        '</td>' % (cw, visual, title, text)
+                        for visual, title, text in group)
                     rows_html += '<tr>' + cells + '</tr>'
                 features_row = (
                     '<tr><td style="padding:6px 18px 12px"><table width="100%" '
@@ -3781,21 +3792,27 @@ def register_modules(app):
                 "feat1_icon": request.form.get("feat1_icon", ""),
                 "feat1_title": request.form.get("feat1_title", ""),
                 "feat1_text": request.form.get("feat1_text", ""),
+                "feat1_img": request.form.get("feat1_img", ""),
                 "feat2_icon": request.form.get("feat2_icon", ""),
                 "feat2_title": request.form.get("feat2_title", ""),
                 "feat2_text": request.form.get("feat2_text", ""),
+                "feat2_img": request.form.get("feat2_img", ""),
                 "feat3_icon": request.form.get("feat3_icon", ""),
                 "feat3_title": request.form.get("feat3_title", ""),
                 "feat3_text": request.form.get("feat3_text", ""),
+                "feat3_img": request.form.get("feat3_img", ""),
                 "feat4_icon": request.form.get("feat4_icon", ""),
                 "feat4_title": request.form.get("feat4_title", ""),
                 "feat4_text": request.form.get("feat4_text", ""),
+                "feat4_img": request.form.get("feat4_img", ""),
                 "feat5_icon": request.form.get("feat5_icon", ""),
                 "feat5_title": request.form.get("feat5_title", ""),
                 "feat5_text": request.form.get("feat5_text", ""),
+                "feat5_img": request.form.get("feat5_img", ""),
                 "feat6_icon": request.form.get("feat6_icon", ""),
                 "feat6_title": request.form.get("feat6_title", ""),
                 "feat6_text": request.form.get("feat6_text", ""),
+                "feat6_img": request.form.get("feat6_img", ""),
                 # Standalone image block (with optional caption + link).
                 "blk_image": request.form.get("blk_image", ""),
                 "img_url": request.form.get("img_url", ""),

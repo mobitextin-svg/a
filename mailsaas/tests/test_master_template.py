@@ -42,6 +42,17 @@ def test_feature_cards_render_only_when_enabled(auth, app):
     assert "Quick setup" in html
 
 
+def test_feature_card_logo_image_overrides_emoji(auth, app):
+    # A card with a logo image shows the <img>, not the emoji icon.
+    html = _save(auth, app, blk_features="1",
+                 feat1_icon="⚡", feat1_title="Branded",
+                 feat1_text="Has a logo",
+                 feat1_img="https://x.test/logo.png")
+    assert 'src="https://x.test/logo.png"' in html
+    assert "⚡" not in html        # emoji replaced by the logo image
+    assert "Branded" in html
+
+
 def test_offer_block_with_promo_code(auth, app):
     html = _save(auth, app, blk_offer="1", offer_headline="50% OFF",
                  offer_sub="Ends Sunday", offer_code="SAVE50")
