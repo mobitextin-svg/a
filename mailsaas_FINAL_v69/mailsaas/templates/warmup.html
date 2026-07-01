@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}IP Warm-up{% endblock %}
+{% block content %}
+<h1>🔥 IP Warm-up Manager</h1>
+<p class="muted">Gradually build sender reputation with a guided daily volume plan.</p>
+
+{% for s in servers %}
+<div class="card">
+  <div class="section-head">
+    <div><h2 style="display:inline">{{ s.name }}</h2>
+      <span class="faint small">· {{ s.dedicated_ip or s.host }}</span></div>
+    <span class="badge {{ 'b-valid' if s.warmup=='Completed' else 'b-risky' }}">{{ s.warmup }}</span>
+  </div>
+  {% set day = 6 if 'Day' in s.warmup else (14 if s.warmup=='Completed' else 1) %}
+  {% set pct = (100 * day / 14)|round(0,'floor')|int %}
+  <div class="grid g4" style="margin-top:8px">
+    <div class="stat"><div class="k">Day</div><div class="v">{{ day }}<span class="unit">/14</span></div></div>
+    <div class="stat"><div class="k">Today's volume</div><div class="v">{{ '{:,}'.format(plan[day-1]) }}</div></div>
+    <div class="stat"><div class="k">Tomorrow</div><div class="v">{{ '{:,}'.format(plan[day] if day < 14 else plan[-1]) }}</div></div>
+    <div class="stat"><div class="k">Reputation</div><div class="v">{{ 70 + day }}<span class="unit">/100</span></div></div>
+  </div>
+  <div style="margin-top:10px"><div class="small faint">Warm-up progress — {{ pct }}%</div>
+    <div class="meter"><i style="width:{{ pct }}%"></i></div></div>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h2>14-day daily plan</h2>
+  <table>
+    <thead><tr><th>Day</th>{% for d in range(1,15) %}<th class="num">{{ d }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      <tr><td>Volume</td>{% for v in plan %}<td class="num small">{{ '{:,}'.format(v) }}</td>{% endfor %}</tr>
+    </tbody>
+  </table>
+  <p class="muted small" style="margin-top:8px">Volumes double roughly every 1–2 days while engagement stays healthy; the schedule auto-pauses if bounce or complaint rates spike.</p>
+</div>
+{% endblock %}

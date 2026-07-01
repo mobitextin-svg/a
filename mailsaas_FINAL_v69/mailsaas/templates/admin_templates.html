@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Template Library{% endblock %}
+{% block content %}
+<div class="section-head"><h1>🧱 System Template Library</h1>
+  <div class="row" style="gap:8px">
+    <a class="btn" href="{{ url_for('quick_builder', target='system') }}">📧 Create Email</a>
+    <a class="btn ghost" href="{{ url_for('builder', target='system') }}">🎨 Visual Builder</a>
+  </div></div>
+<p class="muted">The master library every user can copy from. {{ total }} template(s).
+  Users can <b>Use</b> these but never edit the originals.</p>
+
+{# ---- Builder (create / edit a system template) ---- #}
+<div class="card" style="border-color:var(--brand)">
+  <h2>{{ '✏️ Edit system template' if edit else '➕ New system template' }}</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="{{ 'update' if edit else 'create' }}">
+    {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+    <div class="row">
+      <div style="flex:1"><label>Category</label>
+        <input name="category" list="cats" value="{{ edit.category if edit else '' }}" placeholder="Education" required>
+        <datalist id="cats">{% for c in library.keys() %}<option value="{{ c }}">{% endfor %}
+          <option value="Education"><option value="Healthcare"><option value="Restaurant">
+          <option value="Finance"><option value="Marketing"></datalist></div>
+      <div style="flex:2"><label>Template name</label><input name="name" value="{{ edit.name if edit else '' }}" placeholder="Admission Open" required></div>
+    </div>
+    <label>Subject</label><input name="subject" value="{{ edit.subject if edit else '' }}" placeholder="Admissions are now open!">
+    <label>Content (HTML — use {{ '{{name}}' }} merge tags)</label>
+    <textarea name="content" style="font-family:ui-monospace,monospace;min-height:140px" placeholder="<h1>Hi {{ '{{name}}' }}</h1>">{{ edit.content if edit else '' }}</textarea>
+    {% if not edit %}
+    <div class="card tight" style="background:var(--panel2);margin-top:10px">
+      <label class="small">🤖 Or generate with AI (leave Content empty)</label>
+      <input name="ai_topic" placeholder="Create an Admission Open email for a school">
+    </div>
+    {% endif %}
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <input type="checkbox" name="published" {{ 'checked' if (not edit) or edit.published }} style="width:auto"> Published (visible to all users)</label>
+    <div class="row" style="margin-top:12px">
+      <button class="btn">{{ '💾 Update' if edit else '📢 Publish to all users' }}</button>
+      {% if edit %}<a class="btn ghost" href="{{ url_for('admin_templates') }}">Cancel</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+{# ---- Library by category ---- #}
+{% for category, items in library.items() %}
+<div class="card">
+  <div class="section-head"><h2>📂 {{ category }} <span class="faint small">({{ items|length }})</span></h2>
+    <form class="inline-form" method="post" onsubmit="this.category.value=prompt('Rename category to:', '{{ category }}')||'';return this.category.value!=''">
+      <input type="hidden" name="action" value="rename_category"><input type="hidden" name="old" value="{{ category }}">
+      <input type="hidden" name="category"><button class="btn ghost sm">Rename category</button></form>
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>Subject</th><th class="num">Copied by</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for t in items %}
+      <tr>
+        <td><b>{{ t.name }}</b></td>
+        <td class="muted small">{{ t.subject or '—' }}</td>
+        <td class="num">{{ copies.get(t.id, 0) }} users</td>
+        <td><span class="badge {{ 'b-valid' if t.published else 'b-invalid' }}">{{ 'Published' if t.published else 'Unpublished' }}</span></td>
+        <td class="num" style="white-space:nowrap">
+          <a class="btn ghost sm" href="{{ url_for('admin_templates', edit=t.id) }}">Edit</a>
+          {% if t.fields_json %}<a class="btn ghost sm" href="{{ url_for('quick_builder', target='system', edit=t.id) }}" title="Edit fields">⚡</a>{% endif %}
+          <a class="btn ghost sm" href="{{ url_for('builder', target='system', edit=t.id) }}">🎨</a>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="publish"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn ghost sm">{{ 'Unpublish' if t.published else 'Publish' }}</button></form>
+          <form class="inline-form" method="post" onsubmit="return confirm('Delete this system template?')"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ t.id }}"><button class="btn danger sm">Delete</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card"><p class="empty">No system templates yet — create one above.</p></div>
+{% endfor %}
+{% endblock %}

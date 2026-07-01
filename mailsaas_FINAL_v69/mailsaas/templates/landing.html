@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Landing Pages{% endblock %}
+{% block content %}
+<h1>📄 Landing Pages</h1>
+<p class="muted">Build pages, capture leads with forms, add thank-you pages &amp; QR codes.</p>
+
+<div class="card" style="margin-top:14px">
+  <h2>New landing page</h2>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="action" value="create">
+    <div style="flex:2"><label>Name</label><input name="name" placeholder="Spring Webinar" required></div>
+    <div style="flex:2"><label>URL slug</label><input name="slug" placeholder="spring-webinar"></div>
+    <div style="flex:0"><button class="btn">Create</button></div>
+  </form>
+</div>
+
+<div class="grid g3">
+  {% for p in pages %}
+  <div class="card">
+    <div class="section-head"><h3 style="margin:0">{{ p.name }}</h3>
+      <span class="badge b-{{ 'valid' if p.status=='Published' else 'Draft' }}">{{ p.status }}</span></div>
+    <p class="faint small" style="margin:.2em 0">/{{ p.slug }}</p>
+    <div class="kv"><span>Views</span><span>{{ '{:,}'.format(p.views) }}</span></div>
+    <div class="kv"><span>Submissions</span><span>{{ '{:,}'.format(p.submissions) }}</span></div>
+    <div class="kv"><span>Conversion</span><span>{{ (100*p.submissions/p.views)|round(1) if p.views else 0 }}%</span></div>
+    <div class="row" style="margin-top:10px">
+      {% if p.status!='Published' %}
+      <form class="inline-form" method="post"><input type="hidden" name="action" value="publish">
+        <input type="hidden" name="id" value="{{ p.id }}"><button class="btn sm">Publish</button></form>
+      {% endif %}
+      <form class="inline-form" method="post"><input type="hidden" name="action" value="delete">
+        <input type="hidden" name="id" value="{{ p.id }}"><button class="btn danger sm">Delete</button></form>
+    </div>
+  </div>
+  {% else %}
+  <div class="card"><div class="empty">No landing pages yet.</div></div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Attachments — {{ camp.name }}{% endblock %}
+{% block content %}
+<div class="section-head">
+  <h1>📎 Attachments</h1>
+  <a class="btn ghost sm" href="{{ url_for('campaigns') }}">← All campaigns</a>
+</div>
+<p class="muted">Manage the files attached to <b>{{ camp.name }}</b>
+  <span class="badge b-{{ camp.status }}">{{ camp.status }}</span></p>
+
+<div class="card">
+  <div id="attDrop" class="att-drop">
+    <div style="font-size:1.6rem">📤</div>
+    <div>Drag &amp; drop files here</div>
+    <div class="faint small">or</div>
+    <button type="button" class="btn sm" id="attPick">Upload Files</button>
+    <input type="file" id="attInput" multiple style="display:none"
+           accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.jpg,.jpeg,.png,.gif,.webp">
+    <div class="faint small" style="margin-top:8px">PDF · Office · Images · ZIP · CSV · TXT — max 10 MB/file, 25 MB total, 10 files</div>
+  </div>
+
+  <div id="attProg" class="att-prog" style="display:none"><div id="attBar" class="att-bar"></div></div>
+  <div id="attMsg" class="att-msg" style="display:none"></div>
+  <div id="attList" class="att-list"></div>
+
+  <div class="att-foot">
+    <span id="attCount">Files: 0 / 10</span>
+    <span id="attTotal">Total Size: 0 B / 25 MB</span>
+  </div>
+</div>
+
+<style>
+.att-drop{border:2px dashed var(--border);border-radius:12px;padding:26px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:6px;transition:.15s;background:var(--panel2)}
+.att-drop.over{border-color:var(--accent);background:rgba(80,130,255,.08)}
+.att-prog{height:8px;background:var(--panel2);border-radius:6px;margin-top:12px;overflow:hidden}
+.att-bar{height:100%;width:0;background:var(--accent);transition:width .15s}
+.att-msg{margin-top:12px;padding:9px 12px;border-radius:8px;font-size:.86rem}
+.att-msg.ok{background:#0f2e22;color:#4ade80}.att-msg.err{background:#34141a;color:#f87171}
+.att-list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.att-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);
+  border-radius:9px;background:var(--panel2)}
+.att-ico{font-size:1.1rem}
+.att-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att-name a{color:inherit;text-decoration:none}.att-name a:hover{text-decoration:underline}
+.att-size{color:var(--muted);font-size:.84rem;font-variant-numeric:tabular-nums}
+.att-rm{background:none;border:none;color:var(--bad);cursor:pointer;font-size:.82rem}
+.att-foot{display:flex;justify-content:space-between;margin-top:14px;padding-top:10px;
+  border-top:1px solid var(--border);font-size:.86rem;color:var(--muted);font-variant-numeric:tabular-nums}
+</style>
+
+<script>
+(function(){
+  var CID = {{ camp.id }};
+  var csrf = (document.querySelector('meta[name=csrf-token]') || {}).content || '';
+  var ATT = [{% for a in attachments %}{"id":{{ a.id }},"name":{{ a.filename|tojson }},"size":{{ a.size }}}{{ "," if not loop.last }}{% endfor %}];
+  var MAX_FILES = 10, MAX_FILE = 10*1024*1024, MAX_TOTAL = 25*1024*1024;
+  var ALLOWED = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','zip','jpg','jpeg','png','gif','webp'];
+  function humanSize(b){ if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(b<10240?1:0)+' KB'; return (b/1048576).toFixed(2)+' MB'; }
+  function iconFor(name){ var e=(name.split('.').pop()||'').toLowerCase();
+    if(e==='pdf')return'📕'; if(e==='doc'||e==='docx')return'📘';
+    if(e==='xls'||e==='xlsx'||e==='csv')return'📊'; if(e==='ppt'||e==='pptx')return'📙';
+    if(e==='zip')return'🗜️'; if(['jpg','jpeg','png','gif','webp'].indexOf(e)>=0)return'🖼️';
+    if(e==='txt')return'📄'; return'📎'; }
+  function attMsg(t,ok){ var m=document.getElementById('attMsg'); if(!t){m.style.display='none';return;}
+    m.style.display='block'; m.className='att-msg '+(ok?'ok':'err'); m.textContent=(ok?'✅ ':'❌ ')+t; }
+  function total(){ return ATT.reduce(function(a,b){return a+b.size;},0); }
+  function render(){
+    document.getElementById('attList').innerHTML = ATT.map(function(f){
+      return '<div class="att-item"><span class="att-ico">'+iconFor(f.name)+'</span>'+
+        '<span class="att-name"><a href="/campaigns/attachments/'+f.id+'">'+f.name+'</a></span>'+
+        '<span class="att-size">'+humanSize(f.size)+'</span>'+
+        '<button type="button" class="att-rm" data-id="'+f.id+'">❌ Remove</button></div>';
+    }).join('');
+    document.getElementById('attCount').textContent='Files: '+ATT.length+' / '+MAX_FILES;
+    document.getElementById('attTotal').textContent='Total Size: '+humanSize(total())+' / 25 MB';
+    document.querySelectorAll('.att-rm').forEach(function(b){ b.addEventListener('click',function(){ remove(b.dataset.id); }); });
+  }
+  function uploadOne(file, cb){
+    var ext=(file.name.split('.').pop()||'').toLowerCase();
+    if(ALLOWED.indexOf(ext)<0){ attMsg('File type not supported: '+file.name,false); return cb(); }
+    if(file.size>MAX_FILE){ attMsg(file.name+' exceeds 10 MB.',false); return cb(); }
+    if(ATT.length>=MAX_FILES){ attMsg('Maximum '+MAX_FILES+' files.',false); return cb(); }
+    if(total()+file.size>MAX_TOTAL){ attMsg('Total attachment size exceeds 25 MB.',false); return cb(); }
+    var fd=new FormData(); fd.append('campaign_id',CID); fd.append('file',file);
+    var bar=document.getElementById('attBar'), wrap=document.getElementById('attProg');
+    wrap.style.display='block'; bar.style.width='0%';
+    var xhr=new XMLHttpRequest(); xhr.open('POST','{{ url_for("campaign_attach_upload") }}');
+    xhr.setRequestHeader('X-CSRFToken',csrf);
+    xhr.upload.onprogress=function(e){ if(e.lengthComputable) bar.style.width=Math.round(e.loaded/e.total*100)+'%'; };
+    xhr.onload=function(){ wrap.style.display='none';
+      try{var j=JSON.parse(xhr.responseText);}catch(_){j={error:'Upload failed.'};}
+      if(j.error) attMsg(j.error,false);
+      else { ATT.push({id:j.id,name:j.name,size:j.size}); render(); attMsg('Upload successful: '+j.name,true); }
+      cb(); };
+    xhr.onerror=function(){ wrap.style.display='none'; attMsg('Upload failed: '+file.name,false); cb(); };
+    xhr.send(fd);
+  }
+  function uploadFiles(files){ var arr=Array.prototype.slice.call(files),i=0;
+    (function nxt(){ if(i>=arr.length) return; uploadOne(arr[i++],nxt); })(); }
+  function remove(id){
+    var fd=new FormData(); fd.append('id',id);
+    fetch('{{ url_for("campaign_attach_delete") }}',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+      .then(function(r){return r.json();}).then(function(){ ATT=ATT.filter(function(f){return String(f.id)!==String(id);}); render(); attMsg('',true); });
+  }
+  var drop=document.getElementById('attDrop'), input=document.getElementById('attInput');
+  document.getElementById('attPick').addEventListener('click',function(){ input.click(); });
+  input.addEventListener('change',function(){ uploadFiles(input.files); input.value=''; });
+  ['dragenter','dragover'].forEach(function(ev){ drop.addEventListener(ev,function(e){ e.preventDefault(); drop.classList.add('over'); }); });
+  ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev,function(e){ e.preventDefault(); drop.classList.remove('over'); }); });
+  drop.addEventListener('drop',function(e){ if(e.dataTransfer&&e.dataTransfer.files) uploadFiles(e.dataTransfer.files); });
+  render();
+})();
+</script>
+{% endblock %}

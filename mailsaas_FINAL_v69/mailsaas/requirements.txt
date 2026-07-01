@@ -1,0 +1,5 @@
+# MailSaaS runtime dependencies.
+# Install with:  pip install -r requirements.txt
+Flask>=3.0
+Werkzeug>=3.0
+bcrypt>=4.0

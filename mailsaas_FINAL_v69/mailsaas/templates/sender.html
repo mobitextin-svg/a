@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Bulk Email Sender{% endblock %}
+{% block content %}
+<h1>Bulk Email Sender</h1>
+<p class="muted">Compose, personalize, A/B test and schedule — then watch the delivery queue.</p>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h2>Compose</h2>
+    <form method="post" action="{{ url_for('campaigns') }}" id="composeForm">
+      <input type="hidden" name="action" value="create">
+      <div class="row"><input name="name" id="f_name" placeholder="Campaign name" required>
+        <select id="tplPick" onchange="applyTemplate(this)">
+          <option value="" data-subject="" data-body="">Type manually (from scratch)</option>
+          {% if tpls %}<optgroup label="My templates">
+            {% for t in tpls %}<option value="t{{ t.id }}"
+              data-subject="{{ t.subject|e }}" data-body="{{ t.content|e }}">{{ t.name }}</option>{% endfor %}
+          </optgroup>{% endif %}
+          {% if ready %}<optgroup label="Ready-made">
+            {% for t in ready %}<option value="s{{ t.id }}"
+              data-subject="{{ t.subject|e }}" data-body="{{ t.content|e }}">{{ t.name }}</option>{% endfor %}
+          </optgroup>{% endif %}
+        </select></div>
+
+      <label>Send to</label>
+      <select name="list_id" id="f_list">
+        <option value="">All active contacts ({{ '{:,}'.format(total_active) }})</option>
+        {% for l in lists %}<option value="{{ l.id }}">{{ l.name }} ({{ '{:,}'.format(l.n) }})</option>{% endfor %}
+      </select>
+
+      <label>Subject line</label>
+      <input name="subject" id="f_subject" placeholder="Your subject">
+
+      <label>Body <span class="faint">— insert a variable:</span></label>
+      <div id="varChips" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px">
+        {% for v in ['name','email','company','mobile','city','state'] %}
+          <button type="button" class="btn ghost" style="padding:2px 8px;font-size:12px"
+            onclick="insertVar('{{ '{{' }}{{ v }}{{ '}}' }}')">{{ '{{' }}{{ v }}{{ '}}' }}</button>
+        {% endfor %}
+      </div>
+      <textarea name="body" id="f_body" placeholder="Hi {{ '{{name}}' }}, …" style="min-height:140px"></textarea>
+
+      <div class="row" style="margin-top:12px">
+        <button class="btn">Save &amp; review</button>
+        <button type="button" class="btn" style="background:var(--danger,#c0392b)" onclick="saveAndSend()">Save &amp; send now</button>
+        <button type="button" class="btn ghost" onclick="doPreview()">Preview</button>
+        <a class="btn ghost" href="{{ url_for('campaigns') }}">Go to campaigns</a>
+      </div>
+
+      <div style="margin-top:12px;border-top:1px solid var(--border,#2a3550);padding-top:10px">
+        <label>Send a single test before the campaign</label>
+        <div class="row">
+          <input type="email" id="f_test" value="{{ test_to }}" placeholder="you@example.com">
+          <select id="f_test_contact" title="Fill variables from this contact's real data">
+            <option value="">Sample data</option>
+            {% for c in contacts %}<option value="{{ c.id }}">{{ c.name or c.email }}</option>{% endfor %}
+          </select>
+          <button type="button" class="btn ghost" onclick="doTest()">Send test</button>
+        </div>
+        <div class="faint small" style="margin-top:4px">Variables fill from the chosen contact's real data. Nothing is saved or sent to your list.</div>
+        <div id="testMsg" class="muted" style="margin-top:6px;font-size:13px"></div>
+      </div>
+    </form>
+  </div>
+
+  <div id="previewPanel" class="card" style="display:none;margin-top:14px">
+    <h2>Preview <span class="faint" id="previewFor"></span></h2>
+    <div class="muted" style="font-size:13px;margin-bottom:6px">Subject: <b id="previewSubject"></b></div>
+    <iframe id="previewFrame" style="width:100%;min-height:320px;border:1px solid var(--border,#2a3550);border-radius:8px;background:#fff"></iframe>
+  </div>
+
+  <script>
+  (function () {
+    function meta(n){var m=document.querySelector('meta[name="'+n+'"]');return m?m.getAttribute("content"):"";}
+    var lastField = document.getElementById("f_body");
+    ["f_subject","f_body"].forEach(function(id){
+      var el=document.getElementById(id);
+      el.addEventListener("focus",function(){lastField=el;});
+    });
+    window.insertVar = function(tag){
+      var el=lastField||document.getElementById("f_body");
+      var s=el.selectionStart||0, e=el.selectionEnd||0;
+      el.value=el.value.slice(0,s)+tag+el.value.slice(e);
+      el.focus(); el.selectionStart=el.selectionEnd=s+tag.length;
+    };
+    window.applyTemplate = function(sel){
+      var o=sel.options[sel.selectedIndex];
+      var subj=o.getAttribute("data-subject")||"", body=o.getAttribute("data-body")||"";
+      if(sel.value===""){return;}
+      var sf=document.getElementById("f_subject"), bf=document.getElementById("f_body");
+      if((sf.value.trim()||bf.value.trim()) && !confirm("Replace the current subject and body with this template?")){return;}
+      sf.value=subj; bf.value=body;
+      var nf=document.getElementById("f_name");
+      if(!nf.value.trim()){nf.value=o.textContent.trim();}
+    };
+    function post(url, data){
+      var b=new URLSearchParams(data);
+      return fetch(url,{method:"POST",headers:{"X-CSRFToken":meta("csrf-token"),
+        "Content-Type":"application/x-www-form-urlencoded"},body:b.toString()})
+        .then(function(r){return r.json();});
+    }
+    window.doPreview = function(){
+      post("{{ url_for('sender_preview') }}",{
+        subject:document.getElementById("f_subject").value,
+        body:document.getElementById("f_body").value,
+        contact_id:document.getElementById("f_test_contact").value
+      }).then(function(d){
+        if(!d.ok){return;}
+        document.getElementById("previewPanel").style.display="block";
+        document.getElementById("previewSubject").textContent=d.subject||"(no subject)";
+        document.getElementById("previewFor").textContent="— as "+(d.using.name||d.using.email);
+        var f=document.getElementById("previewFrame");
+        f.srcdoc=d.html;
+        document.getElementById("previewPanel").scrollIntoView({behavior:"smooth"});
+      });
+    };
+    window.doTest = function(){
+      var box=document.getElementById("testMsg");
+      box.textContent="Sending test…";
+      post("{{ url_for('sender_test') }}",{
+        to:document.getElementById("f_test").value,
+        subject:document.getElementById("f_subject").value,
+        body:document.getElementById("f_body").value,
+        contact_id:document.getElementById("f_test_contact").value
+      }).then(function(d){
+        box.textContent=d.msg;
+        box.style.color=d.ok?"var(--text-success,#4ade80)":"var(--text-danger,#f87171)";
+      }).catch(function(){box.textContent="Test failed — try again.";});
+    };
+    window.saveAndSend = function(){
+      var name=document.getElementById("f_name").value.trim();
+      if(!name){alert("Give the campaign a name first.");document.getElementById("f_name").focus();return;}
+      var sel=document.getElementById("f_list");
+      var who=sel.options[sel.selectedIndex].textContent.trim();
+      if(!confirm("Send this campaign now to: "+who+"?\n\nThis creates the campaign and starts sending immediately. It can't be undone.")){return;}
+      var f=document.getElementById("composeForm");
+      f.querySelector('input[name="action"]').value="create_send";
+      f.submit();
+    };
+  })();
+  </script>
+  <div>
+    <div class="card">
+      <h2>Templates</h2>
+      <div class="feature-grid">
+        {% for t in templates %}<div class="feature"><h4>{{ t }}</h4><p>Branded, responsive layout</p></div>{% endfor %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Sender toolkit</h2>
+      <div class="kv"><span>🧪 A/B Testing</span><span class="dot-ok">Ready</span></div>
+      <div class="kv"><span>🔀 Personalization merge tags</span><span class="dot-ok">Ready</span></div>
+      <div class="kv"><span>📎 Attachments</span><span class="dot-ok">Up to 25 MB</span></div>
+      <div class="kv"><span>📥 Inbox placement test</span><span class="dot-ok">Seed list</span></div>
+      <div class="kv"><span>🔥 Warm-up status</span><span class="dot-warn">2 pools warming</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Delivery queue</h2>
+  <table>
+    <thead><tr><th>Campaign</th><th>Status</th><th class="num">Queued</th><th class="num">Sent</th><th>Progress</th></tr></thead>
+    <tbody>
+    {% for c in queue %}
+      {% set pct = (100 * c.sent / c.recipients)|round(0,'floor')|int if c.recipients else 0 %}
+      <tr><td>{{ c.name }}</td><td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="num">{{ '{:,}'.format(c.recipients - c.sent) }}</td>
+        <td class="num">{{ '{:,}'.format(c.sent) }}</td>
+        <td style="width:160px"><div class="meter"><i style="width:{{ pct }}%"></i></div></td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">Nothing sending right now.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
