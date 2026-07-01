@@ -99,6 +99,120 @@ def write_email(topic, tone="friendly", cta="Learn more", audience="customers"):
     return body
 
 
+# --------------------------------------------------------------------------- #
+#  Full AI email generator — assembles a branded, personalised HTML email
+#  (subject, preview text, heading, body, CTA button, footer) from a handful
+#  of inputs. Deterministic and offline; swap `_llm_complete` for a real model
+#  to upgrade the copy without changing any callers.
+# --------------------------------------------------------------------------- #
+
+# Accent colour + a friendly opening line per industry.
+INDUSTRY_PRESETS = {
+    "Banking": ("#1e3a8a", "manage your money with confidence"),
+    "Insurance": ("#0f766e", "protect what matters most"),
+    "Healthcare": ("#0e7490", "care that's always within reach"),
+    "Education": ("#7c3aed", "keep learning and growing"),
+    "E-commerce": ("#db2777", "handpicked just for you"),
+    "Restaurant": ("#b91c1c", "something delicious is waiting"),
+    "Travel": ("#0891b2", "your next journey starts here"),
+    "Real Estate": ("#92400e", "find a place to call home"),
+    "SaaS": ("#4f46e5", "do more with less effort"),
+    "Corporate": ("#334155", "a quick update from our team"),
+    "Automobile": ("#1f2937", "the road ahead looks great"),
+    "Telecom": ("#2563eb", "stay connected, always"),
+    "Fitness": ("#16a34a", "your goals, within reach"),
+    "Hotel": ("#a16207", "your comfort is our priority"),
+    "Beauty & Salon": ("#be185d", "look and feel your best"),
+    "Legal": ("#374151", "clear guidance you can trust"),
+    "Manufacturing": ("#c2410c", "built to last"),
+    "Logistics": ("#0369a1", "delivered on time, every time"),
+    "Entertainment": ("#7e22ce", "the fun is about to begin"),
+    "Non-Profit": ("#15803d", "together we make a difference"),
+}
+
+INDUSTRIES = list(INDUSTRY_PRESETS.keys())
+EMAIL_TYPES = ["Newsletter", "Promotion", "Announcement", "Welcome",
+               "Re-engagement", "Event Invite", "Product Update",
+               "Transactional Receipt"]
+GOALS = ["Drive sales", "Announce a product", "Share news", "Get sign-ups",
+         "Book appointments", "Re-engage inactive contacts", "Collect feedback"]
+
+
+def generate_email(industry="", email_type="Newsletter", goal="", audience="customers",
+                   tone="friendly", length="medium", cta_style="button",
+                   language="english", spam_safe=True, company="{{company}}"):
+    """Return a complete email dict: subject, preview_text and HTML content
+    (heading + body + CTA + footer), branded to the industry and personalised
+    with merge tags."""
+    accent, opener_line = INDUSTRY_PRESETS.get(industry, ("#4f46e5", "we've got something for you"))
+    topic = (goal or email_type or industry or "an update").strip()
+
+    subject = generate_subjects(topic, tone, 1)[0]
+    preview_text = f"{opener_line.capitalize()} — {audience.rstrip('s').capitalize()}-first, no fluff."
+    heading = _headline(topic, tone)
+    cta = generate_ctas(goal or "get started")[0]
+
+    # Body paragraphs scale with the requested length.
+    para = {
+        "short": 1, "medium": 2, "long": 3,
+    }.get((length or "medium").lower(), 2)
+    intro = (f"Hi {{{{name}}}}," if tone != "casual" else "Hey {{name}}! 👋")
+    lines = [
+        f"{opener_line.capitalize()} — here's {topic.lower()} for {audience}.",
+        "We kept it short and useful, with everything you need in one place.",
+        "Have a question? Just reply to this email and a real person will help.",
+    ][:para]
+    body_paras = "".join(f'<p style="margin:0 0 14px;line-height:1.6">{l}</p>'
+                         for l in lines)
+
+    if cta_style == "link":
+        cta_html = (f'<p style="margin:18px 0"><a href="#" '
+                    f'style="color:{accent};font-weight:600">{cta} →</a></p>')
+    else:
+        cta_html = (f'<p style="margin:24px 0"><a href="#" '
+                    f'style="background:{accent};color:#fff;text-decoration:none;'
+                    f'padding:12px 22px;border-radius:8px;font-weight:600;'
+                    f'display:inline-block">{cta}</a></p>')
+
+    content = (
+        f'<div style="max-width:600px;margin:0 auto;font-family:Arial,Helvetica,'
+        f'sans-serif;color:#1f2937">'
+        f'<div style="background:{accent};height:6px;border-radius:6px 6px 0 0"></div>'
+        f'<div style="padding:28px 26px">'
+        f'<h1 style="margin:0 0 16px;font-size:22px;color:{accent}">{heading}</h1>'
+        f'<p style="margin:0 0 14px;line-height:1.6">{intro}</p>'
+        f'{body_paras}{cta_html}'
+        f'<p style="margin:18px 0 0;line-height:1.6">Warm regards,<br>'
+        f'The {company} Team</p>'
+        f'</div>'
+        f'<hr style="border:none;border-top:1px solid #e5e7eb">'
+        f'<p style="font-size:11px;color:#9ca3af;text-align:center;padding:0 20px 20px">'
+        f'You received this email because you opted in.<br>'
+        f'<a href="{{{{view_in_browser_url}}}}">View in browser</a> &middot; '
+        f'<a href="{{{{unsubscribe_url}}}}">Unsubscribe</a></p>'
+        f'</div>'
+    )
+
+    if (language or "english").lower() != "english":
+        tr = translate(content, language)
+        content = tr.get("text", content)
+        subject = translate(subject, language).get("text", subject)
+
+    result = {"subject": subject, "preview_text": preview_text,
+              "heading": heading, "cta": cta, "content": content,
+              "accent": accent}
+    return result
+
+
+def _headline(topic, tone):
+    topic = topic.strip().rstrip(".")
+    if tone == "urgent":
+        return f"{topic.capitalize()} — don't miss out"
+    if tone == "professional":
+        return topic.capitalize()
+    return f"{topic.capitalize()} 🎉"
+
+
 def generate_reply(incoming, tone="professional"):
     incoming = (incoming or "").strip()
     sentiment = "positive"

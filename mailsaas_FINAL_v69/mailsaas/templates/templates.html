@@ -208,14 +208,55 @@
             <div class="faint small" style="margin-top:4px">Tip: add a fallback with <code>{{ '{{city|your area}}' }}</code>. Variables resolve per recipient on send and in Preview.</div>
           </div>
 
+          {# ---- 🤖 AI Email Generator ---- #}
+          <details class="card tight" id="aiGen" style="background:var(--panel2);margin-top:10px">
+            <summary style="cursor:pointer"><b>🤖 AI Email Generator</b> <span class="faint small">— fill subject, preview &amp; body automatically</span></summary>
+            <div class="ai-grid" style="margin-top:10px">
+              <div><label class="small">Industry</label>
+                <select id="aiIndustry">{% for i in ai_industries %}<option>{{ i }}</option>{% endfor %}</select></div>
+              <div><label class="small">Type</label>
+                <select id="aiType">{% for t in ai_types %}<option>{{ t }}</option>{% endfor %}</select></div>
+              <div><label class="small">Goal</label>
+                <select id="aiGoal">{% for g in ai_goals %}<option>{{ g }}</option>{% endfor %}</select></div>
+              <div><label class="small">Audience</label><input id="aiAudience" placeholder="customers" value="customers"></div>
+              <div><label class="small">Tone</label>
+                <select id="aiTone"><option>friendly</option><option>professional</option><option>urgent</option><option>casual</option></select></div>
+              <div><label class="small">Length</label>
+                <select id="aiLength"><option>short</option><option selected>medium</option><option>long</option></select></div>
+              <div><label class="small">CTA style</label>
+                <select id="aiCta"><option value="button">Button</option><option value="link">Text link</option></select></div>
+              <div><label class="small">Language</label>
+                <select id="aiLang"><option>english</option><option>spanish</option><option>french</option><option>german</option><option>hindi</option></select></div>
+            </div>
+            <label class="small" style="display:flex;gap:6px;align-items:center;margin-top:8px">
+              <input type="checkbox" id="aiSpamSafe" checked> Spam-safe mode (auto-optimize for the inbox)</label>
+            <div class="row" style="margin-top:10px">
+              <button type="button" class="btn sm" id="aiGenBtn">✨ Generate</button>
+              <span id="aiGenMsg" class="faint small"></span>
+            </div>
+          </details>
+
           <label style="margin-top:8px">Content (HTML — use {{ '{{name}}' }} merge tags)</label>
           <textarea name="content" id="tplContent" style="font-family:ui-monospace,monospace;min-height:140px" placeholder="<h1>Hi {{ '{{name}}' }}</h1>">{{ edit.content if edit else '' }}</textarea>
-          {% if not edit %}
-          <div class="card tight" style="background:var(--panel2);margin-top:10px">
-            <label class="small">🤖 Or generate with AI (leave Content empty)</label>
-            <input name="ai_topic" placeholder="Create an Admission Open email for a school">
+
+          {# ---- 👁 Multi-device preview ---- #}
+          <div style="margin-top:10px">
+            <div class="row" style="align-items:center;gap:6px;flex-wrap:wrap">
+              <button type="button" class="btn ghost sm" id="tplPreviewBtn">👁 Preview</button>
+              <div id="tplPvModes" class="pv-modes" style="display:none">
+                {% for m in ['Desktop','Tablet','Mobile','Dark','Gmail','Outlook','Apple Mail'] %}
+                <button type="button" class="pv-mode{{ ' on' if m=='Desktop' }}" data-mode="{{ m }}">{{ m }}</button>
+                {% endfor %}
+              </div>
+            </div>
+            <div id="tplPvWrap" style="display:none;margin-top:10px">
+              <div class="muted small" style="margin-bottom:6px">Subject: <b id="tplPvSubject"></b></div>
+              <div id="tplPvStage" class="pv-stage">
+                <iframe id="tplPvFrame" class="pv-frame"></iframe>
+              </div>
+            </div>
           </div>
-          {% endif %}
+
           <div class="row" style="margin-top:12px">
             <button class="btn">{{ '💾 Update' if edit else '💾 Save to My Templates' }}</button>
             {% if edit %}<a class="btn ghost" href="{{ url_for('templates', tab='mine') }}">Cancel</a>{% endif %}
@@ -473,6 +514,20 @@
 .iv-chip{border:1px solid var(--border,#cbd5e1);background:var(--panel,#fff);border-radius:14px;padding:3px 10px;font-size:12px;cursor:pointer}
 .iv-chip:hover{border-color:var(--brand,#6366f1)}
 .iv-custom{border-style:dashed}
+.ai-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.pv-modes{display:flex;flex-wrap:wrap;gap:4px}
+.pv-mode{border:1px solid var(--border,#cbd5e1);background:var(--panel,#fff);border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
+.pv-mode.on{background:var(--brand,#6366f1);color:#fff;border-color:var(--brand,#6366f1)}
+.pv-stage{display:flex;justify-content:center;background:var(--panel2,#f1f5f9);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:14px}
+.pv-stage.dark{background:#0b1220}
+.pv-frame{width:600px;max-width:100%;height:460px;border:1px solid var(--border,#d1d5db);border-radius:8px;background:#fff;transition:width .25s}
+.pv-frame.tablet{width:480px}
+.pv-frame.mobile{width:340px}
+.pv-client{background:#fff;border-radius:8px;overflow:hidden;width:600px;max-width:100%}
+.pv-client .bar{font:600 12px Arial;padding:8px 12px;color:#fff}
+.pv-client.gmail .bar{background:#d93025}
+.pv-client.outlook .bar{background:#0a5ca8}
+.pv-client.apple .bar{background:#555}
 </style>
 
 <script>
@@ -493,6 +548,64 @@
   }
   document.querySelectorAll('.iv-chip').forEach(function(b){
     b.addEventListener('click',function(){ insertVar(b.dataset.var); });
+  });
+
+  /* ---- 🤖 AI Email Generator ---- */
+  var aiBtn=document.getElementById('aiGenBtn');
+  if(aiBtn){
+    aiBtn.addEventListener('click',function(){
+      if((bodyEl.value.trim()) && !confirm('Replace the current subject and body with an AI-generated email?')) return;
+      var msg=document.getElementById('aiGenMsg');
+      aiBtn.disabled=true; msg.textContent='Generating…';
+      post('{{ url_for("template_ai_generate") }}',{
+        industry:document.getElementById('aiIndustry').value,
+        email_type:document.getElementById('aiType').value,
+        goal:document.getElementById('aiGoal').value,
+        audience:document.getElementById('aiAudience').value,
+        tone:document.getElementById('aiTone').value,
+        length:document.getElementById('aiLength').value,
+        cta_style:document.getElementById('aiCta').value,
+        language:document.getElementById('aiLang').value,
+        spam_safe:document.getElementById('aiSpamSafe').checked?'1':'0'
+      }).then(function(d){
+        subjEl.value=d.subject||'';
+        var pv=form.querySelector('[name=preview_text]'); if(pv) pv.value=d.preview_text||'';
+        bodyEl.value=d.content||'';
+        aiBtn.disabled=false; msg.textContent='✓ Generated · inbox score '+d.score+'/100';
+      }).catch(function(){ aiBtn.disabled=false; msg.textContent='Could not generate — try again.'; });
+    });
+  }
+
+  /* ---- 👁 Multi-device preview ---- */
+  var pvBtn=document.getElementById('tplPreviewBtn'), pvMode='Desktop';
+  function renderPreview(){
+    post('{{ url_for("sender_preview") }}',{subject:subjEl.value, body:bodyEl.value})
+      .then(function(d){
+        if(!d.ok) return;
+        document.getElementById('tplPvModes').style.display='';
+        document.getElementById('tplPvWrap').style.display='';
+        document.getElementById('tplPvSubject').textContent=d.subject||'(no subject)';
+        applyMode(d.html);
+      }).catch(function(){});
+  }
+  function applyMode(html){
+    var stage=document.getElementById('tplPvStage');
+    var frame=document.getElementById('tplPvFrame');
+    if(html!==undefined) frame.dataset.html=html;
+    stage.classList.toggle('dark', pvMode==='Dark');
+    frame.className='pv-frame'+(pvMode==='Tablet'?' tablet':(pvMode==='Mobile'?' mobile':''));
+    var body=frame.dataset.html||'';
+    if(pvMode==='Dark'){ body='<div style="background:#0b1220;color:#e5e7eb;padding:10px">'+body+'</div>'; }
+    var chrome={'Gmail':'gmail','Outlook':'outlook','Apple Mail':'apple'}[pvMode];
+    if(chrome){ body='<div class="pvc '+chrome+'"><div class="bar">'+pvMode+' preview</div>'+body+'</div>'; }
+    frame.srcdoc=body;
+  }
+  if(pvBtn){ pvBtn.addEventListener('click',renderPreview); }
+  document.querySelectorAll('.pv-mode').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('.pv-mode').forEach(function(x){x.classList.remove('on');});
+      b.classList.add('on'); pvMode=b.dataset.mode; applyMode();
+    });
   });
   var dlg=document.getElementById('qcDlg');
   var ack=document.getElementById('qc_ack');

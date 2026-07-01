@@ -156,3 +156,34 @@ def test_custom_fields_capped_at_five(app, auth):
     assert n == 5
     html = auth.get("/contacts?list=all").get_data(as_text=True)
     assert "5 / 5 used" in html
+
+
+# --------------------------------------------------------------------------- #
+#  AI Email Generator
+# --------------------------------------------------------------------------- #
+def test_ai_generate_email_shape():
+    from mailsaas import ai
+    g = ai.generate_email(industry="Banking", email_type="Newsletter",
+                          goal="Share news", tone="professional", length="long")
+    assert g["subject"]
+    assert "<h1" in g["content"] and "unsubscribe_url" in g["content"]
+    assert "{{name}}" in g["content"]          # personalised
+    assert g["accent"].startswith("#")
+
+
+def test_ai_generate_endpoint_spam_safe(auth):
+    r = auth.post("/templates/ai-generate",
+                  data={"industry": "E-commerce", "email_type": "Promotion",
+                        "goal": "Drive sales", "tone": "friendly",
+                        "length": "medium", "cta_style": "button",
+                        "language": "english", "spam_safe": "1"})
+    j = r.get_json()
+    assert j["subject"] and j["content"] and j["preview_text"]
+    assert j["score"] >= 80                     # spam-safe optimised
+    # generated email is savable as a template
+    save = auth.post("/templates", data={"action": "create", "name": "AI Tpl",
+                                          "kind": "Email", "folder": "General",
+                                          "subject": j["subject"],
+                                          "content": j["content"], "qc_ack": "1"},
+                     follow_redirects=True)
+    assert save.status_code == 200

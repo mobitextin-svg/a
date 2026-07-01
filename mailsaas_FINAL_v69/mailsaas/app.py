@@ -4062,7 +4062,9 @@ def register_modules(app):
         return render_template("templates.html", tab=tab, system=system,
                                by_folder=by_folder, favorites=favorites, trash=trash,
                                folders=folders, mine_count=len(mine), edit=edit,
-                               custom_fields=custom_fields)
+                               custom_fields=custom_fields,
+                               ai_industries=ai.INDUSTRIES, ai_types=ai.EMAIL_TYPES,
+                               ai_goals=ai.GOALS)
 
     def _content_quality(subject, content):
         """Email Quality Check for a template's subject + HTML body. Content-only
@@ -4084,6 +4086,34 @@ def register_modules(app):
             "spam_count": len(spam_words),
             "suggestions": [f["fix"] for f in score_info["issues"]],
         }
+
+    @app.route("/templates/ai-generate", methods=["POST"])
+    @login_required
+    def template_ai_generate():
+        """AI Email Generator: build a full branded email (subject, preview,
+        HTML body) from the chosen industry / type / goal / tone / length /
+        CTA style / language, optionally spam-optimised."""
+        f = request.form
+        spam_safe = f.get("spam_safe", "1") not in ("", "0", "false", "off")
+        out = ai.generate_email(
+            industry=f.get("industry", ""),
+            email_type=f.get("email_type", "Newsletter"),
+            goal=f.get("goal", ""),
+            audience=f.get("audience", "customers") or "customers",
+            tone=f.get("tone", "friendly") or "friendly",
+            length=f.get("length", "medium") or "medium",
+            cta_style=f.get("cta_style", "button") or "button",
+            language=f.get("language", "english") or "english",
+            spam_safe=spam_safe,
+            company=(current_account()["name"] or "{{company}}"),
+        )
+        subject, content = out["subject"], out["content"]
+        if spam_safe:
+            subject, content = DAI.optimize_email(subject, content)
+        score = DAI.inbox_score(subject, content)["score"]
+        return jsonify({"subject": subject, "preview_text": out["preview_text"],
+                        "content": content, "heading": out["heading"],
+                        "score": score})
 
     @app.route("/templates/quality-check", methods=["POST"])
     @login_required

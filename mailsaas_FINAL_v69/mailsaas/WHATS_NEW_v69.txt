@@ -111,3 +111,20 @@ Files changed for items 4–5:
      (previously only name/email/company/mobile/city/state were sent), so
      Country / Balance / Last Purchase / custom fields all resolve on send.
    • Per-contact values are stored in contacts.custom_json (JSON).
+
+-------------------------------------------------------------------
+
+7) AI Email Generator + multi-device Preview + limits
+-----------------------------------------------------
+   • Template Builder → "🤖 AI Email Generator": pick Industry, Type, Goal,
+     Audience, Tone, Length, CTA style, Language and Spam-safe mode, and it
+     fills the subject, preview text and a fully branded HTML body (heading,
+     body, CTA button, compliant footer, personalised with {{name}}). With
+     Spam-safe on, the result is auto-optimised for the inbox.
+     New: /templates/ai-generate, ai.generate_email() with 20 industry presets.
+   • Template Builder → "👁 Preview" now supports device/client modes:
+     Desktop, Tablet, Mobile, Dark, Gmail, Outlook and Apple Mail.
+   • Custom personalization fields are capped at 5 per account (the Add form
+     shows "N / 5 used" and blocks the 6th).
+   • Removed the "Warm-up status / 2 pools warming" row from the Bulk Sender
+     toolkit panel.
