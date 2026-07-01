@@ -128,3 +128,14 @@ Files changed for items 4–5:
      shows "N / 5 used" and blocks the 6th).
    • Removed the "Warm-up status / 2 pools warming" row from the Bulk Sender
      toolkit panel.
+
+-------------------------------------------------------------------
+
+8) Industry Preset starters
+---------------------------
+   • Template Builder → "🏭 Industry Presets": 20 one-click starters
+     (Banking, Insurance, Healthcare, Education, E-commerce, Restaurant,
+     Travel, Real Estate, SaaS, Corporate, Automobile, Telecom, Fitness,
+     Hotel, Beauty & Salon, Legal, Manufacturing, Logistics, Entertainment,
+     Non-Profit). Clicking one drafts a branded, spam-safe email (subject,
+     preview, body, CTA, footer) into the editor, ready to tweak and save.

@@ -126,6 +126,18 @@
         <a class="btn ghost sm" href="{{ url_for('builder') }}">🎨 Builder</a>
       </div>
 
+      {# ---- 🏭 Industry Preset starters — one click drafts a branded email ---- #}
+      <details class="card" id="industryPresets" style="border-color:var(--brand)">
+        <summary style="cursor:pointer"><b>🏭 Industry Presets</b> <span class="faint small">— one click drafts a branded, spam-safe email you can edit</span></summary>
+        {% set preset_icons = {'Banking':'🏦','Insurance':'🛡','Healthcare':'🩺','Education':'🎓','E-commerce':'🛍','Restaurant':'🍽','Travel':'✈️','Real Estate':'🏠','SaaS':'💻','Corporate':'🏢','Automobile':'🚗','Telecom':'📱','Fitness':'🏋','Hotel':'🏨','Beauty & Salon':'💄','Legal':'⚖','Manufacturing':'🏭','Logistics':'📦','Entertainment':'🎭','Non-Profit':'❤️'} %}
+        <div class="preset-grid" style="margin-top:10px">
+          {% for i in ai_industries %}
+          <button type="button" class="preset-chip" data-industry="{{ i }}">{{ preset_icons.get(i, '📧') }} {{ i }}</button>
+          {% endfor %}
+        </div>
+        <div id="presetMsg" class="faint small" style="margin-top:8px"></div>
+      </details>
+
       {# Category manager #}
       <details class="card" id="catManager">
         <summary style="cursor:pointer"><b>⚙️ Manage categories</b> <span class="faint small">— rename or delete</span></summary>
@@ -515,6 +527,9 @@
 .iv-chip:hover{border-color:var(--brand,#6366f1)}
 .iv-custom{border-style:dashed}
 .ai-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.preset-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.preset-chip{border:1px solid var(--border,#cbd5e1);background:var(--panel,#fff);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;text-align:left}
+.preset-chip:hover{border-color:var(--brand,#6366f1);background:var(--panel2,#f5f5f5)}
 .pv-modes{display:flex;flex-wrap:wrap;gap:4px}
 .pv-mode{border:1px solid var(--border,#cbd5e1);background:var(--panel,#fff);border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
 .pv-mode.on{background:var(--brand,#6366f1);color:#fff;border-color:var(--brand,#6366f1)}
@@ -575,6 +590,31 @@
       }).catch(function(){ aiBtn.disabled=false; msg.textContent='Could not generate — try again.'; });
     });
   }
+
+  /* ---- 🏭 Industry Preset starters ---- */
+  function genFromPreset(industry, msgEl){
+    var editor=document.getElementById('editor'); if(editor) editor.open=true;
+    var nameEl=form.querySelector('[name=name]');
+    if(nameEl && !nameEl.value.trim()) nameEl.value=industry+' Email';
+    var ind=document.getElementById('aiIndustry'); if(ind) ind.value=industry;
+    if(msgEl){ msgEl.textContent='Drafting a '+industry+' email…'; }
+    post('{{ url_for("template_ai_generate") }}',{
+      industry:industry, email_type:'Newsletter', goal:'', audience:'customers',
+      tone:'friendly', length:'medium', cta_style:'button', language:'english', spam_safe:'1'
+    }).then(function(d){
+      subjEl.value=d.subject||'';
+      var pv=form.querySelector('[name=preview_text]'); if(pv) pv.value=d.preview_text||'';
+      bodyEl.value=d.content||'';
+      if(msgEl){ msgEl.textContent='✓ '+industry+' starter loaded — edit it below.'; }
+      if(editor) editor.scrollIntoView({behavior:'smooth'});
+    }).catch(function(){ if(msgEl) msgEl.textContent='Could not draft — try again.'; });
+  }
+  document.querySelectorAll('.preset-chip').forEach(function(b){
+    b.addEventListener('click',function(){
+      if(bodyEl.value.trim() && !confirm('Replace the current subject and body with a '+b.dataset.industry+' starter?')) return;
+      genFromPreset(b.dataset.industry, document.getElementById('presetMsg'));
+    });
+  });
 
   /* ---- 👁 Multi-device preview ---- */
   var pvBtn=document.getElementById('tplPreviewBtn'), pvMode='Desktop';
