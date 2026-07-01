@@ -533,6 +533,10 @@ _MIGRATIONS = [
     ("contacts", "country", "TEXT"),
     ("contacts", "balance", "TEXT"),
     ("contacts", "last_purchase", "TEXT"),
+    # Per-contact values for account-defined custom fields (contact_fields),
+    # stored as a JSON object {field_name: value}. Lets ANY custom variable
+    # (e.g. {{postal_pincode}}, {{din_number}}) resolve to real data.
+    ("contacts", "custom_json", "TEXT"),
 ]
 
 

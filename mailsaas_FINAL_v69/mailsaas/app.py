@@ -268,16 +268,18 @@ def execute_campaign_send(account_id, campaign_id, base_url):
         rate = 0
     delay = (60.0 / rate) if rate and rate > 0 else 0
     # Send to the campaign's target list if one is set, else all active contacts.
+    # SELECT * so every personalization field — built-ins plus custom_json —
+    # travels to the renderer and resolves per recipient.
     if camp["list_id"]:
         recipients = D.query(
-            "SELECT email, name, company, mobile, city, state FROM contacts"
+            "SELECT * FROM contacts"
             " WHERE account_id=? AND status='active' AND list_id=?"
             " AND email NOT IN (SELECT email FROM blocked_emails WHERE account_id=?)"
             " ORDER BY id LIMIT ?",
             (account_id, camp["list_id"], account_id, batch + 1))
     else:
         recipients = D.query(
-            "SELECT email, name, company, mobile, city, state FROM contacts"
+            "SELECT * FROM contacts"
             " WHERE account_id=? AND status='active'"
             " AND email NOT IN (SELECT email FROM blocked_emails WHERE account_id=?)"
             " ORDER BY id LIMIT ?", (account_id, account_id, batch + 1))
@@ -1081,7 +1083,7 @@ def _normalize_mobile(v):
     return plus + re.sub(r"\D", "", v)
 
 
-def _parse_contacts(rows):
+def _parse_contacts(rows, custom_lookup=None):
     """Map headers, clean and validate rows into standard contact records.
 
     Applies the default import pipeline: auto detect headers, auto map columns,
@@ -1095,9 +1097,16 @@ def _parse_contacts(rows):
         return records, {"blanks": 0, "invalid": 0, "errors": []}
     header = [str(c or "").strip() for c in rows[0]]
     mapping = {i: _HEADER_LOOKUP.get(h.lower()) for i, h in enumerate(header)}
+    # Custom-field columns: header text → custom field name (account-defined).
+    custom_col = {}
     if "email" in mapping.values():                       # row 0 is a header
         col = {f: i for i, f in mapping.items() if f}
         data = rows[1:]
+        if custom_lookup:
+            for i, h in enumerate(header):
+                fname = custom_lookup.get(h.lower())
+                if fname and mapping.get(i) is None:
+                    custom_col[i] = fname
     else:                                                 # positional fallback
         order = ["email", "name", "mobile", "company", "city", "state"]
         col = {f: i for i, f in enumerate(order)}
@@ -1116,14 +1125,23 @@ def _parse_contacts(rows):
             invalid += 1
             errors.append((",".join(str(x) for x in r), "Invalid email address"))
             continue                                      # Skip Invalid Records
-        records.append({
+        rec = {
             "email": email,
             "name": cell(r, col.get("name")),
             "mobile": _normalize_mobile(cell(r, col.get("mobile"))),
             "company": cell(r, col.get("company")),
             "city": cell(r, col.get("city")),
             "state": cell(r, col.get("state")),
-        })
+        }
+        if custom_col:
+            cust = {}
+            for i, fname in custom_col.items():
+                v = cell(r, i)
+                if v:
+                    cust[fname] = v
+            if cust:
+                rec["custom"] = cust
+        records.append(rec)
     return records, {"blanks": blanks, "invalid": invalid, "errors": errors}
 
 
@@ -1358,6 +1376,17 @@ def register_modules(app):
                 return int(lid)
             return None
 
+        def _collect_custom(aid):
+            """Gather this account's custom-field values from the form (inputs
+            named cf_<field>) into a JSON string, or None when all are blank."""
+            vals = {}
+            for r in D.query("SELECT name FROM contact_fields WHERE account_id=?",
+                             (aid,)):
+                v = (request.form.get("cf_" + r["name"]) or "").strip()
+                if v:
+                    vals[r["name"]] = v
+            return json.dumps(vals) if vals else None
+
         if request.method == "POST":
             action = request.form.get("action")
             sel = request.form.get("sel", "all")    # where to return to
@@ -1481,7 +1510,17 @@ def register_modules(app):
                     rule = "remove"
                 by_name = acct["dup_check"] == "email_name"
                 rows_data, fname = _read_import_rows()
-                records, pstats = _parse_contacts(rows_data)
+                # Let CSV columns matching a custom field (by name or label) map
+                # into that contact's custom values.
+                custom_lookup = {}
+                for f in D.query("SELECT name, label FROM contact_fields WHERE"
+                                 " account_id=?", (aid,)):
+                    custom_lookup[f["name"].lower()] = f["name"]
+                    custom_lookup[(f["label"] or "").lower()] = f["name"]
+                    custom_lookup[(f["label"] or "").lower().replace(" ", "_")] = \
+                        f["name"]
+                custom_lookup.pop("", None)
+                records, pstats = _parse_contacts(rows_data, custom_lookup)
                 scope = "account_id=?" + (" AND list_id=?" if lid else "")
                 sargs = [aid] + ([lid] if lid else [])
                 existing = {}
@@ -1525,11 +1564,12 @@ def register_modules(app):
                     seen.add(key)
                     new_cid = D.execute(
                         "INSERT INTO contacts (account_id, list_id, email, name, mobile,"
-                        " company, city, state, status, tags, import_id, created_at)"
-                        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        " company, city, state, custom_json, status, tags, import_id,"
+                        " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (aid, lid, rec["email"], rec["name"], rec["mobile"],
-                         rec["company"], rec["city"], rec["state"], "active",
-                         imp_tag if imp_tag else None,
+                         rec["company"], rec["city"], rec["state"],
+                         json.dumps(rec["custom"]) if rec.get("custom") else None,
+                         "active", imp_tag if imp_tag else None,
                          imp_id, D.now()))
                     D.log_contact_event(aid, new_cid, "imported", fname or "pasted rows")
                     if imp_tag:
@@ -1586,8 +1626,8 @@ def register_modules(app):
                 D.execute(
                     "INSERT INTO contacts (account_id, list_id, email, name, tags,"
                     " mobile, company, city, state, country, balance, last_purchase,"
-                    " note, status, created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " custom_json, note, status, created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (aid, _list_id(), request.form.get("email", "").strip().lower(),
                      request.form.get("name", "").strip(),
                      request.form.get("tags", "").strip(),
@@ -1598,6 +1638,7 @@ def register_modules(app):
                      request.form.get("country", "").strip(),
                      request.form.get("balance", "").strip(),
                      request.form.get("last_purchase", "").strip(),
+                     _collect_custom(aid),
                      request.form.get("note", "").strip(), "active", D.now()))
                 flash("Contact added.", "success")
             elif action == "edit":
@@ -1607,7 +1648,8 @@ def register_modules(app):
                     D.execute(
                         "UPDATE contacts SET email=?, name=?, tags=?, mobile=?,"
                         " company=?, city=?, state=?, country=?, balance=?,"
-                        " last_purchase=?, note=? WHERE id=? AND account_id=?",
+                        " last_purchase=?, custom_json=?, note=? WHERE id=? AND"
+                        " account_id=?",
                         (email, request.form.get("name", "").strip(),
                          request.form.get("tags", "").strip(),
                          _normalize_mobile(request.form.get("mobile", "")),
@@ -1617,6 +1659,7 @@ def register_modules(app):
                          request.form.get("country", "").strip(),
                          request.form.get("balance", "").strip(),
                          request.form.get("last_purchase", "").strip(),
+                         _collect_custom(aid),
                          request.form.get("note", "").strip(), cid, aid))
                     flash("Contact updated.", "success")
                 else:
@@ -2929,15 +2972,13 @@ def register_modules(app):
         data). Otherwise use the first active contact, or a synthetic stand-in.
         Every merge field is populated so the user can see each variable
         resolve."""
-        cols = ("email, name, company, mobile, city, state, country, balance,"
-                " last_purchase")
         row = None
         if contact_id:
-            row = D.query(f"SELECT {cols} FROM"
+            row = D.query("SELECT * FROM"
                           " contacts WHERE account_id=? AND id=?",
                           (aid, contact_id), one=True)
         if row is None:
-            row = D.query(f"SELECT {cols} FROM contacts"
+            row = D.query("SELECT * FROM contacts"
                           " WHERE account_id=? AND status='active' ORDER BY id LIMIT 1",
                           (aid,), one=True)
         base = {"name": "", "email": to_email or "sample@example.com",
@@ -2957,6 +2998,19 @@ def register_modules(app):
         base["country"] = base["country"] or "India"
         base["balance"] = base["balance"] or "₹0"
         base["last_purchase"] = base["last_purchase"] or "—"
+        # Custom fields: use the contact's real values; fall back to the field's
+        # label so an unset variable still previews as something readable.
+        custom = {}
+        if row and "custom_json" in row.keys() and row["custom_json"]:
+            try:
+                custom = json.loads(row["custom_json"]) or {}
+            except (ValueError, TypeError):
+                custom = {}
+        for f in D.query("SELECT name, label FROM contact_fields WHERE account_id=?",
+                         (aid,)):
+            if not custom.get(f["name"]):
+                custom[f["name"]] = f["label"]
+        base["custom"] = custom
         return base
 
     def _first_transport(aid):

@@ -338,6 +338,7 @@
                 data-state="{{ c.state or '' }}" data-note="{{ c.note or '' }}"
                 data-country="{{ c.country or '' }}" data-balance="{{ c.balance or '' }}"
                 data-last_purchase="{{ c.last_purchase or '' }}"
+                data-custom="{{ c.custom_json or '{}' }}"
                 data-list="{{ c.list_id or '' }}" title="Edit">✏️</button>
               {% if c.status != 'blocked' %}
               <form class="inline-form" method="post"><input type="hidden" name="action" value="block_contact">
@@ -391,6 +392,9 @@
     <div><label class="small">💰 Balance</label><input name="balance" placeholder="₹0"></div>
     <div><label class="small">🛍 Last Purchase</label><input name="last_purchase"></div>
     <div><label class="small">🏷 Tags</label><input name="tags" placeholder="vip, lead"></div>
+    {% for f in fields %}
+    <div><label class="small">🔧 {{ f.label }}</label><input name="cf_{{ f.name }}"></div>
+    {% endfor %}
   </div>
   <label class="small" style="margin-top:8px">📝 Note <span class="faint">(internal)</span></label><input name="note">
   <label class="small" style="margin-top:8px">List</label>
@@ -513,6 +517,9 @@
       <div><label class="small">💰 Balance</label><input name="balance" id="e-balance"></div>
       <div><label class="small">🛍 Last Purchase</label><input name="last_purchase" id="e-last_purchase"></div>
       <div><label class="small">🏷 Tags</label><input name="tags" id="e-tags"></div>
+      {% for f in fields %}
+      <div><label class="small">🔧 {{ f.label }}</label><input name="cf_{{ f.name }}" id="e-cf-{{ f.name }}" class="e-cf" data-cf="{{ f.name }}"></div>
+      {% endfor %}
     </div>
     <label class="small" style="margin-top:8px">📝 Note</label><input name="note" id="e-note">
     <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Save</button></div>
@@ -940,6 +947,9 @@ a.ct-li.on{background:var(--accent);color:#fff}
       document.getElementById('e-balance').value=b.dataset.balance||'';
       document.getElementById('e-last_purchase').value=b.dataset.last_purchase||'';
       document.getElementById('e-note').value=b.dataset.note||'';
+      // Custom fields.
+      var cvals={}; try{ cvals=JSON.parse(b.dataset.custom||'{}')||{}; }catch(e){}
+      document.querySelectorAll('.e-cf').forEach(function(inp){ inp.value=cvals[inp.dataset.cf]||''; });
       var ml=document.getElementById('m-list'); if(ml) ml.value=b.dataset.list||'';
       open(edit);
     });

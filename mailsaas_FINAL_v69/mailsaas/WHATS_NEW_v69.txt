@@ -91,3 +91,23 @@ Files changed for items 4–5:
   mailsaas/templates/templates.html, contacts.html, campaign_wizard.html,
   campaigns.html, reports.html, live_analytics.html (new),
   mailsaas/tests/test_personalization_analytics.py (new)
+
+-------------------------------------------------------------------
+
+6) Custom variables now carry REAL per-contact data
+---------------------------------------------------
+   • Define custom fields at Contacts → Settings → Custom Fields
+     (e.g. "Postal Pincode", "DIN Number", "Main Division Description").
+   • Each defined field now:
+       - shows an input on the Add/Edit Contact form,
+       - can be filled by CSV import (a column whose header matches the
+         field name or label maps automatically),
+       - appears as an insertable chip in the Template Builder, and
+       - resolves to the contact's real value on send and in previews,
+         via {{postal_pincode}}, {{din_number}}, … (fallbacks supported,
+         e.g. {{postal_pincode|N/A}}).
+     Custom keys never override the built-in fields.
+   • Also fixed: the real send now reads every personalization column
+     (previously only name/email/company/mobile/city/state were sent), so
+     Country / Balance / Last Purchase / custom fields all resolve on send.
+   • Per-contact values are stored in contacts.custom_json (JSON).

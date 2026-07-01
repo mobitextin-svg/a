@@ -51,11 +51,11 @@ def wrap_links(html, base_url, token):
     return _HREF_RE.sub(repl, html)
 
 
-def render_html(body, contact, base_url, token):
-    """Resolve merge tags, wrap links, and append the open-tracking pixel."""
-    name = (contact.get("name") or contact["email"].split("@")[0]).strip()
-    unsub_url = "%s/t/u/%s" % (base_url, token)
-    view_url = "%s/v/%s" % (base_url, token)
+def _merge_values(contact, name):
+    """Build the {tag: value} map for a contact: the built-in personalization
+    fields plus any custom-field values (contact['custom'] = {name: value}, or
+    a JSON string in contact['custom_json']). Custom keys are lower-cased so
+    {{Postal Pincode}} → postal_pincode resolves the same way."""
     values = {
         "name": name,
         "email": contact.get("email") or "",
@@ -67,6 +67,27 @@ def render_html(body, contact, base_url, token):
         "balance": (contact.get("balance") or "").strip(),
         "last_purchase": (contact.get("last_purchase") or "").strip(),
     }
+    custom = contact.get("custom")
+    if custom is None and contact.get("custom_json"):
+        import json as _json
+        try:
+            custom = _json.loads(contact["custom_json"])
+        except (ValueError, TypeError):
+            custom = None
+    if isinstance(custom, dict):
+        for k, v in custom.items():
+            key = str(k).strip().lower()
+            if key and key not in values:          # never shadow built-ins
+                values[key] = ("" if v is None else str(v)).strip()
+    return values
+
+
+def render_html(body, contact, base_url, token):
+    """Resolve merge tags, wrap links, and append the open-tracking pixel."""
+    name = (contact.get("name") or contact["email"].split("@")[0]).strip()
+    unsub_url = "%s/t/u/%s" % (base_url, token)
+    view_url = "%s/v/%s" % (base_url, token)
+    values = _merge_values(contact, name)
 
     def _sub(m):
         key = m.group(1).strip().lower()
@@ -100,17 +121,7 @@ def render_subject(subject, contact):
     contact. The URL tokens ({{unsubscribe_url}}/{{view_in_browser_url}}) are
     meaningless in a subject, so they resolve to empty rather than a raw URL."""
     name = (contact.get("name") or (contact.get("email") or "").split("@")[0]).strip()
-    values = {
-        "name": name,
-        "email": contact.get("email") or "",
-        "company": (contact.get("company") or "").strip(),
-        "mobile": (contact.get("mobile") or "").strip(),
-        "city": (contact.get("city") or "").strip(),
-        "state": (contact.get("state") or "").strip(),
-        "country": (contact.get("country") or "").strip(),
-        "balance": (contact.get("balance") or "").strip(),
-        "last_purchase": (contact.get("last_purchase") or "").strip(),
-    }
+    values = _merge_values(contact, name)
 
     def _sub(m):
         key = m.group(1).strip().lower()

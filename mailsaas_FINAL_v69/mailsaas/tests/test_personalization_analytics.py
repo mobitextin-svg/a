@@ -100,3 +100,48 @@ def test_live_analytics_page_and_json(app, auth):
     assert j["sent"] == j["delivered"] + j["bounces"]
     assert len(j["devices"]) == 3 and len(j["clients"]) == 5
     assert "hourly" in j and "geo" in j
+
+
+# --------------------------------------------------------------------------- #
+#  Custom variables — define, store, resolve, import
+# --------------------------------------------------------------------------- #
+def test_custom_field_add_store_and_render(app, auth):
+    from mailsaas import sending as S
+    auth.post("/contacts", data={"action": "add_field", "label": "Postal Pincode"})
+    auth.post("/contacts", data={"action": "add_field", "label": "DIN Number"})
+    auth.post("/contacts", data={"action": "add", "email": "cv@example.com",
+                                 "name": "CV", "cf_postal_pincode": "600001",
+                                 "cf_din_number": "DIN123"})
+    with app.app_context():
+        row = D.query("SELECT custom_json FROM contacts WHERE email='cv@example.com'",
+                      one=True)
+    contact = {"email": "cv@example.com", "name": "CV",
+               "custom_json": row["custom_json"]}
+    assert S.render_subject("{{postal_pincode}}/{{din_number}}", contact) \
+        == "600001/DIN123"
+    html = S.render_html("<p>{{postal_pincode}}</p>", contact, "http://h", "t")
+    assert "600001" in html
+
+
+def test_custom_field_shows_in_template_builder(auth):
+    auth.post("/contacts", data={"action": "add_field", "label": "Loyalty Tier"})
+    html = auth.get("/templates?tab=mine").get_data(as_text=True)
+    assert "Loyalty Tier" in html
+
+
+def test_custom_field_csv_import(app, auth):
+    auth.post("/contacts", data={"action": "add_field", "label": "Postal Pincode"})
+    csv = "Email,Name,Postal Pincode\nimp@example.com,Imp,560002\n"
+    auth.post("/contacts", data={"action": "import", "list_id": "", "csv": csv})
+    with app.app_context():
+        row = D.query("SELECT custom_json FROM contacts WHERE email='imp@example.com'",
+                      one=True)
+    assert row and '"postal_pincode": "560002"' in row["custom_json"]
+
+
+def test_custom_field_never_shadows_builtin():
+    from mailsaas import sending as S
+    # A custom field literally named 'name' must not override the real name.
+    contact = {"email": "x@y.com", "name": "Real",
+               "custom": {"name": "Spoofed"}}
+    assert S.render_subject("{{name}}", contact) == "Real"
