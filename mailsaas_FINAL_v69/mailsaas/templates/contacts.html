@@ -565,12 +565,16 @@
     </div>
   </div>
   <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
-    <b>Custom Fields</b>
+    <b>Custom Fields</b> <span class="faint small">({{ fields|length }} / {{ max_custom_fields }} used)</span>
+    {% if fields|length < max_custom_fields %}
     <form method="post" class="row" style="gap:8px;align-items:flex-end;margin:8px 0">
       <input type="hidden" name="action" value="add_field">
-      <div style="flex:1"><label class="small">Field label</label><input name="label" placeholder="e.g. Company" required></div>
+      <div style="flex:1"><label class="small">Field label</label><input name="label" placeholder="e.g. Postal Pincode" required></div>
       <button class="btn sm">＋ Add</button>
     </form>
+    {% else %}
+    <p class="faint small" style="margin:8px 0">Maximum of {{ max_custom_fields }} custom fields reached — delete one to add another.</p>
+    {% endif %}
     <table><tbody>
       {% for f in fields %}
       <tr><td>{{ f.label }}</td><td><code>{{ f.name }}</code></td>

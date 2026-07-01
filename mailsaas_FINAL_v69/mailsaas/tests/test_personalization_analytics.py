@@ -145,3 +145,14 @@ def test_custom_field_never_shadows_builtin():
     contact = {"email": "x@y.com", "name": "Real",
                "custom": {"name": "Spoofed"}}
     assert S.render_subject("{{name}}", contact) == "Real"
+
+
+def test_custom_fields_capped_at_five(app, auth):
+    for i in range(7):
+        auth.post("/contacts", data={"action": "add_field", "label": f"F{i}"})
+    with app.app_context():
+        n = D.query("SELECT COUNT(*) c FROM contact_fields WHERE account_id=1",
+                    one=True)["c"]
+    assert n == 5
+    html = auth.get("/contacts?list=all").get_data(as_text=True)
+    assert "5 / 5 used" in html

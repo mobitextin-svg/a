@@ -993,6 +993,10 @@ ATTACH_TYPES = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
     "gif": "image/gif", "webp": "image/webp",
 }
+# Custom personalization fields are capped per account to keep the Insert
+# Variable menu and Add/Edit forms manageable.
+MAX_CUSTOM_FIELDS = 5
+
 ATTACH_MAX_FILES = 10
 ATTACH_MAX_FILE = 10 * 1024 * 1024     # 10 MB per file
 ATTACH_MAX_TOTAL = 25 * 1024 * 1024    # 25 MB combined (safe Gmail/Outlook limit)
@@ -1981,13 +1985,18 @@ def register_modules(app):
                 flash("Contact settings saved.", "success")
             elif action == "add_field":
                 label = request.form.get("label", "").strip()[:40]
-                if label:
+                count = D.query("SELECT COUNT(*) c FROM contact_fields WHERE"
+                                " account_id=?", (aid,), one=True)["c"]
+                if not label:
+                    flash("Enter a field label.", "error")
+                elif count >= MAX_CUSTOM_FIELDS:
+                    flash(f"You can have at most {MAX_CUSTOM_FIELDS} custom "
+                          "fields. Delete one to add another.", "error")
+                else:
                     key = re.sub(r"[^a-z0-9_]+", "_", label.lower()).strip("_") or "field"
                     D.execute("INSERT INTO contact_fields (account_id, name, label,"
                               " created_at) VALUES (?,?,?,?)", (aid, key, label, D.now()))
                     flash(f"Custom field '{label}' added.", "success")
-                else:
-                    flash("Enter a field label.", "error")
             elif action == "del_field":
                 D.execute("DELETE FROM contact_fields WHERE id=? AND account_id=?",
                           (request.form.get("id"), aid))
@@ -2113,7 +2122,7 @@ def register_modules(app):
             all_total=all_total, suppress_count=suppress_count,
             trash=trash_rows, trash_count=trash_count,
             unsub=unsub, bounced=bounced, complaints=complaints, blocked=blocked,
-            imports=imports, acct=acct,
+            imports=imports, acct=acct, max_custom_fields=MAX_CUSTOM_FIELDS,
             fields=D.query("SELECT * FROM contact_fields WHERE account_id=?"
                            " ORDER BY id", (aid,)),
             type_icons=LIST_TYPE_ICONS,
