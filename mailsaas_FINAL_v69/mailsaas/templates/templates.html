@@ -177,22 +177,23 @@
       {# Editor (create / edit) #}
       <details class="card" id="editor" style="border-color:var(--brand)" {{ 'open' if edit }}>
         <summary style="cursor:pointer"><b>{{ '✏️ Edit template' if edit else '➕ New template' }}</b></summary>
-        <form method="post" style="margin-top:10px">
+        <form method="post" style="margin-top:10px" id="tplEditForm">
           <input type="hidden" name="action" value="{{ 'update' if edit else 'create' }}">
           <input type="hidden" name="tab" value="mine">
+          <input type="hidden" name="qc_ack" id="qc_ack" value="">
           {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
           <div class="row">
             <div style="flex:2"><label>Template name</label><input name="name" value="{{ edit.name if edit else '' }}" placeholder="Admission 2027" required></div>
             <div style="flex:1"><label>Category</label>
               <select name="folder" id="newTplFolder">{% for f in folders %}<option {{ 'selected' if edit and edit.folder==f }}>{{ f }}</option>{% endfor %}</select></div>
             <div style="flex:1"><label>Type</label>
-              <select name="kind"><option {{ 'selected' if edit and edit.kind=='Email' }}>Email</option><option {{ 'selected' if edit and edit.kind=='Landing' }}>Landing</option><option {{ 'selected' if edit and edit.kind=='Block' }}>Block</option></select></div>
+              <select name="kind" id="tplKind"><option {{ 'selected' if edit and edit.kind=='Email' }}>Email</option><option {{ 'selected' if edit and edit.kind=='Landing' }}>Landing</option><option {{ 'selected' if edit and edit.kind=='Block' }}>Block</option></select></div>
           </div>
-          <label>Subject</label><input name="subject" value="{{ edit.subject if edit else '' }}" placeholder="Admissions are now open!">
+          <label>Subject</label><input name="subject" id="tplSubject" value="{{ edit.subject if edit else '' }}" placeholder="Admissions are now open!">
           <label style="margin-top:8px">Preview Text <span class="faint small">(optional, default) — the grey inbox line; campaigns can override it</span></label>
-          <input name="preview_text" value="{{ edit.preview_text if edit else '' }}" placeholder="Limited-time offer ends tonight.">
+          <input name="preview_text" id="tplPreview" value="{{ edit.preview_text if edit else '' }}" placeholder="Limited-time offer ends tonight.">
           <label style="margin-top:8px">Content (HTML — use {{ '{{name}}' }} merge tags)</label>
-          <textarea name="content" style="font-family:ui-monospace,monospace;min-height:140px" placeholder="<h1>Hi {{ '{{name}}' }}</h1>">{{ edit.content if edit else '' }}</textarea>
+          <textarea name="content" id="tplContent" style="font-family:ui-monospace,monospace;min-height:140px" placeholder="<h1>Hi {{ '{{name}}' }}</h1>">{{ edit.content if edit else '' }}</textarea>
           {% if not edit %}
           <div class="card tight" style="background:var(--panel2);margin-top:10px">
             <label class="small">🤖 Or generate with AI (leave Content empty)</label>
@@ -411,4 +412,105 @@
   </tbody></table>
 </div>
 {% endif %}
+
+{# ============ Email Quality Check (optional, on save) ============ #}
+<dialog id="qcDlg" class="ct-dlg" style="max-width:460px">
+  <h3 style="margin-top:0">✉️ Email Quality Check</h3>
+  <div id="qcBody">
+    <div class="qc-grid">
+      <div class="qc-metric">
+        <div class="faint small">Quality Score</div>
+        <div class="qc-score" id="qcScore">—</div>
+      </div>
+      <div class="qc-metric">
+        <div class="faint small">Spam Risk</div>
+        <div id="qcRisk" class="qc-pill">—</div>
+      </div>
+      <div class="qc-metric">
+        <div class="faint small">Spam Words</div>
+        <div id="qcWords" class="qc-pill">—</div>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="faint small" style="margin-bottom:4px">Suggestions</div>
+      <ul id="qcSuggestions" class="qc-sugg"></ul>
+    </div>
+  </div>
+  <div class="ct-foot" style="margin-top:16px;gap:8px;flex-wrap:wrap">
+    <button type="button" class="btn ghost sm" id="qcBack">Back to Edit</button>
+    <button type="button" class="btn sm" id="qcOptimize">⚡ Auto Optimize</button>
+    <button type="button" class="btn sm" id="qcSaveAnyway">Save Anyway</button>
+  </div>
+  <p class="faint small" style="margin:10px 0 0">This check is optional — you can save without optimising.</p>
+</dialog>
+
+<style>
+.qc-grid{display:flex;gap:10px;text-align:center}
+.qc-metric{flex:1;background:var(--panel2,#f5f5f5);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:10px 6px}
+.qc-score{font-size:1.8rem;font-weight:700}
+.qc-pill{font-weight:600;margin-top:4px}
+.qc-sugg{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+.qc-sugg li{margin:2px 0}
+.qc-low{color:var(--good,#16a34a)}.qc-med{color:var(--warn,#d97706)}.qc-high{color:var(--bad,#dc2626)}
+</style>
+
+<script>
+(function(){
+  var form=document.getElementById('tplEditForm');
+  if(!form) return;
+  function meta(n){var m=document.querySelector('meta[name="'+n+'"]');return m?m.getAttribute('content'):'';}
+  var dlg=document.getElementById('qcDlg');
+  var ack=document.getElementById('qc_ack');
+  function post(url,data){
+    return fetch(url,{method:'POST',headers:{'X-CSRFToken':meta('csrf-token'),
+      'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams(data).toString()}).then(function(r){return r.json();});
+  }
+  function fields(){
+    return {subject:form.querySelector('[name=subject]').value,
+            preview_text:(form.querySelector('[name=preview_text]')||{}).value||'',
+            content:form.querySelector('[name=content]').value};
+  }
+  function realSubmit(){ ack.value='1'; form.submit(); }
+
+  form.addEventListener('submit',function(e){
+    // Skip the check when it's not an email, when saving from AI-generate
+    // (empty content), or once the user has already acknowledged it.
+    var kind=(form.querySelector('[name=kind]')||{}).value||'Email';
+    var f=fields();
+    if(ack.value==='1' || kind!=='Email' || !f.content.trim()) return; // save normally
+    e.preventDefault();
+    post('{{ url_for("template_quality_check") }}',{subject:f.subject,content:f.content})
+      .then(function(d){ renderQC(d); if(dlg.showModal)dlg.showModal(); else dlg.setAttribute('open',''); })
+      .catch(function(){ realSubmit(); }); // if the check fails, don't block saving
+  });
+
+  function renderQC(d){
+    var s=document.getElementById('qcScore');
+    s.textContent=d.score; s.style.color=d.score>=80?'var(--good,#16a34a)':(d.score>=55?'var(--warn,#d97706)':'var(--bad,#dc2626)');
+    var risk=document.getElementById('qcRisk');
+    risk.textContent=d.spam_level;
+    risk.className='qc-pill '+(d.spam_level==='Low'?'qc-low':(d.spam_level==='Medium'?'qc-med':'qc-high'));
+    document.getElementById('qcWords').textContent=d.spam_count+' Found';
+    var ul=document.getElementById('qcSuggestions'); ul.innerHTML='';
+    (d.suggestions&&d.suggestions.length?d.suggestions:['Looks great — no issues found.']).forEach(function(t){
+      var li=document.createElement('li'); li.textContent=t; ul.appendChild(li);
+    });
+  }
+  function closeDlg(){ if(dlg.close)dlg.close(); else dlg.removeAttribute('open'); }
+
+  document.getElementById('qcBack').addEventListener('click',closeDlg);
+  document.getElementById('qcSaveAnyway').addEventListener('click',function(){ closeDlg(); realSubmit(); });
+  document.getElementById('qcOptimize').addEventListener('click',function(){
+    var btn=this; btn.disabled=true; btn.textContent='Optimising…';
+    var f=fields();
+    post('{{ url_for("template_auto_optimize") }}',f).then(function(d){
+      form.querySelector('[name=subject]').value=d.subject;
+      if(form.querySelector('[name=preview_text]')) form.querySelector('[name=preview_text]').value=d.preview_text;
+      form.querySelector('[name=content]').value=d.content;
+      closeDlg(); realSubmit(); // save the optimised template
+    }).catch(function(){ btn.disabled=false; btn.textContent='⚡ Auto Optimize'; alert('Could not optimise right now.'); });
+  });
+})();
+</script>
 {% endblock %}

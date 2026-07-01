@@ -62,6 +62,8 @@
       <span>📋 All Contacts</span><span class="ct-n">{{ '{:,}'.format(all_total) }}</span></a>
     <a class="ct-li {{ 'on' if is_supp }}" href="{{ url_for('contacts', list='suppression') }}">
       <span>🚫 Suppression</span><span class="ct-n">{{ suppress_count }}</span></a>
+    <a class="ct-li {{ 'on' if sel=='trash' }}" href="{{ url_for('contacts', list='trash') }}">
+      <span>🗑 Trash</span><span class="ct-n">{{ trash_count }}</span></a>
     <div class="ct-sep"></div>
     {% for l in lists %}
     <div class="ct-li-row {{ 'on' if sel==l.id|string }}">
@@ -213,6 +215,51 @@
         </tbody></table>
       {% endif %}
     </div>
+  {% elif sel=='trash' %}
+    {# ---- Trash (soft-deleted contacts) ---- #}
+    <div class="card">
+      <h2 style="margin-top:0">🗑 Trash <span class="faint small">— deleted contacts, recoverable</span></h2>
+      <p class="faint small">Deleted contacts stay here until you restore them or delete them permanently. They are never sent to.</p>
+
+      <form method="post" id="trashForm"><input type="hidden" name="sel" value="trash"></form>
+      <div class="row" style="gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap">
+        <span class="faint small">With selected:</span>
+        <button class="btn sm" form="trashForm" name="action" value="restore_selected">♻ Restore</button>
+        <button class="btn danger sm" form="trashForm" name="action" value="purge_selected"
+                onclick="return confirm('⚠ Delete the selected contacts permanently?\n\nThis action CANNOT be undone.')">Delete Permanently</button>
+        {% if trash %}
+        <form method="post" style="margin-left:auto" onsubmit="return confirm('⚠ Empty Trash?\n\nAll {{ trash|length }} contact(s) will be permanently deleted. This action CANNOT be undone.')">
+          <input type="hidden" name="action" value="empty_trash"><input type="hidden" name="sel" value="trash">
+          <button class="btn danger sm">🗑 Empty Trash</button></form>
+        {% endif %}
+      </div>
+
+      <table>
+        <thead><tr>
+          <th style="width:24px"><input type="checkbox" id="checkAllTrash"></th>
+          <th>Email</th><th>Name</th><th>Company</th><th>Deleted</th><th></th></tr></thead>
+        <tbody>
+        {% for c in trash %}
+          <tr>
+            <td><input type="checkbox" name="ids" value="{{ c.id }}" class="trashChk" form="trashForm"></td>
+            <td>{{ c.email }}</td>
+            <td>{{ c.name or '—' }}</td>
+            <td class="faint small">{{ c.company or '—' }}</td>
+            <td class="faint small">{{ c.deleted_at[:10] if c.deleted_at else '—' }}</td>
+            <td class="num">
+              <form class="inline-form" method="post"><input type="hidden" name="action" value="restore">
+                <input type="hidden" name="id" value="{{ c.id }}"><button class="btn ghost sm" title="Restore">♻ Restore</button></form>
+              <form class="inline-form" method="post" onsubmit="return confirm('⚠ Delete {{ c.email }} permanently?\n\nThis action CANNOT be undone.')">
+                <input type="hidden" name="action" value="purge"><input type="hidden" name="id" value="{{ c.id }}">
+                <button class="btn danger sm" title="Delete permanently">🗑</button></form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="empty">Trash is empty.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
     {# ---- List / All Contacts ---- #}
     <div class="card">
@@ -265,7 +312,7 @@
         <button class="btn sm" form="bulkForm" name="action" value="assign_list">Move</button>
         <button type="button" class="btn sm" data-open="dlgTag">🏷 Tag</button>
         <button class="btn danger sm" form="bulkForm" name="action" value="delete_selected"
-                onclick="return confirm('Delete the selected contacts?')">Delete</button>
+                onclick="return confirm('Delete the selected contacts?\n\nThey will be moved to Trash and can be restored later.')">Delete</button>
       </div>
 
       <table>
@@ -294,9 +341,9 @@
               <form class="inline-form" method="post"><input type="hidden" name="action" value="block_contact">
                 <input type="hidden" name="sel" value="{{ sel }}"><input type="hidden" name="id" value="{{ c.id }}">
                 <button class="btn ghost sm" title="Block">🚫</button></form>{% endif %}
-              <form class="inline-form" method="post" onsubmit="return confirm('Delete {{ c.email }}?')">
+              <form class="inline-form" method="post" onsubmit="return confirm('Move {{ c.email }} to Trash?\n\nThis can be undone from the Trash view.')">
                 <input type="hidden" name="action" value="delete"><input type="hidden" name="sel" value="{{ sel }}">
-                <input type="hidden" name="id" value="{{ c.id }}"><button class="btn danger sm" title="Delete">🗑</button></form>
+                <input type="hidden" name="id" value="{{ c.id }}"><button class="btn danger sm" title="Move to Trash">🗑</button></form>
             </td>
           </tr>
         {% else %}
@@ -851,6 +898,8 @@ a.ct-li.on{background:var(--accent);color:#fff}
   });
   var all=document.getElementById('checkAll');
   if(all) all.addEventListener('change',function(){ document.querySelectorAll('.rowChk').forEach(function(x){x.checked=all.checked}); });
+  var allTrash=document.getElementById('checkAllTrash');
+  if(allTrash) allTrash.addEventListener('change',function(){ document.querySelectorAll('.trashChk').forEach(function(x){x.checked=allTrash.checked}); });
   // Keyboard shortcuts: A=Add, I=Import, E=Export, S=Statistics, / = search.
   // Ignored while typing in a field or when a dialog is already open.
   var SHORTCUTS={a:'dlgAdd',i:'dlgImport',e:'dlgExport',s:'dlgStats'};

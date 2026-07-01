@@ -290,19 +290,26 @@
      ========================================================= #}
   <div class="wiz-step card">
     <div class="section-head">
-      <h2>⑥ 📊 Inbox Analysis <span class="badge b-Running">⭐ Recommended</span></h2>
+      <h2>⑥ 📊 Inbox Analysis — Email Quality Check <span class="badge b-Running">⭐ Recommended</span></h2>
       <button type="button" class="btn ghost sm" id="reAnalyze" style="display:none">↻ Re-check</button>
     </div>
-    <p class="muted small">Run checks before sending. This step is optional — click <b>Skip</b> to continue.</p>
+    <p class="muted small">Verify the whole email before sending — spam score, authentication, links, readability and more.</p>
     <div class="ana-check-list">
-      <span class="faint small">✓ Spam Score &nbsp;·&nbsp; ✓ Authentication (SPF, DKIM, DMARC) &nbsp;·&nbsp; ✓ Broken Links &nbsp;·&nbsp; ✓ Image Ratio &nbsp;·&nbsp; ✓ Subject Analysis</span>
+      <span class="faint small">✓ Spam Score &nbsp;·&nbsp; ✓ Authentication (SPF, DKIM, DMARC) &nbsp;·&nbsp; ✓ Broken Links &nbsp;·&nbsp; ✓ Image Ratio &nbsp;·&nbsp; ✓ Mobile &nbsp;·&nbsp; ✓ Personalization</span>
     </div>
     <div id="anaBox" style="margin-top:14px">
-      <p class="faint">Click <b>Analyze</b> to run checks, or <b>Skip</b> to continue to the next step.</p>
+      <p class="faint">Click <b>Analyze</b> to run the Email Quality Check.</p>
     </div>
-    <div style="display:flex;gap:10px;margin-top:16px">
+    <div id="anaPreview" style="display:none;margin-top:14px">
+      <div class="muted small" style="margin-bottom:6px">Subject: <b id="anaPreviewSubject"></b></div>
+      <iframe id="anaPreviewFrame" style="width:100%;min-height:300px;border:1px solid var(--border,#2a3550);border-radius:8px;background:#fff"></iframe>
+    </div>
+    <div id="anaTestMsg" class="muted small" style="margin-top:8px"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
       <button type="button" class="btn" id="runAnalyzeBtn">Analyze</button>
-      <button type="button" class="btn ghost" id="skipAnalyze">Skip →</button>
+      <button type="button" class="btn ghost" id="previewEmailBtn">👁 Preview Email</button>
+      <button type="button" class="btn ghost" id="sendTestBtn">✉️ Send Test Email</button>
+      <button type="button" class="btn" id="skipAnalyze" style="margin-left:auto">Continue →</button>
     </div>
   </div>
 
@@ -783,6 +790,20 @@
           return '<div class="kv"><span>' + r.label + '</span><span style="color:' +
             (r.ok ? 'var(--good)' : 'var(--bad)') + '">' + (r.ok ? '✅ ' : '⚠️ ') + r.value + '</span></div>';
         }).join('');
+        function statusRow(r){
+          return '<div class="kv"><span>' + r.label + '</span><span style="color:' +
+            (r.ok ? 'var(--good)' : 'var(--bad)') + '">' + (r.ok ? '✅ ' : '⚠️ ') + (r.value||'') + '</span></div>';
+        }
+        var auth = (j.auth || []).map(function(a){
+          return '<div class="kv"><span>' + a.label + '</span><span style="color:' +
+            (a.ok ? 'var(--good)' : 'var(--bad)') + '">' + (a.ok ? '✅ Pass' : '⚠️ Missing') + '</span></div>';
+        }).join('');
+        var checks = (j.checks || []).map(function(c){
+          return '<div class="kv"><span>' + c.label + '</span><span style="color:' +
+            (c.ok ? 'var(--good)' : 'var(--bad)') + '">' + (c.ok ? '✅ ' + (c.label==='Personalization'?'Available':(c.label==='Mobile friendly'?'Good':'Good')) : '⚠️ Improve') + '</span></div>';
+        }).join('');
+        var spamLine = '<div class="kv"><span>🧨 Spam words</span><b>' + j.spam_count + ' found' +
+          (j.spam_count ? ' (' + (j.spam_words||[]).slice(0,4).join(', ') + ')' : '') + '</b></div>';
         var issues = (j.issues || []).length
           ? '<h3 style="margin-top:12px">🤖 Suggestions</h3>' + j.issues.map(function(i){
               return '<div class="kv"><span>🟠 <b>' + i.label + '</b> — <span class="muted">' + i.fix + '</span></span></div>';
@@ -793,15 +814,51 @@
           '<div style="text-align:center"><div class="score-ring" style="font-size:2.6rem;color:' + col + '">' + j.overall +
           '<span style="font-size:1rem;color:var(--muted)">/100</span></div>' +
           '<span class="badge ' + (j.level==='good'?'b-valid':(j.level==='warn'?'b-risky':'b-invalid')) + '">' + j.verdict + '</span></div>' +
-          '<div class="kv"><span>📥 Inbox score</span><b>' + j.content + '%</b></div>' +
-          '<div class="kv"><span>🚨 Spam risk</span><b>' + j.spam_risk + '/100</b></div></div>' +
+          '<div class="kv"><span>🚨 Spam risk</span><b>' + j.spam_level + '</b></div>' +
+          '<div class="kv"><span>📥 Inbox score</span><b>' + j.content + '%</b></div></div>' +
+          spamLine +
+          '<h3 style="margin-top:12px">🔐 Authentication</h3>' + auth +
+          '<h3 style="margin-top:12px">✅ Quality checks</h3>' + checks +
           '<div style="margin-top:10px">' + rows + '</div>' + issues;
       })
       .catch(function() { box.innerHTML = '<p class="faint">Could not analyze right now — you can still continue.</p>'; });
   }
 
+  /* ---- Preview + Send Test (reuses the bulk-sender endpoints) ---- */
+  function previewEmail() {
+    var wrap = document.getElementById('anaPreview');
+    var fd = new FormData();
+    fd.append('subject', form.subject.value);
+    fd.append('body', form.body.value);
+    fetch('{{ url_for("sender_preview") }}', {method:'POST', headers:{'X-CSRFToken': csrf}, body: fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) return;
+        wrap.style.display = '';
+        document.getElementById('anaPreviewSubject').textContent = d.subject || '(no subject)';
+        document.getElementById('anaPreviewFrame').srcdoc = d.html;
+      })
+      .catch(function(){});
+  }
+  function sendTest() {
+    var box = document.getElementById('anaTestMsg');
+    var to = prompt('Send a test email to which address?', '{{ default_from }}');
+    if (!to) return;
+    box.textContent = 'Sending test…'; box.style.color = 'var(--muted)';
+    var fd = new FormData();
+    fd.append('to', to);
+    fd.append('subject', form.subject.value);
+    fd.append('body', form.body.value);
+    fetch('{{ url_for("sender_test") }}', {method:'POST', headers:{'X-CSRFToken': csrf}, body: fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ box.textContent = d.msg; box.style.color = d.ok ? 'var(--good)' : 'var(--bad)'; })
+      .catch(function(){ box.textContent = 'Test failed — try again.'; box.style.color = 'var(--bad)'; });
+  }
+
   document.getElementById('runAnalyzeBtn').addEventListener('click', runAnalysis);
   document.getElementById('reAnalyze').addEventListener('click', runAnalysis);
+  document.getElementById('previewEmailBtn').addEventListener('click', previewEmail);
+  document.getElementById('sendTestBtn').addEventListener('click', sendTest);
   document.getElementById('skipAnalyze').addEventListener('click', function() {
     show(Math.min(cur + 1, steps.length - 1));
   });

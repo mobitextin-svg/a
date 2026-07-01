@@ -1,0 +1,57 @@
+MailSaaS v69 — what changed
+===========================
+
+1) Email Quality Check — now in TWO places, each with its own purpose
+--------------------------------------------------------------------
+
+   a) Template Module (OPTIONAL) — improve reusable templates before use.
+      When you Save an Email template that has content, an optional
+      "Email Quality Check" popup appears with:
+        • Quality Score        • Spam Risk (Low/Medium/High)
+        • Spam Words count     • Suggestions
+      Buttons:
+        • Save Anyway     — save the template unchanged.
+        • Auto Optimize   — rewrite the subject, soften the preheader,
+                            replace spam words, add unsubscribe/footer and
+                            personalisation, then save automatically.
+        • Back to Edit    — return to the editor without saving.
+      The check is optional — Landing/Block templates and AI-generated
+      (empty-content) saves skip it, and you can always Save Anyway.
+
+   b) Campaign Module (Step 6, "Inbox Analysis") — verify the whole email
+      before sending. The Email Quality Check now shows the overall score,
+      spam risk, spam-word count, authentication (SPF / DKIM / DMARC), and
+      readiness checks (personalisation, mobile-friendly, readability,
+      plain-text) alongside the existing content rows. New buttons:
+        • Preview Email     — live desktop preview with variables resolved.
+        • Send Test Email   — send one throwaway test to any address.
+        • Continue →        — move on to the Send step.
+
+   AI Auto-Optimize (used in both modules) rewrites the subject and
+   preheader, replaces spam-trigger words, improves readability, reduces
+   ALL CAPS, and optimises the HTML — keeping the original meaning.
+
+2) Contact deletion — soft delete to Trash, with permanent delete
+-----------------------------------------------------------------
+
+   • Normal Delete (single or bulk) now MOVES contacts to a new Trash view
+     instead of erasing them. The confirmation says it can be undone.
+   • Trashed contacts are excluded from lists, counts and every send.
+   • Trash view (left rail → 🗑 Trash) offers:
+        • Restore / Restore selected  — back to the previous status.
+        • Delete Permanently          — hard delete, with a "cannot be
+                                        undone" warning.
+        • Empty Trash                 — purge everything at once.
+
+3) Bulk Email Sender — one clean flow
+-------------------------------------
+   Name → Template (auto-fills subject + body) → Send to (list or all) →
+   optional Preview / Send test → Save & send now, with a recipient-count
+   confirmation. (Unchanged flow, documented here for completeness.)
+
+Files changed in this version:
+  mailsaas/app.py, mailsaas/db.py
+  mailsaas/templates/templates.html
+  mailsaas/templates/contacts.html
+  mailsaas/templates/campaign_wizard.html
+  mailsaas/tests/test_quality_and_trash.py

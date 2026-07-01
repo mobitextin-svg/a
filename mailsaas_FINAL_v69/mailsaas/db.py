@@ -522,6 +522,12 @@ _MIGRATIONS = [
     # Recently-used tags, account-wide, most-recent-first comma list (for the
     # quick-pick chips while editing/tagging a contact).
     ("accounts", "recent_tags", "TEXT NOT NULL DEFAULT ''"),
+    # Contact Trash (soft delete). Deleting a contact sets status='trashed' and
+    # stamps `deleted_at`; `restore_status` remembers the status to restore it
+    # to. Because trashed contacts leave the 'active' status, every existing
+    # status='active' send/count query excludes them automatically.
+    ("contacts", "deleted_at", "TEXT"),
+    ("contacts", "restore_status", "TEXT"),
 ]
 
 

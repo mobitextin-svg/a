@@ -1327,8 +1327,9 @@ def register_modules(app):
                        (lid, aid), one=True)
 
     def _scope_stats(aid, lid):
-        """Total / per-status counts for a list (lid) or the whole account (None)."""
-        where, args = "account_id=?", [aid]
+        """Total / per-status counts for a list (lid) or the whole account (None).
+        Trashed (soft-deleted) contacts are excluded."""
+        where, args = "account_id=? AND status != 'trashed'", [aid]
         if lid:
             where += " AND list_id=?"
             args.append(lid)
@@ -1818,18 +1819,70 @@ def register_modules(app):
                               f" AND id IN ({qs})", [_list_id(), aid] + ids)
                     flash(f"Moved {len(ids)} contact(s).", "success")
             elif action == "delete_selected":
+                # Normal Delete → soft delete (move to Trash, recoverable).
                 ids = request.form.getlist("ids")
                 if ids:
                     qs = ",".join("?" for _ in ids)
-                    D.execute(f"DELETE FROM contacts WHERE account_id=? AND"
-                              f" id IN ({qs})", [aid] + ids)
-                    flash(f"Deleted {len(ids)} contact(s).", "success")
+                    D.execute(
+                        f"UPDATE contacts SET restore_status=status,"
+                        f" status='trashed', deleted_at=? WHERE account_id=?"
+                        f" AND status != 'trashed' AND id IN ({qs})",
+                        [D.now(), aid] + ids)
+                    flash(f"Moved {len(ids)} contact(s) to Trash. "
+                          "Restore them any time from the Trash view.", "success")
             elif action == "block_contact":
                 D.execute("UPDATE contacts SET status='blocked' WHERE id=? AND"
                           " account_id=?", (request.form.get("id"), aid))
             elif action == "delete":
-                D.execute("DELETE FROM contacts WHERE id=? AND account_id=?",
+                # Normal Delete (single) → soft delete (move to Trash).
+                D.execute("UPDATE contacts SET restore_status=status,"
+                          " status='trashed', deleted_at=? WHERE id=? AND"
+                          " account_id=? AND status != 'trashed'",
+                          (D.now(), request.form.get("id"), aid))
+                flash("Contact moved to Trash.", "success")
+                sel = request.form.get("sel", sel)
+            elif action == "restore_selected":
+                # Restore soft-deleted contacts back to their previous status.
+                ids = request.form.getlist("ids")
+                if ids:
+                    qs = ",".join("?" for _ in ids)
+                    D.execute(
+                        f"UPDATE contacts SET"
+                        f" status=COALESCE(NULLIF(restore_status,''),'active'),"
+                        f" restore_status=NULL, deleted_at=NULL WHERE account_id=?"
+                        f" AND status='trashed' AND id IN ({qs})", [aid] + ids)
+                    flash(f"Restored {len(ids)} contact(s) from Trash.", "success")
+                sel = "trash"
+            elif action == "restore":
+                D.execute("UPDATE contacts SET"
+                          " status=COALESCE(NULLIF(restore_status,''),'active'),"
+                          " restore_status=NULL, deleted_at=NULL WHERE id=? AND"
+                          " account_id=? AND status='trashed'",
                           (request.form.get("id"), aid))
+                flash("Contact restored.", "success")
+                sel = "trash"
+            elif action == "purge_selected":
+                # Hard Delete → permanent removal (only from Trash).
+                ids = request.form.getlist("ids")
+                if ids:
+                    qs = ",".join("?" for _ in ids)
+                    D.execute(f"DELETE FROM contacts WHERE account_id=? AND"
+                              f" status='trashed' AND id IN ({qs})", [aid] + ids)
+                    flash(f"Permanently deleted {len(ids)} contact(s).", "success")
+                sel = "trash"
+            elif action == "purge":
+                D.execute("DELETE FROM contacts WHERE id=? AND account_id=? AND"
+                          " status='trashed'", (request.form.get("id"), aid))
+                flash("Contact permanently deleted.", "success")
+                sel = "trash"
+            elif action == "empty_trash":
+                n = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                            " AND status='trashed'", (aid,), one=True)["c"]
+                D.execute("DELETE FROM contacts WHERE account_id=? AND"
+                          " status='trashed'", (aid,))
+                flash(f"Trash emptied — {n} contact(s) permanently deleted.",
+                      "success")
+                sel = "trash"
             elif action == "fav_list":
                 # Favorite Lists: pin/unpin a list to the top of the rail.
                 lst = _own_list(aid, request.form.get("id"))
@@ -1893,7 +1946,8 @@ def register_modules(app):
         # -------------------- GET: render the dashboard -------------------- #
         lists = D.query(
             "SELECT cl.*, (SELECT COUNT(*) FROM contacts c WHERE c.list_id=cl.id"
-            " AND c.account_id=cl.account_id) AS n FROM contact_lists cl WHERE"
+            " AND c.account_id=cl.account_id AND c.status != 'trashed') AS n"
+            " FROM contact_lists cl WHERE"
             " cl.account_id=? ORDER BY cl.favorite DESC, cl.name", (aid,))
         sel = (request.args.get("list") or "all").strip()
         sel_list = _own_list(aid, sel) if sel.isdigit() else None
@@ -1916,9 +1970,10 @@ def register_modules(app):
         status_filter = request.args.get("status", "").strip()
         tag_filter = request.args.get("tag", "").strip()
         stats = None
-        if sel != "suppression":
+        if sel not in ("suppression", "trash"):
             lid = sel_list["id"] if sel_list else None
-            where, args = "account_id=?", [aid]
+            # Trashed contacts live only in the Trash view, never the lists.
+            where, args = "account_id=? AND status != 'trashed'", [aid]
             if lid:
                 where += " AND list_id=?"
                 args.append(lid)
@@ -1948,8 +2003,14 @@ def register_modules(app):
                 f" LIMIT ? OFFSET ?", args + [per_page, (page - 1) * per_page])
             stats = _scope_stats(aid, lid)
 
-        all_total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?",
-                            (aid,), one=True)["c"]
+        all_total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                            " AND status != 'trashed'", (aid,), one=True)["c"]
+        # Trash view payload — soft-deleted contacts, most-recently-trashed first.
+        trash_rows = D.query(
+            "SELECT * FROM contacts WHERE account_id=? AND status='trashed'"
+            " ORDER BY deleted_at DESC, id DESC", (aid,)) if sel == "trash" else []
+        trash_count = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                              " AND status='trashed'", (aid,), one=True)["c"]
         suppress_count = len(unsub) + len(bounced) + len(complaints) + len(blocked)
         # Import history (account-wide, most recent first) for the History modal.
         imports = D.query("SELECT * FROM contact_imports WHERE account_id=?"
@@ -1998,6 +2059,7 @@ def register_modules(app):
             contacts=contacts_rows, q=q, status_filter=status_filter,
             page=page, pages=pages, total=total, stats=stats,
             all_total=all_total, suppress_count=suppress_count,
+            trash=trash_rows, trash_count=trash_count,
             unsub=unsub, bounced=bounced, complaints=complaints, blocked=blocked,
             imports=imports, acct=acct,
             fields=D.query("SELECT * FROM contact_fields WHERE account_id=?"
@@ -2756,8 +2818,11 @@ def register_modules(app):
     @app.route("/campaigns/analyze", methods=["POST"])
     @login_required
     def campaign_analyze():
-        """Live Inbox-Analysis used by the wizard's step 5 — scores the in-progress
-        subject + body without saving anything."""
+        """Live Email Quality Check used by the wizard's Inbox-Analysis step —
+        scores the in-progress subject + body without saving anything. Returns
+        the overall score, spam risk, the granular content rows, email-auth
+        health (SPF/DKIM/DMARC) and a set of readiness checks (personalisation,
+        mobile-friendliness, readability, plain-text)."""
         aid = current_account()["id"]
         subject = request.form.get("subject", "")
         body = request.form.get("body", "")
@@ -2766,11 +2831,43 @@ def register_modules(app):
         sig = _account_signals(aid)
         acct = DAI.predict_deliverability(sig)
         readiness = DAI.send_readiness(content["score"], acct["score"])
+        spam_risk = max(0, 100 - content["score"])
+        spam_level = ("Low" if spam_risk <= 20 else
+                      "Medium" if spam_risk <= 45 else "High")
+
+        # Email authentication for the account's best domain.
+        dom = D.query("SELECT * FROM domains WHERE account_id=? ORDER BY"
+                      " reputation DESC LIMIT 1", (aid,), one=True)
+        auth = [
+            {"label": "SPF", "ok": bool(dom and dom["spf"])},
+            {"label": "DKIM", "ok": bool(dom and dom["dkim"])},
+            {"label": "DMARC", "ok": bool(dom and dom["dmarc"])},
+        ]
+
+        # Readiness checks the granular rows don't already cover.
+        low = body.lower()
+        personalised = "{{" in body
+        mobile_ok = ("viewport" in low or "@media" in low
+                     or "max-width" in low or "<table" in low)
+        tone = ai.analyze_tone(DAI._text_of(body))
+        readable = tone["readability"] == "Easy"
+        checks = [
+            {"label": "Personalization", "ok": personalised,
+             "hint": "Add a merge tag like {{name}} so it doesn't read as bulk mail."},
+            {"label": "Mobile friendly", "ok": mobile_ok,
+             "hint": "Use a responsive layout (viewport meta / table layout)."},
+            {"label": "Readability", "ok": readable,
+             "hint": "Shorten long paragraphs and sentences."},
+            {"label": "Plain-text version", "ok": True,
+             "hint": "A plain-text alternative is generated automatically on send."},
+        ]
         return jsonify({
             "overall": readiness["overall"], "verdict": readiness["verdict"],
             "level": readiness["level"], "content": content["score"],
-            "spam_risk": max(0, 100 - content["score"]),
-            "rows": analysis["rows"],
+            "spam_risk": spam_risk, "spam_level": spam_level,
+            "spam_words": analysis["spam_words"],
+            "spam_count": len(analysis["spam_words"]),
+            "rows": analysis["rows"], "auth": auth, "checks": checks,
             "issues": [{"label": f["label"], "fix": f["fix"]}
                        for f in content["issues"]],
         })
@@ -3837,6 +3934,58 @@ def register_modules(app):
         return render_template("templates.html", tab=tab, system=system,
                                by_folder=by_folder, favorites=favorites, trash=trash,
                                folders=folders, mine_count=len(mine), edit=edit)
+
+    def _content_quality(subject, content):
+        """Email Quality Check for a template's subject + HTML body. Content-only
+        (no account signals) so it works while composing. Returns the score,
+        spam risk/level, the exact spam-trigger words found and plain-language
+        suggestions — the payload behind the optional save-time popup."""
+        score_info = DAI.inbox_score(subject or "", content or "")
+        analysis = DAI.content_analysis(subject or "", content or "")
+        spam_words = analysis["spam_words"]
+        spam_risk = max(0, 100 - score_info["score"])
+        spam_level = ("Low" if spam_risk <= 20 else
+                      "Medium" if spam_risk <= 45 else "High")
+        return {
+            "score": score_info["score"],
+            "band": score_info["band"],
+            "spam_risk": spam_risk,
+            "spam_level": spam_level,
+            "spam_words": spam_words,
+            "spam_count": len(spam_words),
+            "suggestions": [f["fix"] for f in score_info["issues"]],
+        }
+
+    @app.route("/templates/quality-check", methods=["POST"])
+    @login_required
+    def template_quality_check():
+        """Score the in-progress template without saving anything — powers the
+        optional Email Quality Check popup shown when a template is saved."""
+        return jsonify(_content_quality(request.form.get("subject", ""),
+                                        request.form.get("content", "")))
+
+    @app.route("/templates/auto-optimize", methods=["POST"])
+    @login_required
+    def template_auto_optimize():
+        """AI Auto-Optimize for a template: rewrite the subject, soften spam
+        words in the preheader, and optimise the body (personalisation,
+        footer/unsubscribe, HTML). Returns the improved fields + before/after
+        scores; the client fills them in and saves."""
+        subject = request.form.get("subject", "")
+        content = request.form.get("content", "")
+        preview = request.form.get("preview_text", "")
+        before = DAI.inbox_score(subject, content)["score"]
+        new_subject, new_content = DAI.optimize_email(subject, content)
+        # Soften spam-trigger words in the preheader too, using the same map.
+        new_preview = preview
+        for bad, good in DAI.SPAM_FIX.items():
+            new_preview = re.sub(re.escape(bad), good, new_preview,
+                                 flags=re.IGNORECASE)
+        after = DAI.inbox_score(new_subject, new_content)["score"]
+        return jsonify({
+            "subject": new_subject, "content": new_content,
+            "preview_text": new_preview, "before": before, "after": after,
+        })
 
     @app.route("/templates/<int:tid>/export")
     @login_required
