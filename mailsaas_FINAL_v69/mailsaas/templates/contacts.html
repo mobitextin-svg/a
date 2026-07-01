@@ -336,6 +336,8 @@
                 data-tags="{{ c.tags or '' }}" data-mobile="{{ c.mobile or '' }}"
                 data-company="{{ c.company or '' }}" data-city="{{ c.city or '' }}"
                 data-state="{{ c.state or '' }}" data-note="{{ c.note or '' }}"
+                data-country="{{ c.country or '' }}" data-balance="{{ c.balance or '' }}"
+                data-last_purchase="{{ c.last_purchase or '' }}"
                 data-list="{{ c.list_id or '' }}" title="Edit">✏️</button>
               {% if c.status != 'blocked' %}
               <form class="inline-form" method="post"><input type="hidden" name="action" value="block_contact">
@@ -385,6 +387,9 @@
     <div><label class="small">🏢 Company</label><input name="company"></div>
     <div><label class="small">🏙 City</label><input name="city"></div>
     <div><label class="small">🌍 State</label><input name="state"></div>
+    <div><label class="small">🌐 Country</label><input name="country"></div>
+    <div><label class="small">💰 Balance</label><input name="balance" placeholder="₹0"></div>
+    <div><label class="small">🛍 Last Purchase</label><input name="last_purchase"></div>
     <div><label class="small">🏷 Tags</label><input name="tags" placeholder="vip, lead"></div>
   </div>
   <label class="small" style="margin-top:8px">📝 Note <span class="faint">(internal)</span></label><input name="note">
@@ -504,6 +509,9 @@
       <div><label class="small">🏢 Company</label><input name="company" id="e-company"></div>
       <div><label class="small">🏙 City</label><input name="city" id="e-city"></div>
       <div><label class="small">🌍 State</label><input name="state" id="e-state"></div>
+      <div><label class="small">🌐 Country</label><input name="country" id="e-country"></div>
+      <div><label class="small">💰 Balance</label><input name="balance" id="e-balance"></div>
+      <div><label class="small">🛍 Last Purchase</label><input name="last_purchase" id="e-last_purchase"></div>
       <div><label class="small">🏷 Tags</label><input name="tags" id="e-tags"></div>
     </div>
     <label class="small" style="margin-top:8px">📝 Note</label><input name="note" id="e-note">
@@ -928,6 +936,9 @@ a.ct-li.on{background:var(--accent);color:#fff}
       document.getElementById('e-company').value=b.dataset.company||'';
       document.getElementById('e-city').value=b.dataset.city||'';
       document.getElementById('e-state').value=b.dataset.state||'';
+      document.getElementById('e-country').value=b.dataset.country||'';
+      document.getElementById('e-balance').value=b.dataset.balance||'';
+      document.getElementById('e-last_purchase').value=b.dataset.last_purchase||'';
       document.getElementById('e-note').value=b.dataset.note||'';
       var ml=document.getElementById('m-list'); if(ml) ml.value=b.dataset.list||'';
       open(edit);

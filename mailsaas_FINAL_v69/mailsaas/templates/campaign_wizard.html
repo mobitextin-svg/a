@@ -301,13 +301,20 @@
       <p class="faint">Click <b>Analyze</b> to run the Email Quality Check.</p>
     </div>
     <div id="anaPreview" style="display:none;margin-top:14px">
+      <div class="row" style="align-items:center;gap:10px;margin-bottom:6px">
+        <button type="button" class="btn ghost sm" id="anaPrev">← Prev</button>
+        <div class="muted small" style="flex:1;text-align:center">
+          👤 <b id="anaPreviewName">—</b> <span id="anaPreviewWho" class="faint"></span>
+        </div>
+        <button type="button" class="btn ghost sm" id="anaNext">Next →</button>
+      </div>
       <div class="muted small" style="margin-bottom:6px">Subject: <b id="anaPreviewSubject"></b></div>
       <iframe id="anaPreviewFrame" style="width:100%;min-height:300px;border:1px solid var(--border,#2a3550);border-radius:8px;background:#fff"></iframe>
     </div>
     <div id="anaTestMsg" class="muted small" style="margin-top:8px"></div>
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
       <button type="button" class="btn" id="runAnalyzeBtn">Analyze</button>
-      <button type="button" class="btn ghost" id="previewEmailBtn">👁 Preview Email</button>
+      <button type="button" class="btn ghost" id="previewEmailBtn">👁 Personalization Preview</button>
       <button type="button" class="btn ghost" id="sendTestBtn">✉️ Send Test Email</button>
       <button type="button" class="btn" id="skipAnalyze" style="margin-left:auto">Continue →</button>
     </div>
@@ -824,22 +831,34 @@
       .catch(function() { box.innerHTML = '<p class="faint">Could not analyze right now — you can still continue.</p>'; });
   }
 
-  /* ---- Preview + Send Test (reuses the bulk-sender endpoints) ---- */
-  function previewEmail() {
+  /* ---- Personalization Preview: step through real recipients ---- */
+  var anaIdx = 0;
+  function personalizePreview(index) {
     var wrap = document.getElementById('anaPreview');
     var fd = new FormData();
     fd.append('subject', form.subject.value);
     fd.append('body', form.body.value);
-    fetch('{{ url_for("sender_preview") }}', {method:'POST', headers:{'X-CSRFToken': csrf}, body: fd})
+    fd.append('index', index);
+    // Pass a single chosen list when the recipient step selected exactly one.
+    var picked = document.querySelectorAll('input[name=list_ids]:checked');
+    if (picked.length === 1) fd.append('list_id', picked[0].value);
+    fetch('{{ url_for("campaign_personalize_preview") }}', {method:'POST', headers:{'X-CSRFToken': csrf}, body: fd})
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if (!d.ok) return;
+        anaIdx = d.index || 0;
         wrap.style.display = '';
+        document.getElementById('anaPreviewName').textContent = d.name || d.email || 'Recipient';
+        document.getElementById('anaPreviewWho').textContent =
+          d.sample ? '(sample — no contacts yet)' : ('· ' + (d.index + 1) + ' of ' + d.total + ' · ' + d.email);
         document.getElementById('anaPreviewSubject').textContent = d.subject || '(no subject)';
         document.getElementById('anaPreviewFrame').srcdoc = d.html;
+        var one = d.total <= 1;
+        document.getElementById('anaPrev').disabled = one;
+        document.getElementById('anaNext').disabled = one;
       })
       .catch(function(){});
   }
+  function previewEmail(){ personalizePreview(0); }
   function sendTest() {
     var box = document.getElementById('anaTestMsg');
     var to = prompt('Send a test email to which address?', '{{ default_from }}');
@@ -858,6 +877,8 @@
   document.getElementById('runAnalyzeBtn').addEventListener('click', runAnalysis);
   document.getElementById('reAnalyze').addEventListener('click', runAnalysis);
   document.getElementById('previewEmailBtn').addEventListener('click', previewEmail);
+  document.getElementById('anaPrev').addEventListener('click', function(){ personalizePreview(anaIdx - 1); });
+  document.getElementById('anaNext').addEventListener('click', function(){ personalizePreview(anaIdx + 1); });
   document.getElementById('sendTestBtn').addEventListener('click', sendTest);
   document.getElementById('skipAnalyze').addEventListener('click', function() {
     show(Math.min(cur + 1, steps.length - 1));

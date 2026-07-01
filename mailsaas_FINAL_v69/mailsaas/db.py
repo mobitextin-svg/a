@@ -528,6 +528,11 @@ _MIGRATIONS = [
     # status='active' send/count query excludes them automatically.
     ("contacts", "deleted_at", "TEXT"),
     ("contacts", "restore_status", "TEXT"),
+    # Extra personalization fields so {{country}}/{{balance}}/{{last_purchase}}
+    # merge tags resolve to real data (used by the Insert Variable menu).
+    ("contacts", "country", "TEXT"),
+    ("contacts", "balance", "TEXT"),
+    ("contacts", "last_purchase", "TEXT"),
 ]
 
 

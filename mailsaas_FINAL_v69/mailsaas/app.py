@@ -42,6 +42,7 @@ from . import sending as SEND
 from . import payments as PAY
 from . import deliverability as DELIV
 from . import deliver_ai as DAI
+from . import analytics as ANALYTICS
 from .nav import (NAV, NAV_BY_KEY, USER_GROUPS, ADMIN_GROUPS, ADMIN_ONLY,
                   ESSENTIAL, USER_ONBOARDING_STEPS, ADMIN_ONBOARDING_STEPS)
 from .verify import verify_email, verify_bulk
@@ -1584,8 +1585,9 @@ def register_modules(app):
             elif action == "add":
                 D.execute(
                     "INSERT INTO contacts (account_id, list_id, email, name, tags,"
-                    " mobile, company, city, state, note, status, created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " mobile, company, city, state, country, balance, last_purchase,"
+                    " note, status, created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (aid, _list_id(), request.form.get("email", "").strip().lower(),
                      request.form.get("name", "").strip(),
                      request.form.get("tags", "").strip(),
@@ -1593,6 +1595,9 @@ def register_modules(app):
                      request.form.get("company", "").strip(),
                      request.form.get("city", "").strip(),
                      request.form.get("state", "").strip(),
+                     request.form.get("country", "").strip(),
+                     request.form.get("balance", "").strip(),
+                     request.form.get("last_purchase", "").strip(),
                      request.form.get("note", "").strip(), "active", D.now()))
                 flash("Contact added.", "success")
             elif action == "edit":
@@ -1601,13 +1606,17 @@ def register_modules(app):
                 if cid and "@" in email:
                     D.execute(
                         "UPDATE contacts SET email=?, name=?, tags=?, mobile=?,"
-                        " company=?, city=?, state=?, note=? WHERE id=? AND account_id=?",
+                        " company=?, city=?, state=?, country=?, balance=?,"
+                        " last_purchase=?, note=? WHERE id=? AND account_id=?",
                         (email, request.form.get("name", "").strip(),
                          request.form.get("tags", "").strip(),
                          _normalize_mobile(request.form.get("mobile", "")),
                          request.form.get("company", "").strip(),
                          request.form.get("city", "").strip(),
                          request.form.get("state", "").strip(),
+                         request.form.get("country", "").strip(),
+                         request.form.get("balance", "").strip(),
+                         request.form.get("last_purchase", "").strip(),
                          request.form.get("note", "").strip(), cid, aid))
                     flash("Contact updated.", "success")
                 else:
@@ -2872,6 +2881,47 @@ def register_modules(app):
                        for f in content["issues"]],
         })
 
+    @app.route("/campaigns/personalize-preview", methods=["POST"])
+    @login_required
+    def campaign_personalize_preview():
+        """Personalization Preview: render the in-progress subject + body against
+        REAL recipients so the user can step through contacts (Prev/Next) and
+        confirm merge tags resolve before sending. Falls back to a synthetic
+        sample contact when the account has no active contacts yet."""
+        aid = current_account()["id"]
+        subject = request.form.get("subject", "")
+        body = request.form.get("body", "")
+        try:
+            idx = int(request.form.get("index", 0) or 0)
+        except ValueError:
+            idx = 0
+        list_id = (request.form.get("list_id") or "").strip()
+        where, args = "account_id=? AND status='active'", [aid]
+        if list_id and D.query("SELECT 1 FROM contact_lists WHERE id=? AND"
+                               " account_id=?", (list_id, aid), one=True):
+            where += " AND list_id=?"
+            args.append(list_id)
+        total = D.query(f"SELECT COUNT(*) c FROM contacts WHERE {where}", args,
+                        one=True)["c"]
+        base = request.host_url.rstrip("/")
+        if total == 0:
+            sample = _sample_contact(aid)
+            html = SEND.render_html(body, dict(sample), base, SEND.make_token())
+            subj = SEND.render_subject(subject, dict(sample))
+            return jsonify({"total": 0, "index": 0, "sample": True,
+                            "name": sample["name"], "email": sample["email"],
+                            "subject": subj, "html": html})
+        idx = idx % total
+        row = D.query(f"SELECT * FROM contacts WHERE {where} ORDER BY id"
+                      f" LIMIT 1 OFFSET ?", args + [idx], one=True)
+        contact = dict(row)
+        html = SEND.render_html(body, contact, base, SEND.make_token())
+        subj = SEND.render_subject(subject, contact)
+        return jsonify({"total": total, "index": idx, "sample": False,
+                        "name": contact.get("name") or "",
+                        "email": contact.get("email"),
+                        "subject": subj, "html": html})
+
     # ---- Bulk-sender helpers: a sample contact for preview / test ------- #
     def _sample_contact(aid, to_email=None, contact_id=None):
         """A representative contact for preview and test sends. When contact_id
@@ -2879,17 +2929,20 @@ def register_modules(app):
         data). Otherwise use the first active contact, or a synthetic stand-in.
         Every merge field is populated so the user can see each variable
         resolve."""
+        cols = ("email, name, company, mobile, city, state, country, balance,"
+                " last_purchase")
         row = None
         if contact_id:
-            row = D.query("SELECT email, name, company, mobile, city, state FROM"
+            row = D.query(f"SELECT {cols} FROM"
                           " contacts WHERE account_id=? AND id=?",
                           (aid, contact_id), one=True)
         if row is None:
-            row = D.query("SELECT email, name, company, mobile, city, state FROM contacts"
+            row = D.query(f"SELECT {cols} FROM contacts"
                           " WHERE account_id=? AND status='active' ORDER BY id LIMIT 1",
                           (aid,), one=True)
         base = {"name": "", "email": to_email or "sample@example.com",
-                "company": "", "mobile": "", "city": "", "state": ""}
+                "company": "", "mobile": "", "city": "", "state": "",
+                "country": "", "balance": "", "last_purchase": ""}
         if row:
             base.update({k: (row[k] or "") for k in base if k in row.keys()})
         if to_email:
@@ -2901,6 +2954,9 @@ def register_modules(app):
         base["mobile"] = base["mobile"] or "9000000000"
         base["city"] = base["city"] or "Chennai"
         base["state"] = base["state"] or "Tamil Nadu"
+        base["country"] = base["country"] or "India"
+        base["balance"] = base["balance"] or "₹0"
+        base["last_purchase"] = base["last_purchase"] or "—"
         return base
 
     def _first_transport(aid):
@@ -3086,8 +3142,14 @@ def register_modules(app):
             "inbox": series(94, 4),
         }
         smtp = D.query("SELECT name, health FROM smtp_servers WHERE account_id=?", (aid,))
+        # Campaigns that can be watched live (running now, or already sent).
+        live_campaigns = D.query(
+            "SELECT id, name, status, sent, recipients FROM campaigns WHERE"
+            " account_id=? AND (sent > 0 OR status IN ('Running','Completed'))"
+            " ORDER BY id DESC LIMIT 8", (aid,))
         return render_template("reports.html", agg=agg, per_campaign=per_campaign,
-                               charts=charts, smtp=smtp)
+                               charts=charts, smtp=smtp,
+                               live_campaigns=live_campaigns)
 
     # ---- API keys -------------------------------------------------------- #
     @app.route("/api", methods=["GET", "POST"])
@@ -3931,9 +3993,13 @@ def register_modules(app):
         if request.args.get("edit"):
             edit = D.query("SELECT * FROM templates WHERE id=? AND account_id=?",
                            (request.args.get("edit"), aid), one=True)
+        # Custom contact fields become insertable merge variables too.
+        custom_fields = D.query("SELECT name, label FROM contact_fields WHERE"
+                                " account_id=? ORDER BY id", (aid,))
         return render_template("templates.html", tab=tab, system=system,
                                by_folder=by_folder, favorites=favorites, trash=trash,
-                               folders=folders, mine_count=len(mine), edit=edit)
+                               folders=folders, mine_count=len(mine), edit=edit,
+                               custom_fields=custom_fields)
 
     def _content_quality(subject, content):
         """Email Quality Check for a template's subject + HTML body. Content-only
@@ -5724,6 +5790,64 @@ def register_modules(app):
             " COALESCE(SUM(clicked),0) clicks, COALESCE(SUM(status='failed'),0) failed"
             " FROM messages WHERE campaign_id=?", (cid,), one=True)
         return render_template("campaign_report.html", camp=camp, msgs=msgs, agg=agg)
+
+    def _live_payload(aid, cid):
+        """Real headline metrics + derived breakdowns for a campaign's Live
+        Analytics dashboard. Returns None if the campaign isn't the account's."""
+        c = D.query("SELECT * FROM campaigns WHERE id=? AND account_id=?",
+                    (cid, aid), one=True)
+        if not c:
+            return None
+        sent = c["sent"] or 0
+        bounces = c["bounces"] or 0
+        opens = c["opens"] or 0
+        clicks = c["clicks"] or 0
+        delivered = max(0, sent - bounces)
+        unsub = D.query("SELECT COUNT(*) c FROM complaints WHERE account_id=? AND"
+                        " campaign_id=? AND kind='unsubscribe'",
+                        (aid, cid), one=True)["c"]
+        spam = D.query("SELECT COUNT(*) c FROM complaints WHERE account_id=? AND"
+                       " campaign_id=? AND kind='complaint'",
+                       (aid, cid), one=True)["c"]
+        opened_ts = [r["opened_at"] for r in D.query(
+            "SELECT opened_at FROM messages WHERE campaign_id=? AND opened=1 AND"
+            " opened_at IS NOT NULL", (cid,))]
+        return {
+            "id": c["id"], "name": c["name"], "status": c["status"],
+            "recipients": c["recipients"] or 0,
+            "sent": sent, "delivered": delivered, "opened": opens,
+            "clicked": clicks, "bounces": bounces, "spam": spam,
+            "unsubscribes": unsub,
+            "open_rate": ANALYTICS.rate(opens, delivered),
+            "click_rate": ANALYTICS.rate(clicks, delivered),
+            "bounce_rate": ANALYTICS.rate(bounces, sent),
+            "delivered_rate": ANALYTICS.rate(delivered, sent),
+            "devices": ANALYTICS.device_split(opens, c["id"]),
+            "clients": ANALYTICS.client_split(opens, c["id"]),
+            "geo": ANALYTICS.geo_split(opens, c["id"]),
+            "hourly": ANALYTICS.hourly(opened_ts, opens, c["id"]),
+            "live": c["status"] in ("Running", "Scheduled"),
+        }
+
+    @app.route("/campaigns/<int:cid>/live")
+    @login_required
+    def campaign_live(cid):
+        """Real-time Live Analytics dashboard for a campaign (auto-refreshing)."""
+        aid = current_account()["id"]
+        data = _live_payload(aid, cid)
+        if not data:
+            abort(404)
+        return render_template("live_analytics.html", cid=cid, data=data)
+
+    @app.route("/campaigns/<int:cid>/live.json")
+    @login_required
+    def campaign_live_json(cid):
+        """Polled every few seconds by the Live Analytics dashboard."""
+        aid = current_account()["id"]
+        data = _live_payload(aid, cid)
+        if not data:
+            abort(404)
+        return jsonify(data)
 
     # ---- Open / click tracking (public — hit by recipients' mail clients) - #
     @app.route("/t/o/<token>.gif")

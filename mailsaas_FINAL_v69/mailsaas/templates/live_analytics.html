@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Live Analytics{% endblock %}
+{% block content %}
+<div class="section-head">
+  <div>
+    <h1 style="margin-bottom:2px">📊 Live Analytics
+      <span id="liveDot" class="live-dot" title="Updating live">●</span></h1>
+    <p class="muted" style="margin:0">Campaign: <b id="laName">{{ data.name }}</b>
+      · <span class="badge b-{{ data.status }}" id="laStatus">{{ data.status }}</span>
+      · <span class="faint small" id="laUpdated">updating…</span></p>
+  </div>
+  <div class="row" style="flex:0;gap:8px">
+    <a class="btn ghost sm" href="{{ url_for('campaign_report', cid=cid) }}">Full report</a>
+    <a class="btn ghost sm" href="{{ url_for('campaigns') }}">← Campaigns</a>
+  </div>
+</div>
+
+{# ---- Headline metrics (real numbers) ---- #}
+<div class="la-cards" id="laCards"></div>
+
+<div class="grid g2" style="margin-top:14px">
+  {# ---- Engagement bars ---- #}
+  <div class="card">
+    <h2>Engagement</h2>
+    <div id="laRates"></div>
+  </div>
+
+  {# ---- Hourly performance ---- #}
+  <div class="card">
+    <h2>Hourly Performance</h2>
+    <div id="laHourly"></div>
+  </div>
+</div>
+
+<div class="grid g2" style="margin-top:14px">
+  {# ---- Location / map ---- #}
+  <div class="card">
+    <h2>🗺 Location Report <span class="faint small">— opens by region</span></h2>
+    <div id="laGeo"></div>
+  </div>
+
+  {# ---- Device report ---- #}
+  <div class="card">
+    <h2>💻 Device Report</h2>
+    <div id="laDevices"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px">
+  <h2>✉️ Email Client</h2>
+  <div id="laClients"></div>
+</div>
+
+<style>
+.live-dot{color:#22c55e;animation:lapulse 1.4s infinite;font-size:14px}
+@keyframes lapulse{0%,100%{opacity:.3}50%{opacity:1}}
+.la-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:14px}
+.la-card{background:var(--panel2,#f5f5f5);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:12px 14px;text-align:center}
+.la-card .n{font-size:1.6rem;font-weight:700}
+.la-card .l{font-size:12px;color:var(--muted)}
+.la-bar-row{display:flex;align-items:center;gap:10px;margin:7px 0}
+.la-bar-row .lbl{width:120px;font-size:13px}
+.la-bar-row .num{width:88px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums}
+.la-track{flex:1;height:12px;background:var(--panel2,#eef2f7);border-radius:7px;overflow:hidden}
+.la-fill{height:100%;background:var(--brand,#6366f1);border-radius:7px;transition:width .5s ease}
+.la-fill.good{background:var(--good,#16a34a)}
+.la-fill.warn{background:var(--warn,#d97706)}
+.la-fill.bad{background:var(--bad,#dc2626)}
+</style>
+
+<script>
+(function(){
+  function meta(n){var m=document.querySelector('meta[name="'+n+'"]');return m?m.getAttribute("content"):"";}
+  var DATA = {{ data|tojson }};
+  var URL = "{{ url_for('campaign_live_json', cid=cid) }}";
+
+  function card(label, value, color){
+    return '<div class="la-card"><div class="n"'+(color?(' style="color:'+color+'"'):'')+'>'+
+      (value||0).toLocaleString()+'</div><div class="l">'+label+'</div></div>';
+  }
+  function bar(label, pct, count, cls){
+    return '<div class="la-bar-row"><span class="lbl">'+label+'</span>'+
+      '<div class="la-track"><div class="la-fill '+(cls||'')+'" style="width:'+Math.max(0,Math.min(100,pct))+'%"></div></div>'+
+      '<span class="num">'+(count!=null?count.toLocaleString()+' · ':'')+pct+'%</span></div>';
+  }
+  function splitRows(rows){
+    return (rows||[]).map(function(r){ return bar(r.label, r.pct, r.value); }).join('');
+  }
+
+  function render(d){
+    document.getElementById('laName').textContent = d.name;
+    var st = document.getElementById('laStatus'); st.textContent = d.status; st.className = 'badge b-'+d.status;
+    document.getElementById('laCards').innerHTML =
+      card('Sent', d.sent) + card('Delivered', d.delivered, 'var(--good,#16a34a)') +
+      card('Opened', d.opened) + card('Clicked', d.clicked) +
+      card('Bounce', d.bounces, 'var(--warn,#d97706)') +
+      card('Spam', d.spam, 'var(--bad,#dc2626)') +
+      card('Unsubscribe', d.unsubscribes);
+    document.getElementById('laRates').innerHTML =
+      bar('Delivered', d.delivered_rate, null, 'good') +
+      bar('Open rate', d.open_rate, null) +
+      bar('Click rate', d.click_rate, null) +
+      bar('Bounce', d.bounce_rate, null, 'bad');
+    document.getElementById('laDevices').innerHTML = splitRows(d.devices);
+    document.getElementById('laClients').innerHTML = splitRows(d.clients);
+    document.getElementById('laGeo').innerHTML = (d.geo && d.geo.length)
+      ? splitRows(d.geo) : '<p class="faint small">No opens yet.</p>';
+    // Hourly — scale bars to the peak hour.
+    var peak = (d.hourly||[]).reduce(function(m,h){return Math.max(m,h.opens);},1);
+    document.getElementById('laHourly').innerHTML = (d.hourly && d.hourly.length)
+      ? d.hourly.map(function(h){ return bar(h.hour, Math.round(100*h.opens/peak), h.opens); }).join('')
+      : '<p class="faint small">No opens recorded yet.</p>';
+    document.getElementById('laUpdated').textContent = 'updated ' + new Date().toLocaleTimeString();
+  }
+
+  render(DATA);
+
+  function poll(){
+    fetch(URL, {headers:{'X-CSRFToken': meta('csrf-token')}})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ render(d);
+        // Stop the live pulse once the campaign is finished.
+        if (d.status!=='Running' && d.status!=='Scheduled'){
+          document.getElementById('liveDot').style.display='none';
+          clearInterval(timer);
+        }
+      })
+      .catch(function(){});
+  }
+  // Refresh every few seconds while the dashboard is open.
+  var timer = setInterval(poll, 4000);
+})();
+</script>
+{% endblock %}

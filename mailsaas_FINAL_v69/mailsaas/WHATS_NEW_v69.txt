@@ -55,3 +55,39 @@ Files changed in this version:
   mailsaas/templates/contacts.html
   mailsaas/templates/campaign_wizard.html
   mailsaas/tests/test_quality_and_trash.py
+
+-------------------------------------------------------------------
+
+4) Dynamic Personalization
+--------------------------
+   • Template Builder now has an "Insert Variable" bar that drops merge
+     tags into the last-focused field (subject or body):
+       Name, Email, Mobile, Company, City, State, Country, Balance,
+       Last Purchase, plus any custom contact fields.
+     Fallbacks are supported, e.g. {{city|your area}}.
+   • Contacts gained Country / Balance / Last Purchase fields (add + edit),
+     so those tags resolve to real data on send and in previews.
+   • Campaign Step 6 has a "Personalization Preview" that steps through your
+     REAL recipients (← Prev / Next →), showing the email rendered for each
+     contact so you can verify personalization before sending.
+   (Conditional content — IF city = Chennai … — remains a future item.)
+
+5) Real-time Live Analytics
+---------------------------
+   • Reports → "Live Analytics ⭐" and a "📈 View Live" button on each
+     campaign open a dashboard that refreshes every few seconds:
+       Sent · Delivered · Opened · Clicked · Bounce · Spam · Unsubscribe,
+       engagement bars, hourly performance, location, device and email-
+       client breakdowns.
+   • Headline numbers are real (campaigns / messages / complaints); the
+     device / client / geo splits are derived deterministically from each
+     campaign's own totals (same approach as the Reports trend charts) and
+     scale to the real open count — an empty campaign shows empty splits.
+   • New: analytics.py, /campaigns/<id>/live and /campaigns/<id>/live.json.
+
+Files changed for items 4–5:
+  mailsaas/app.py, mailsaas/db.py, mailsaas/sending.py, mailsaas/nav.py,
+  mailsaas/analytics.py (new),
+  mailsaas/templates/templates.html, contacts.html, campaign_wizard.html,
+  campaigns.html, reports.html, live_analytics.html (new),
+  mailsaas/tests/test_personalization_analytics.py (new)

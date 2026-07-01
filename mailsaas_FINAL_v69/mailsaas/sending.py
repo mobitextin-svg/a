@@ -63,6 +63,9 @@ def render_html(body, contact, base_url, token):
         "mobile": (contact.get("mobile") or "").strip(),
         "city": (contact.get("city") or "").strip(),
         "state": (contact.get("state") or "").strip(),
+        "country": (contact.get("country") or "").strip(),
+        "balance": (contact.get("balance") or "").strip(),
+        "last_purchase": (contact.get("last_purchase") or "").strip(),
     }
 
     def _sub(m):
@@ -104,6 +107,9 @@ def render_subject(subject, contact):
         "mobile": (contact.get("mobile") or "").strip(),
         "city": (contact.get("city") or "").strip(),
         "state": (contact.get("state") or "").strip(),
+        "country": (contact.get("country") or "").strip(),
+        "balance": (contact.get("balance") or "").strip(),
+        "last_purchase": (contact.get("last_purchase") or "").strip(),
     }
 
     def _sub(m):

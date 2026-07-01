@@ -255,6 +255,7 @@ NAV = [
     {
         "key": "reports", "label": "Reports", "icon": "📈", "built": True,
         "items": [
+            ("Live Analytics ⭐", "Real-time per-campaign metrics"),
             ("Delivery", "Delivered vs attempted"),
             ("Opens", "Engagement by open"),
             ("Clicks", "Link engagement"),
