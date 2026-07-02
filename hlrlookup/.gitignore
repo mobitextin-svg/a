@@ -4,4 +4,10 @@ __pycache__/
 venv/
 *.csv
 !sample_numbers.csv
+*.xlsx
+results*.xlsx
+numbers*.xlsx
 .env
+# Playwright persisted browser profile (--user-data-dir)
+pw-profile/
+user-data/

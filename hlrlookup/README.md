@@ -64,6 +64,62 @@ stay identical whether you're on mock or a live gateway.
 > privacy law (e.g. the DPDP Act). This tool doesn't send SMS or calls — it only
 > queries network signalling status via your chosen gateway.
 
+## Browser automation (Excel → website → Excel)
+
+If you'd rather drive the **e164.com website** directly instead of an API —
+read numbers from an Excel file, type each into the site's search box, click
+Search, and write the results back to Excel — use `playwright_lookup.py`. This
+is the "one by one, paste into the search box" flow.
+
+```bash
+pip install -r requirements-playwright.txt
+playwright install chromium         # one-time browser download
+
+# make/prepare an input file (a "mobile_number" column)
+python make_input_template.py -o numbers.xlsx        # then paste your numbers in
+
+# run it (headed so you can watch / handle any login or CAPTCHA)
+python playwright_lookup.py -i numbers.xlsx -o results.xlsx --headed
+```
+
+Output `results.xlsx` has one row per number: `input, msisdn, e164, result,
+status, error, checked_at`. Rows are saved after **every** number, so a crash
+never loses finished work — resume with `--start N`.
+
+### Finding the selectors (important)
+
+The script auto-detects a likely search box, but every site is different, so for
+a reliable run give it the three selectors explicitly. The easiest way to get
+them (takes ~30s):
+
+```bash
+playwright codegen https://www.e164.com
+```
+
+Click the search box, the Search button, and the result area — codegen prints
+the selectors. Then:
+
+```bash
+python playwright_lookup.py -i numbers.xlsx -o results.xlsx --headed \
+    --search-selector "#yourSearchBox" \
+    --submit-selector "button[type=submit]" \
+    --result-selector "#resultArea" \
+    --number-format e164 --delay 2 --pause-first
+```
+
+Useful flags: `--pause-first` (pause once after load so you can log in / clear a
+CAPTCHA), `--reload-each` (fresh page per number), `--delay` (seconds between
+numbers — be polite and respect the site's terms), `--number-format`
+(`e164` = +91…, `national` = 10-digit, `raw` = the cell as-is),
+`--user-data-dir` (persist a login between runs).
+
+> **Heads-up:** e164.com is behind bot-protection and may require an account /
+> login and rate-limit automated use. Run the script from **your own machine**
+> (not a locked-down CI box), keep `--delay` sane, and make sure your use
+> complies with the site's terms of service and applicable law. If the site
+> blocks automation, the API route above (with a proper HLR provider) is the
+> robust option.
+
 ## JSON API
 
 | Method & path | Purpose |
@@ -113,6 +169,8 @@ python test_hlr.py         # or: python -m pytest -q
 hlrlookup/
 ├── app.py              # Flask web app + JSON API
 ├── cli.py              # command-line bulk tool
+├── playwright_lookup.py  # Excel → e164.com website → Excel (browser automation)
+├── make_input_template.py # generate a starter input .xlsx
 ├── hlr/
 │   ├── india.py        # MSISDN normalise/validate
 │   ├── providers.py    # mock + real HTTP providers (pluggable)

@@ -1,0 +1,4 @@
+# For the browser-automation lookup (playwright_lookup.py).
+# After installing, download the browser once:  playwright install chromium
+playwright>=1.40
+openpyxl>=3.1
