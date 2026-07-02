@@ -56,6 +56,13 @@
 </head>
 <body>
 <div class="wrap">
+  {% if provider == 'mock' %}
+  <div style="background:#7f1d1d;color:#fee2e2;border:1px solid #ef4444;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:.9rem">
+    ⚠️ <strong>DEMO — synthetic data, NOT real.</strong> The operator/ported/roaming
+    values below are randomly generated for pipeline testing and will not match
+    e164.com. For <strong>real e164.com data</strong>, run <code>python e164_app.py</code> instead.
+  </div>
+  {% endif %}
   <h1>Bulk HLR Lookup <span class="badge">India · +91</span></h1>
   <p class="sub">Check status, current operator and ported flag for up to
      {{ max_numbers }} Indian mobile numbers. Active provider:

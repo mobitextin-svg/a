@@ -1,21 +1,51 @@
-# Bulk HLR Lookup — India
+# Bulk lookup for Indian mobile numbers (+91)
 
-Check the status of Indian mobile numbers (+91) in bulk — up to a few thousand
-at a time. For each number you get:
+Look up Indian mobile numbers in bulk and get the real fields e164.com returns:
+`Prefix, Calling Code, ISO3, TADIG, MCCMNC, Type, Location, Operator Brand,
+Operator Company, Operator Group, Total Length Min/Max, Weight, Source`.
 
-| Field | Meaning |
-|-------|---------|
-| `status` | `CONNECTED` (live/reachable), `ABSENT` (valid but off/out of coverage), `INVALID`, `ERROR`, `UNKNOWN` |
-| `current_operator` | Network the number is on **now** (post-MNP) |
-| `original_operator` | Network it was originally allocated to |
-| `is_ported` | Whether it moved networks via Mobile Number Portability |
-| `roaming` | Whether it's roaming off its home network |
-| `mccmnc` | Mobile country + network code |
+## ⭐ Real data — start here
 
-There's a **web app**, a **JSON API**, and a **command-line tool** — all on the
-same core.
+To get **real** data (straight from e164.com), use one of these two. Both drive
+a real browser against e164.com, so run them on a machine that can reach the
+site:
 
-## Quick start (no API key needed)
+```bash
+cd hlrlookup
+pip install -r requirements-playwright.txt flask
+playwright install chromium
+```
+
+**Web app** (paste/upload numbers, watch a live table, download CSV/TXT):
+```bash
+python e164_app.py            # → http://127.0.0.1:5000   (set HEADFUL=1 to watch the browser)
+```
+
+**Command line** (Excel in → Notepad/CSV/Excel out):
+```bash
+python make_input_template.py -o numbers.xlsx        # paste your numbers in
+python playwright_lookup.py -i numbers.xlsx -o results.txt --headed
+```
+
+Both produce the exact e164.com fields shown above. Lookups run sequentially and
+politely (~1–2s each), so 1000 numbers takes roughly half an hour — that's live
+scraping, not a bug.
+
+> The `app.py` / `cli.py` tools below are a **separate offline demo** that uses
+> **synthetic (fake) data** to exercise the pipeline without a network. They will
+> NOT match e164.com — do not use them for real lookups. They're kept only for
+> testing and as an API scaffold.
+
+---
+
+## Offline demo (synthetic data — NOT real)
+
+`app.py` and `cli.py` run an offline **mock** provider with made-up
+operator/status data. Useful only for testing the bulk pipeline or as a starting
+point for wiring a paid HLR API. The web UI shows a red "DEMO" banner so it's
+never confused with real data.
+
+### Quick start (no API key needed)
 
 ```bash
 cd hlrlookup
@@ -191,11 +221,13 @@ python test_hlr.py         # or: python -m pytest -q
 
 ```
 hlrlookup/
-├── app.py              # Flask web app + JSON API
-├── cli.py              # command-line bulk tool
-├── playwright_lookup.py  # Excel → e164.com website → Excel (browser automation)
+├── e164_app.py         # ⭐ REAL-DATA web app (drives e164.com in a browser)
+├── playwright_lookup.py  # ⭐ REAL-DATA CLI: Excel → e164.com → Notepad/CSV/Excel
 ├── make_input_template.py # generate a starter input .xlsx
+├── app.py              # offline DEMO web app + JSON API (synthetic data)
+├── cli.py              # offline DEMO command-line bulk tool (synthetic data)
 ├── hlr/
+│   ├── e164_scrape.py  # shared e164.com driver + parser (used by both real tools)
 │   ├── india.py        # MSISDN normalise/validate
 │   ├── providers.py    # mock + real HTTP providers (pluggable)
 │   └── engine.py       # concurrent bulk engine, rate limiting, CSV
