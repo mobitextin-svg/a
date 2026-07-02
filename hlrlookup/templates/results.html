@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HLR job {{ job_id }}</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --fg:#e2e8f0; --muted:#94a3b8;
+            --accent:#38bdf8; --ok:#34d399; --bad:#f87171; --warn:#fbbf24; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+    .wrap { max-width:960px; margin:0 auto; padding:24px 18px 60px; }
+    a { color:var(--accent); }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:18px; }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); position:sticky; top:0; background:var(--card); }
+    .tag { padding:1px 8px; border-radius:999px; font-size:.72rem; font-weight:600; }
+    .CONNECTED { background:rgba(52,211,153,.15); color:var(--ok); }
+    .ABSENT { background:rgba(251,191,36,.15); color:var(--warn); }
+    .INVALID, .ERROR { background:rgba(248,113,113,.15); color:var(--bad); }
+    .UNKNOWN { background:var(--line); color:var(--fg); }
+    .tablewrap { max-height:600px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:10px; margin:14px 0; }
+    .stat { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; text-align:center; }
+    .stat b { font-size:1.3rem; display:block; }
+    .stat span { font-size:.72rem; color:var(--muted); }
+    button { background:transparent; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px 16px; cursor:pointer; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <p><a href="/">← New lookup</a></p>
+  <h1>Job {{ job_id }}</h1>
+  <div class="card">
+    <div class="stats" id="stats"></div>
+    <a href="/api/jobs/{{ job_id }}/export.csv"><button>Download CSV</button></a>
+  </div>
+  <div class="card">
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Number</th><th>Status</th><th>Current operator</th>
+          <th>Ported</th><th>Roaming</th><th>MCCMNC</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+fetch("/api/jobs/{{ job_id }}/results").then(r => r.json()).then(d => {
+  if (!d.ok) { document.getElementById("rows").innerHTML = "<tr><td colspan=6>Not found</td></tr>"; return; }
+  const s = d.summary.by_status || {};
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><b>${d.job.unique}</b><span>unique</span></div>
+    <div class="stat"><b>${d.summary.valid||0}</b><span>valid</span></div>
+    <div class="stat"><b>${s.CONNECTED||0}</b><span>connected</span></div>
+    <div class="stat"><b>${s.ABSENT||0}</b><span>absent</span></div>
+    <div class="stat"><b>${d.summary.ported||0}</b><span>ported</span></div>
+    <div class="stat"><b>${d.summary.errors||0}</b><span>errors</span></div>`;
+  document.getElementById("rows").innerHTML = d.results.map(r => `
+    <tr><td>${r.e164||r.msisdn}</td>
+    <td><span class="tag ${r.status}">${r.status}</span></td>
+    <td>${r.current_operator||"—"}</td>
+    <td>${r.is_ported===true?"Yes":r.is_ported===false?"No":"—"}</td>
+    <td>${r.roaming===true?"Yes":r.roaming===false?"No":"—"}</td>
+    <td>${r.mccmnc||"—"}</td></tr>`).join("");
+});
+</script>
+</body>
+</html>
