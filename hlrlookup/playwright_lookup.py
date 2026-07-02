@@ -1,41 +1,39 @@
 #!/usr/bin/env python3
 """
-Browser automation for HLR / number lookup on a website (default: e164.com).
+Browser automation for number lookup on e164.com (or a similar site).
 
-What it does, per your request:
-  1. Reads phone numbers from an uploaded Excel file (.xlsx).
-  2. Opens the lookup website in a real browser (Playwright / Chromium).
-  3. For each number, one by one: types it into the search box, clicks Search,
-     waits for the result, and copies the result text.
-  4. Writes the results back into an Excel file (one row per number).
+Your flow:
+  1. Read phone numbers from an uploaded Excel file (.xlsx).
+  2. Open https://www.e164.com in a real browser (Playwright / Chromium).
+  3. For each number, one by one: paste it into the search box, let the site
+     search, and read the "Results for: …" block.
+  4. Save every result to a Notepad (.txt) file  (also supports .xlsx / .csv —
+     the format is picked from the -o file extension).
 
-Results are saved after every number, so if it stops halfway nothing is lost
-and you can resume with --start.
+Results are written after every number, so a stop halfway loses nothing; resume
+with --start N.
 
-────────────────────────────────────────────────────────────────────────────
-IMPORTANT — selectors
-The exact search-box / button / result location on the site can't be guessed
-reliably. The script auto-detects a likely search box, but for a solid run set
-the three selectors explicitly (see "Finding selectors" in the README). You get
-them in 30 seconds with:  playwright codegen https://www.e164.com
-────────────────────────────────────────────────────────────────────────────
+e164.com returns these fields, which this script parses out:
+  Prefix, Calling Code, ISO3, TADIG, MCCMNC, Type, Location,
+  Operator Brand, Operator Company, Operator Group,
+  Total Length Min, Total Length Max, Weight, Source
 
-Setup (on the machine that CAN reach the site):
+Setup (on the machine that CAN reach e164.com):
     pip install playwright openpyxl
     playwright install chromium
 
 Examples:
-    # headed (watch it), auto-detect the search box:
-    python playwright_lookup.py -i numbers.xlsx -o results.xlsx --headed
+    # Excel in -> Notepad out, headed so you can watch:
+    python playwright_lookup.py -i numbers.xlsx -o results.txt --headed
 
-    # explicit selectors + pause once for manual login/CAPTCHA:
-    python playwright_lookup.py -i numbers.xlsx -o results.xlsx --headed \
-        --search-selector "#phone" --submit-selector "button[type=submit]" \
-        --result-selector "#result" --pause-first
+    # pause once for any login/CAPTCHA, be polite between numbers:
+    python playwright_lookup.py -i numbers.xlsx -o results.txt --headed \
+        --pause-first --delay 2
 """
 
 import os
 import re
+import csv
 import sys
 import time
 import argparse
@@ -50,10 +48,9 @@ try:
 except ImportError:
     sys.exit("Missing 'playwright'. Run: pip install playwright && playwright install chromium")
 
-# Reuse the Indian-number normaliser from the sibling package when available.
 try:
     from hlr.india import normalize_msisdn, to_e164
-except Exception:  # pragma: no cover - allow running the file standalone
+except Exception:  # allow running standalone
     def normalize_msisdn(raw):
         d = re.sub(r"\D", "", raw or "")
         if d.startswith("0091"): d = d[4:]
@@ -63,21 +60,25 @@ except Exception:  # pragma: no cover - allow running the file standalone
     def to_e164(n): return "+91" + n
 
 
-# Common search-box guesses, tried in order when --search-selector is absent.
+# The exact labels e164.com prints, in display order.
+E164_FIELDS = [
+    "Prefix", "Calling Code", "ISO3", "TADIG", "MCCMNC", "Type", "Location",
+    "Operator Brand", "Operator Company", "Operator Group",
+    "Total Length Min", "Total Length Max", "Weight", "Source",
+]
+
 SEARCH_GUESSES = [
-    "input[type=search]",
+    "input[type=search]", "input[type=tel]",
     "input[name*=number i]", "input[id*=number i]",
-    "input[name*=msisdn i]", "input[id*=msisdn i]",
     "input[name*=phone i]", "input[id*=phone i]",
     "input[name*=search i]", "input[id*=search i]",
-    "input[placeholder*=number i]", "input[placeholder*=search i]",
-    "input[type=tel]", "input[type=text]:visible", "textarea:visible",
+    "input[placeholder*=number i]", "input[placeholder*=phone i]",
+    "input[type=text]:visible", "input:visible",
 ]
 
 
-# ── Excel helpers ───────────────────────────────────────────────────────────
+# ── Excel input ─────────────────────────────────────────────────────────────
 def read_numbers(path, column):
-    """Read numbers from an .xlsx. ``column`` may be a header name or a letter/index."""
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
@@ -90,13 +91,11 @@ def read_numbers(path, column):
         col = column.strip()
         if col.lower() in header:
             col_idx = header.index(col.lower())
-        elif re.fullmatch(r"[A-Za-z]", col):        # a column letter like "A"
+        elif re.fullmatch(r"[A-Za-z]", col):
             col_idx = ord(col.upper()) - ord("A")
         elif col.isdigit():
             col_idx = int(col)
     if col_idx is None:
-        # Auto-pick: a column whose header mentions number/phone/msisdn/mobile,
-        # else the first column.
         for i, h in enumerate(header):
             if any(k in h for k in ("number", "phone", "msisdn", "mobile", "cell")):
                 col_idx = i
@@ -106,32 +105,110 @@ def read_numbers(path, column):
 
     header_is_label = not re.search(r"\d", str(rows[0][col_idx] or ""))
     body = rows[1:] if header_is_label else rows
-    numbers = []
+    out = []
     for r in body:
         if col_idx < len(r) and r[col_idx] not in (None, ""):
-            numbers.append(str(r[col_idx]).strip())
-    return numbers
+            out.append(str(r[col_idx]).strip())
+    return out
 
 
-class ResultWriter:
-    """Incrementally writes results to an .xlsx, saving after each row."""
+# ── Result parsing ──────────────────────────────────────────────────────────
+def parse_e164_result(body_text):
+    """Pull the labelled e164.com fields out of the page's visible text."""
+    fields = {}
+    for label in E164_FIELDS:
+        m = re.search(rf"(?m)^\s*{re.escape(label)}\s*:\s*(.+?)\s*$", body_text)
+        if m:
+            fields[label] = m.group(1).strip()
+    return fields
 
-    HEADERS = ["input", "msisdn", "e164", "result", "status", "error", "checked_at"]
 
+def shown_number(body_text):
+    """Digits from the 'Results for: …' line, or '' if not present."""
+    m = re.search(r"Results for:\s*([0-9+\s]+)", body_text)
+    return re.sub(r"\D", "", m.group(1)) if m else ""
+
+
+# ── Output writers (chosen by file extension) ───────────────────────────────
+COLUMNS = ["input", "msisdn", "typed"] + E164_FIELDS + ["status", "error", "checked_at"]
+
+
+class NotepadWriter:
+    """Human-readable .txt, one block per number."""
+
+    def __init__(self, path):
+        self.path = path
+        self.fh = open(path, "w", encoding="utf-8")
+        self.fh.write("HLR / number lookup results — source: e164.com\n")
+        self.fh.write("Generated: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+        self.fh.flush()
+
+    def add(self, rec):
+        f = self.fh
+        f.write("\n" + "=" * 56 + "\n")
+        typed = rec.get("typed") or ""
+        f.write(f"Input: {rec.get('input','')}"
+                + (f"   (typed: {typed})" if typed else "") + "\n")
+        if rec.get("status") == "INVALID":
+            f.write("  INVALID — not a valid Indian mobile number\n")
+        elif rec.get("error"):
+            f.write(f"  ERROR — {rec['error']}\n")
+        else:
+            for label in E164_FIELDS:
+                if rec.get(label):
+                    f.write(f"  {label}: {rec[label]}\n")
+        f.write(f"  Checked: {rec.get('checked_at','')}\n")
+        f.flush()
+
+    def close(self):
+        self.fh.close()
+
+
+class CsvWriter:
+    def __init__(self, path):
+        self.fh = open(path, "w", encoding="utf-8", newline="")
+        self.w = csv.DictWriter(self.fh, fieldnames=COLUMNS, extrasaction="ignore")
+        self.w.writeheader()
+        self.fh.flush()
+
+    def add(self, rec):
+        self.w.writerow(rec)
+        self.fh.flush()
+
+    def close(self):
+        self.fh.close()
+
+
+class ExcelWriter:
     def __init__(self, path):
         self.path = path
         self.wb = Workbook()
         self.ws = self.wb.active
         self.ws.title = "results"
-        self.ws.append(self.HEADERS)
+        self.ws.append(COLUMNS)
         self.wb.save(path)
 
-    def add(self, **row):
-        self.ws.append([row.get(h, "") for h in self.HEADERS])
-        self.wb.save(self.path)   # durable: survive a crash mid-run
+    def add(self, rec):
+        self.ws.append([rec.get(c, "") for c in COLUMNS])
+        self.wb.save(self.path)
+
+    def close(self):
+        self.wb.save(self.path)
 
 
-# ── the automation ──────────────────────────────────────────────────────────
+def make_writer(path):
+    ext = os.path.splitext(path)[1].lower()
+    if ext in (".txt", ""):
+        return NotepadWriter(path)
+    if ext == ".csv":
+        return CsvWriter(path)
+    if ext in (".xlsx", ".xlsm"):
+        return ExcelWriter(path)
+    # default to notepad
+    return NotepadWriter(path)
+
+
+# ── Automation ──────────────────────────────────────────────────────────────
 def find_search_box(page, selector):
     if selector:
         return page.locator(selector).first
@@ -145,77 +222,74 @@ def find_search_box(page, selector):
     return None
 
 
-def do_one(page, number_to_type, args):
-    """Run a single lookup on an already-loaded page. Returns (result_text, err)."""
-    # Re-navigate each iteration if requested (safest for non-SPA sites).
+def do_one(page, typed, national, args):
+    """Search one number on an already-loaded page. Returns (fields, body, err)."""
     if args.reload_each:
         page.goto(args.url, wait_until="domcontentloaded", timeout=args.timeout)
 
     box = find_search_box(page, args.search_selector)
     if box is None:
-        return "", "search box not found (set --search-selector)"
+        return {}, "", "search box not found (set --search-selector)"
 
     box.click()
     box.fill("")
-    box.fill(number_to_type)
+    # Type it so the site's live/reactive search fires (fill alone can be missed).
+    box.press_sequentially(typed, delay=15)
 
-    # Submit: explicit button, else a Search-labelled button, else Enter.
-    submitted = False
+    # Nudge sites that need Enter or a button; harmless if the site is reactive.
     if args.submit_selector:
         try:
-            page.locator(args.submit_selector).first.click(timeout=5000)
-            submitted = True
+            page.locator(args.submit_selector).first.click(timeout=3000)
         except Exception:
             pass
-    if not submitted:
+    else:
         try:
-            page.get_by_role("button", name=re.compile("search|lookup|check", re.I)).first.click(timeout=3000)
-            submitted = True
+            box.press("Enter")
         except Exception:
             pass
-    if not submitted:
-        box.press("Enter")
 
-    # Wait for the result to appear.
-    try:
-        if args.result_selector:
-            page.locator(args.result_selector).first.wait_for(state="visible", timeout=args.timeout)
-            page.wait_for_timeout(args.settle)
-            text = page.locator(args.result_selector).first.inner_text()
-        else:
-            page.wait_for_load_state("networkidle", timeout=args.timeout)
-            page.wait_for_timeout(args.settle)
-            text = page.inner_text("body")
-    except PWTimeout:
-        return "", "timed out waiting for result"
+    # Wait until the "Results for: …" block reflects THIS number (not the last).
+    deadline = time.time() + args.timeout / 1000.0
+    body = ""
+    while time.time() < deadline:
+        body = page.inner_text("body")
+        if national and national in shown_number(body):
+            break
+        page.wait_for_timeout(200)
+    else:
+        return {}, body, "timed out waiting for this number's result"
 
-    return " ".join(text.split()), ""
+    page.wait_for_timeout(args.settle)
+    body = page.inner_text("body")
+    fields = parse_e164_result(body)
+    if not fields:
+        return {}, body, "results block not found / no fields parsed"
+    return fields, body, ""
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Excel → website lookup → Excel, via Playwright.")
+    ap = argparse.ArgumentParser(description="Excel numbers -> e164.com lookup -> Notepad/Excel/CSV.")
     ap.add_argument("-i", "--input", required=True, help="input .xlsx with the numbers")
-    ap.add_argument("-o", "--output", default="results.xlsx", help="output .xlsx")
+    ap.add_argument("-o", "--output", default="results.txt",
+                    help="output file; .txt=Notepad (default), .xlsx=Excel, .csv=CSV")
     ap.add_argument("-c", "--column", default="", help="column header/letter holding numbers (auto if omitted)")
     ap.add_argument("--url", default="https://www.e164.com", help="lookup website URL")
     ap.add_argument("--search-selector", default="", help="CSS selector for the search box")
-    ap.add_argument("--submit-selector", default="", help="CSS selector for the search button")
-    ap.add_argument("--result-selector", default="", help="CSS selector for the result element")
-    ap.add_argument("--number-format", choices=["e164", "national", "raw"], default="e164",
-                    help="what to type: +91XXXXXXXXXX (e164), 10-digit (national), or the raw cell (raw)")
+    ap.add_argument("--submit-selector", default="", help="CSS selector for a search button (Enter used if omitted)")
+    ap.add_argument("--number-format", choices=["cc", "e164", "national", "raw"], default="cc",
+                    help="what to type: cc=91XXXXXXXXXX (matches e164.com), e164=+91…, national=10-digit, raw=cell")
     ap.add_argument("--headed", action="store_true", help="show the browser window")
     ap.add_argument("--pause-first", action="store_true", help="pause after first load for manual login/CAPTCHA")
     ap.add_argument("--reload-each", action="store_true", help="reload the page before every number")
-    ap.add_argument("--delay", type=float, default=2.0, help="seconds to wait between numbers (be polite)")
-    ap.add_argument("--settle", type=int, default=800, help="ms to wait after result appears before reading")
-    ap.add_argument("--timeout", type=int, default=30000, help="per-step timeout (ms)")
+    ap.add_argument("--delay", type=float, default=1.5, help="seconds between numbers (be polite)")
+    ap.add_argument("--settle", type=int, default=600, help="ms to wait after result appears before reading")
+    ap.add_argument("--timeout", type=int, default=30000, help="per-number wait timeout (ms)")
     ap.add_argument("--slowmo", type=int, default=0, help="slow every action by N ms (debugging)")
     ap.add_argument("--start", type=int, default=0, help="skip the first N numbers (resume)")
     ap.add_argument("--limit", type=int, default=0, help="only process N numbers (0 = all)")
     ap.add_argument("--user-data-dir", default="", help="persist login/session in this folder")
     ap.add_argument("--executable-path", default=os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE", ""),
-                    help="path to a specific Chromium binary (usually not needed after "
-                         "'playwright install chromium'); or set PLAYWRIGHT_CHROMIUM_EXECUTABLE")
+                    help="path to a specific Chromium binary (rarely needed)")
     args = ap.parse_args()
 
     raw_numbers = read_numbers(args.input, args.column)
@@ -225,9 +299,9 @@ def main():
         raw_numbers = raw_numbers[args.start:]
     if args.limit:
         raw_numbers = raw_numbers[:args.limit]
-    print(f"Loaded {len(raw_numbers)} numbers. Output → {args.output}")
+    print(f"Loaded {len(raw_numbers)} numbers. Output -> {args.output}")
 
-    writer = ResultWriter(args.output)
+    writer = make_writer(args.output)
 
     with sync_playwright() as p:
         launch_kwargs = dict(headless=not args.headed, slow_mo=args.slowmo)
@@ -243,55 +317,60 @@ def main():
             page = ctx.new_page()
 
         page.goto(args.url, wait_until="domcontentloaded", timeout=args.timeout)
-        if args.pause_first:
-            if args.headed:
-                print("Paused. Log in / clear any CAPTCHA in the window, then press Enter here…")
-                try:
-                    input()
-                except EOFError:
-                    page.pause()
-            else:
-                print("--pause-first needs --headed; continuing without pause.")
+        if args.pause_first and args.headed:
+            print("Paused. Log in / clear any CAPTCHA in the window, then press Enter here…")
+            try:
+                input()
+            except EOFError:
+                page.pause()
 
-        ok = err_count = 0
+        ok = err = 0
         for idx, raw in enumerate(raw_numbers, start=1 + args.start):
             n = normalize_msisdn(raw)
+            now = time.strftime("%Y-%m-%d %H:%M:%S")
+
             if args.number_format == "raw":
-                to_type = raw
+                typed = re.sub(r"\s+", "", raw)
+                national = re.sub(r"\D", "", raw)[-10:]
             elif n is None:
-                writer.add(input=raw, error="invalid Indian mobile number", status="INVALID",
-                           checked_at=time.strftime("%Y-%m-%d %H:%M:%S"))
-                err_count += 1
+                writer.add({"input": raw, "status": "INVALID",
+                            "error": "invalid Indian mobile number", "checked_at": now})
+                err += 1
                 print(f"[{idx}] {raw}: INVALID (skipped)")
                 continue
             elif args.number_format == "e164":
-                to_type = to_e164(n)
-            else:
-                to_type = n
+                typed, national = to_e164(n), n
+            elif args.number_format == "national":
+                typed, national = n, n
+            else:  # cc -> 91XXXXXXXXXX (matches what e164.com echoes)
+                typed, national = "91" + n, n
 
             try:
-                result, err = do_one(page, to_type, args)
+                fields, _body, err_msg = do_one(page, typed, national, args)
             except Exception as exc:
-                result, err = "", f"{type(exc).__name__}: {exc}"
+                fields, err_msg = {}, f"{type(exc).__name__}: {exc}"
 
-            writer.add(
-                input=raw, msisdn=(n or ""), e164=(to_e164(n) if n else ""),
-                result=result, status=("OK" if result and not err else "ERROR"),
-                error=err, checked_at=time.strftime("%Y-%m-%d %H:%M:%S"),
-            )
-            if err:
-                err_count += 1
-                print(f"[{idx}] {to_type}: ERROR — {err}")
+            rec = {"input": raw, "msisdn": (n or ""), "typed": typed,
+                   "status": ("OK" if fields and not err_msg else "ERROR"),
+                   "error": err_msg, "checked_at": now}
+            rec.update(fields)
+            writer.add(rec)
+
+            if err_msg:
+                err += 1
+                print(f"[{idx}] {typed}: ERROR — {err_msg}")
             else:
                 ok += 1
-                print(f"[{idx}] {to_type}: {result[:80]}")
+                op = fields.get("Operator Brand", "?")
+                print(f"[{idx}] {typed}: {op} | MCCMNC {fields.get('MCCMNC','?')} | {fields.get('Type','?')}")
 
             if args.delay:
                 time.sleep(args.delay)
 
         (ctx if args.user_data_dir else browser).close()
 
-    print(f"\nDone. {ok} ok, {err_count} error/invalid. Saved to {args.output}")
+    writer.close()
+    print(f"\nDone. {ok} ok, {err} error/invalid. Saved to {args.output}")
 
 
 if __name__ == "__main__":

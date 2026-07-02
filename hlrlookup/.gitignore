@@ -7,6 +7,8 @@ venv/
 *.xlsx
 results*.xlsx
 numbers*.xlsx
+results*.txt
+results*.csv
 .env
 # Playwright persisted browser profile (--user-data-dir)
 pw-profile/

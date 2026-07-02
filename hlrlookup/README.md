@@ -79,38 +79,62 @@ playwright install chromium         # one-time browser download
 python make_input_template.py -o numbers.xlsx        # then paste your numbers in
 
 # run it (headed so you can watch / handle any login or CAPTCHA)
-python playwright_lookup.py -i numbers.xlsx -o results.xlsx --headed
+# output to a Notepad .txt file:
+python playwright_lookup.py -i numbers.xlsx -o results.txt --headed
 ```
 
-Output `results.xlsx` has one row per number: `input, msisdn, e164, result,
-status, error, checked_at`. Rows are saved after **every** number, so a crash
-never loses finished work — resume with `--start N`.
+The **output format is chosen by the file extension**:
+`-o results.txt` → Notepad file (default), `-o results.xlsx` → Excel,
+`-o results.csv` → CSV. Rows/blocks are written after **every** number, so a
+crash never loses finished work — resume with `--start N`.
 
-### Finding the selectors (important)
+For each number the script parses the exact fields e164.com returns:
 
-The script auto-detects a likely search box, but every site is different, so for
-a reliable run give it the three selectors explicitly. The easiest way to get
-them (takes ~30s):
+```
+========================================================
+Input: 9416659700   (typed: 919416659700)
+  Prefix: 919416
+  Calling Code: 91
+  ISO3: IND
+  TADIG: INDWB
+  MCCMNC: 40434
+  Type: MOBILE
+  Location: N/A
+  Operator Brand: BSNL
+  Operator Company: BSNL - Haryana
+  Operator Group: N/A
+  Total Length Min: 12
+  Total Length Max: 12
+  Weight: 11
+  Source: e164.com
+  Checked: 2026-07-02 21:05:06
+```
+
+`--number-format cc` (the default) types `91XXXXXXXXXX` — the form e164.com
+echoes back. The script waits until the on-page "Results for: …" block matches
+**this** number before reading, so it never records a stale result.
+
+### If it can't find the search box
+
+The script auto-detects the search box (works for e164.com's phone input). If a
+future layout change breaks that, grab the exact selector in ~30s:
 
 ```bash
 playwright codegen https://www.e164.com
 ```
 
-Click the search box, the Search button, and the result area — codegen prints
-the selectors. Then:
+Click the search box (and result area) — codegen prints the selectors — then:
 
 ```bash
-python playwright_lookup.py -i numbers.xlsx -o results.xlsx --headed \
-    --search-selector "#yourSearchBox" \
-    --submit-selector "button[type=submit]" \
-    --result-selector "#resultArea" \
-    --number-format e164 --delay 2 --pause-first
+python playwright_lookup.py -i numbers.xlsx -o results.txt --headed \
+    --search-selector "#yourSearchBox" --result-selector "#resultArea" \
+    --delay 2 --pause-first
 ```
 
 Useful flags: `--pause-first` (pause once after load so you can log in / clear a
 CAPTCHA), `--reload-each` (fresh page per number), `--delay` (seconds between
 numbers — be polite and respect the site's terms), `--number-format`
-(`e164` = +91…, `national` = 10-digit, `raw` = the cell as-is),
+(`cc` = 91…, `e164` = +91…, `national` = 10-digit, `raw` = the cell as-is),
 `--user-data-dir` (persist a login between runs).
 
 > **Heads-up:** e164.com is behind bot-protection and may require an account /
