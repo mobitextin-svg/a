@@ -6,7 +6,10 @@
 {% set subtab = request.args.get('subtab', 'unsubscribed') %}
 
 <div class="ct-head">
-  <h1 style="margin:0">👥 Contacts</h1>
+  <div>
+    <a class="small" href="{{ url_for('contacts') }}" style="color:var(--muted)">← Contact Lists</a>
+    <h1 style="margin:0">👥 Contacts</h1>
+  </div>
   <div class="row" style="gap:8px;align-items:center">
     {% if not is_supp %}
     <form method="get" class="inline-form">
@@ -1068,5 +1071,11 @@ a.ct-li.on{background:var(--accent);color:#fff}
     document.getElementById('tagDetailOverlay').classList.remove('show');
     document.getElementById('tagDetailPanel').classList.remove('show');
   }
+  /* Deep links from the Contacts home tables: ?open=add / ?open=import */
+  (function(){
+    var open = new URLSearchParams(location.search).get('open');
+    if (open === 'add') { var d = document.getElementById('dlgAdd'); if (d) d.showModal(); }
+    if (open === 'import') { var i = document.getElementById('dlgImport'); if (i) i.showModal(); }
+  })();
 </script>
 {% endblock %}

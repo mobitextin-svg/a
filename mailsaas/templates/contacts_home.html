@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}Contacts{% endblock %}
+{% block content %}
+<style>
+/* ---- Contacts home: clean list-first tables (scoped ch-*) ---- */
+.ch-wrap{max-width:1280px}
+.ch-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:18px}
+.ch-head h1{font-size:1.65rem;letter-spacing:-.02em;margin:0}
+.ch-head .sub{color:var(--muted);font-size:.85rem;margin-top:2px}
+.ch-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ch-search{display:flex;align-items:center;gap:8px;background:var(--panel);
+  border:1px solid var(--line2);border-radius:12px;padding:9px 14px;min-width:200px}
+.ch-search input{border:none;outline:none;background:transparent;color:var(--text);
+  font:inherit;width:100%;padding:0}
+.ch-iconbtn{display:grid;place-items:center;width:42px;height:42px;background:var(--panel);
+  border:1px solid var(--line2);border-radius:12px;cursor:pointer;font-size:15px;
+  color:var(--text)}
+.ch-iconbtn:hover{border-color:var(--brand)}
+.ch-cta{display:flex}
+.ch-cta .main{background:#0b0d13;color:#fff;border:none;font:inherit;font-weight:600;
+  padding:11px 22px;border-radius:24px 0 0 24px;cursor:pointer}
+.ch-cta .main:hover{background:#1c2230}
+:root:not([data-theme="light"]) .ch-cta .main{background:var(--brand);color:#fff}
+.ch-cta details{position:relative}
+.ch-cta summary{list-style:none;display:grid;place-items:center;width:40px;height:100%;
+  background:#0b0d13;color:#fff;border-left:1px solid rgba(255,255,255,.22);
+  border-radius:0 24px 24px 0;cursor:pointer;font-size:11px}
+:root:not([data-theme="light"]) .ch-cta summary{background:var(--brand)}
+.ch-cta summary::-webkit-details-marker{display:none}
+.ch-menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.14);
+  min-width:180px;padding:6px;z-index:30}
+.ch-menu button,.ch-menu a{display:block;width:100%;text-align:left;background:none;
+  border:none;font:inherit;color:var(--text);padding:9px 12px;border-radius:8px;
+  cursor:pointer;text-decoration:none}
+.ch-menu button:hover,.ch-menu a:hover{background:var(--panel2);text-decoration:none}
+:root[data-theme="light"] .ch-menu a{color:var(--text)}
+.ch-menu .danger{color:var(--bad)}
+.ch-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  overflow:visible}
+.ch-table{width:100%;border-collapse:collapse}
+.ch-table th{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;text-align:left;padding:14px 18px;cursor:pointer;
+  user-select:none;white-space:nowrap}
+.ch-table th .car{opacity:.45;font-size:.6rem;margin-left:3px}
+.ch-table td{padding:16px 18px;border-top:1px solid var(--line);vertical-align:middle}
+.ch-table tr:hover td{background:var(--panel2)}
+.ch-name{color:#2563eb;font-weight:500}
+.ch-count{color:#2563eb;text-decoration:underline;text-underline-offset:3px}
+.ch-rate{color:#2563eb}
+.ch-dim{color:var(--faint)}
+.ch-row-actions{display:flex;justify-content:flex-end}
+.ch-ov{display:flex}
+.ch-ov>a{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  font-weight:500;padding:9px 18px;border-radius:12px 0 0 12px;text-decoration:none}
+.ch-ov>a:hover{background:var(--line);text-decoration:none}
+.ch-ov details{position:relative}
+.ch-ov summary{list-style:none;display:grid;place-items:center;width:38px;height:100%;
+  background:var(--panel2);border:1px solid var(--line);border-left:none;
+  border-radius:0 12px 12px 0;cursor:pointer;font-size:10px;color:var(--muted)}
+.ch-ov summary::-webkit-details-marker{display:none}
+.ch-ov details[open] summary{background:#2563eb;color:#fff;border-color:#2563eb}
+.ch-empty{padding:34px 18px;text-align:center;color:var(--muted)}
+.ch-sec{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:30px 0 14px}
+.ch-sec h2{margin:0;font-size:1.2rem}
+.ch-sec .sub{color:var(--muted);font-size:.85rem}
+.ch-newtag{background:var(--panel);border:1px solid var(--line2);border-radius:24px;
+  padding:9px 20px;font:inherit;font-weight:600;color:var(--text);cursor:pointer}
+.ch-newtag:hover{border-color:var(--brand)}
+.tagdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;
+  vertical-align:1px}
+.tagdot-blue{background:#3b82f6}.tagdot-red{background:#ef4444}
+.tagdot-green{background:#10b981}.tagdot-yellow{background:#f59e0b}
+.tagdot-purple{background:#8b5cf6}.tagdot-gray{background:#9ca3af}
+.ch-dlg{border:none;border-radius:16px;padding:24px;max-width:430px;width:92vw;
+  background:var(--panel);color:var(--text);box-shadow:0 24px 64px rgba(15,23,42,.25)}
+.ch-dlg::backdrop{background:rgba(10,14,24,.45)}
+.ch-dlg h3{margin-top:0}
+.ch-dlg label{display:block;font-size:.8rem;color:var(--muted);margin:12px 0 4px}
+.ch-dlg input,.ch-dlg select{width:100%;padding:10px 12px;border:1px solid var(--line2);
+  border-radius:10px;background:var(--bg2);color:var(--text);font:inherit}
+.ch-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+</style>
+
+<div class="ch-wrap">
+  <div class="ch-head">
+    <div>
+      <h1>Contact Lists</h1>
+      <div class="sub">{{ lists|length }} list{{ 's' if lists|length != 1 }} · {{ '{:,}'.format(all_total) }} contact{{ 's' if all_total != 1 }}</div>
+    </div>
+    <div class="ch-tools">
+      <label class="ch-search">🔍 <input type="search" id="chSearch" placeholder="Search"></label>
+      <a class="ch-iconbtn" href="{{ url_for('contacts', list='all', open='import') }}" title="Import contacts">⬆</a>
+      <div class="ch-cta">
+        <button type="button" class="main" onclick="dlg('dlgNewList')">Create New List</button>
+        <details id="ctaMenu"><summary>▼</summary>
+          <div class="ch-menu">
+            <button type="button" onclick="dlg('dlgNewList')">Create list</button>
+            <button type="button" onclick="dlg('dlgNewTag')">Create tag</button>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div class="ch-card">
+    <table class="ch-table" id="listsTable">
+      <thead><tr>
+        <th data-sort="text">Name <span class="car">⇅</span></th>
+        <th data-sort="num">Contacts <span class="car">⇅</span></th>
+        <th data-sort="num">Open Rate <span class="car">⇅</span></th>
+        <th>Email Verification</th>
+        <th data-sort="date">Last Updated <span class="car">⇅</span></th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+      {% for l in lists %}
+      <tr data-search="{{ l.name|lower }}">
+        <td><a class="ch-name" href="{{ url_for('contacts', list=l.id) }}">{{ l.name }}</a></td>
+        <td data-v="{{ l.n }}"><a class="ch-count" href="{{ url_for('contacts', list=l.id) }}">{{ '{:,}'.format(l.n) }}</a></td>
+        <td data-v="{{ l.open_rate }}"><span class="ch-rate">{{ '%.2f'|format(l.open_rate) }}%</span></td>
+        <td><span class="ch-dim">--</span></td>
+        <td data-v="{{ l.last_updated_disp }}">{{ l.last_updated_disp }}</td>
+        <td class="ch-row-actions">
+          <div class="ch-ov">
+            <a href="{{ url_for('contacts', list=l.id) }}">Overview</a>
+            <details><summary>▼</summary>
+              <div class="ch-menu">
+                <a href="{{ url_for('contacts', list=l.id, open='add') }}">Add contact</a>
+                <button type="button" onclick="renameList('{{ l.id }}', {{ l.name|tojson }})">Rename</button>
+                <a href="{{ url_for('contacts') }}">Refresh</a>
+                <a href="{{ url_for('verification') }}">Verify Emails</a>
+                <a href="{{ url_for('contacts_export', list=l.id, fmt='csv') }}">Export</a>
+                <button type="button" class="danger" onclick="deleteList('{{ l.id }}', {{ l.name|tojson }})">Delete</button>
+              </div>
+            </details>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="ch-empty">No lists yet — click <b>Create New List</b> to get started.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ---------------- Tags ---------------- #}
+  <div class="ch-sec">
+    <div>
+      <h2>Tags</h2>
+      <div class="sub">{{ tags|length }} tag{{ 's' if tags|length != 1 }} — account-wide labels across every list</div>
+    </div>
+    <button type="button" class="ch-newtag" onclick="dlg('dlgNewTag')">＋ Create Tag</button>
+  </div>
+  <div class="ch-card">
+    <table class="ch-table" id="tagsTable">
+      <thead><tr>
+        <th data-sort="text">Name <span class="car">⇅</span></th>
+        <th data-sort="num">Contacts <span class="car">⇅</span></th>
+        <th>Description</th>
+        <th data-sort="date">Created <span class="car">⇅</span></th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+      {% for t in tags %}
+      <tr data-search="{{ t.name|lower }}">
+        <td><span class="tagdot tagdot-{{ t.color }}"></span><a class="ch-name" href="{{ url_for('contacts', list='all', tag=t.name) }}">{{ t.name }}</a>{% if t.favorite %} ⭐{% endif %}</td>
+        <td data-v="{{ t.count }}"><a class="ch-count" href="{{ url_for('contacts', list='all', tag=t.name) }}">{{ '{:,}'.format(t.count) }}</a></td>
+        <td><span class="ch-dim">{{ t.description or '--' }}</span></td>
+        <td data-v="{{ t.created_disp }}">{{ t.created_disp }}</td>
+        <td class="ch-row-actions">
+          <div class="ch-ov">
+            <a href="{{ url_for('contacts', list='all', tag=t.name) }}">View</a>
+            <details><summary>▼</summary>
+              <div class="ch-menu">
+                <button type="button" onclick="renameTag({{ t.name|tojson }}, {{ t.description|tojson }})">Rename / Edit</button>
+                <button type="button" onclick="mergeTag({{ t.name|tojson }})">Merge</button>
+                <a href="{{ url_for('contacts_export', list='all', fmt='csv') }}">Export</a>
+                <button type="button" class="danger" onclick="deleteTag({{ t.name|tojson }})">Delete</button>
+              </div>
+            </details>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="ch-empty">No tags yet — click <b>＋ Create Tag</b> to add your first label.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ---------------- Dialogs ---------------- #}
+<dialog id="dlgNewList" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="create_list"><input type="hidden" name="sel" value="home">
+  <h3>Create New List</h3>
+  <label>List name</label><input name="name" placeholder="e.g. Newsletter" required maxlength="60" autofocus>
+  <label>Type</label>
+  <select name="list_type">{% for lt, ic in type_icons.items() %}<option value="{{ lt }}">{{ ic }} {{ lt }}</option>{% endfor %}</select>
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Create</button></div>
+</form></dialog>
+
+<dialog id="dlgRenameList" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="rename_list"><input type="hidden" name="sel" value="home">
+  <input type="hidden" name="id" id="rl-id">
+  <h3>Rename List</h3>
+  <label>New name for “<span id="rl-name"></span>”</label><input name="name" id="rl-input" required maxlength="60">
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Save</button></div>
+</form></dialog>
+
+<dialog id="dlgDeleteList" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="delete_list"><input type="hidden" name="sel" value="home">
+  <input type="hidden" name="id" id="dl-id">
+  <h3>Delete List</h3>
+  <p>⚠ Deletes “<b id="dl-name"></b>” and its contacts.</p>
+  <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="keep_contacts" style="width:auto"> Keep the contacts (just unassign them)</label>
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn danger sm">Delete list</button></div>
+</form></dialog>
+
+<dialog id="dlgNewTag" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="create_tag"><input type="hidden" name="sel" value="home">
+  <h3>Create New Tag</h3>
+  <label>Tag name</label><input name="tag_name" placeholder="e.g. VIP Customers" required maxlength="60">
+  <label>Description <span style="color:var(--faint)">(optional)</span></label>
+  <input name="tag_description" placeholder="What this tag is for" maxlength="200">
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Create</button></div>
+</form></dialog>
+
+<dialog id="dlgRenameTag" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="rename_tag"><input type="hidden" name="sel" value="home">
+  <h3>Rename / Edit Tag</h3>
+  <label>Current name</label><input name="old_tag" id="rt-old" readonly style="opacity:.6">
+  <label>New name</label><input name="new_tag" id="rt-new" required maxlength="60">
+  <label>Description <span style="color:var(--faint)">(optional)</span></label>
+  <input name="tag_description" id="rt-desc" maxlength="200">
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Save</button></div>
+</form></dialog>
+
+<dialog id="dlgMergeTags" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="merge_tags"><input type="hidden" name="sel" value="home">
+  <h3>Merge Tags</h3>
+  <label>First tag</label><input name="tag_a" id="mt-a" required>
+  <label>Second tag</label>
+  <select name="tag_b" id="mt-b" required>{% for t in tags %}<option>{{ t.name }}</option>{% endfor %}</select>
+  <label>Merged tag name</label><input name="merged_tag" id="mt-name" required maxlength="60">
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Merge</button></div>
+</form></dialog>
+
+<dialog id="dlgDeleteTag" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="delete_tag"><input type="hidden" name="sel" value="home">
+  <input type="hidden" name="tag_name" id="dt-name">
+  <input type="hidden" name="delete_mode" value="tag_only">
+  <h3>Delete Tag</h3>
+  <p>Delete tag “<b id="dt-label"></b>”? Contacts keep their other tags.</p>
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn danger sm">Delete tag</button></div>
+</form></dialog>
+
+<script>
+function dlg(id){document.querySelectorAll('.ch-cta details, .ch-ov details').forEach(function(d){d.open=false;});
+  document.getElementById(id).showModal();}
+document.querySelectorAll('[data-close]').forEach(function(b){
+  b.addEventListener('click',function(){b.closest('dialog').close();});});
+function renameList(id,name){document.getElementById('rl-id').value=id;
+  document.getElementById('rl-name').textContent=name;
+  document.getElementById('rl-input').value=name; dlg('dlgRenameList');}
+function deleteList(id,name){document.getElementById('dl-id').value=id;
+  document.getElementById('dl-name').textContent=name; dlg('dlgDeleteList');}
+function renameTag(name,desc){document.getElementById('rt-old').value=name;
+  document.getElementById('rt-new').value=name;
+  document.getElementById('rt-desc').value=desc||''; dlg('dlgRenameTag');}
+function mergeTag(name){document.getElementById('mt-a').value=name;
+  document.getElementById('mt-name').value=name; dlg('dlgMergeTags');}
+function deleteTag(name){document.getElementById('dt-name').value=name;
+  document.getElementById('dt-label').textContent=name; dlg('dlgDeleteTag');}
+/* close any open row menu when clicking elsewhere */
+document.addEventListener('click',function(e){
+  document.querySelectorAll('.ch-ov details[open], .ch-cta details[open]').forEach(function(d){
+    if(!d.contains(e.target)) d.open=false;});});
+/* live search across both tables */
+document.getElementById('chSearch').addEventListener('input',function(){
+  var q=this.value.trim().toLowerCase();
+  document.querySelectorAll('tr[data-search]').forEach(function(tr){
+    tr.style.display=(!q||tr.dataset.search.indexOf(q)>-1)?'':'none';});});
+/* column sorting */
+document.querySelectorAll('th[data-sort]').forEach(function(th){
+  th.addEventListener('click',function(){
+    var table=th.closest('table'), tbody=table.tBodies[0],
+        idx=Array.prototype.indexOf.call(th.parentNode.children, th),
+        dir=th.dataset.dir==='asc'?-1:1, kind=th.dataset.sort;
+    th.dataset.dir=dir===1?'asc':'desc';
+    var rows=Array.prototype.slice.call(tbody.rows).filter(function(r){return r.dataset.search!==undefined;});
+    rows.sort(function(a,b){
+      var av=a.cells[idx].dataset.v!==undefined?a.cells[idx].dataset.v:a.cells[idx].textContent.trim(),
+          bv=b.cells[idx].dataset.v!==undefined?b.cells[idx].dataset.v:b.cells[idx].textContent.trim();
+      if(kind==='num') return (parseFloat(av)-parseFloat(bv))*dir;
+      if(kind==='date') return (new Date(av)-new Date(bv))*dir||av.localeCompare(bv)*dir;
+      return av.localeCompare(bv)*dir;});
+    rows.forEach(function(r){tbody.appendChild(r);});});});
+</script>
+{% endblock %}

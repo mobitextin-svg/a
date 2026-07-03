@@ -1995,6 +1995,66 @@ def register_modules(app):
             " AND c.account_id=cl.account_id AND c.status != 'trashed') AS n"
             " FROM contact_lists cl WHERE"
             " cl.account_id=? ORDER BY cl.favorite DESC, cl.name", (aid,))
+
+        # ---------------- Contacts home: lists & tags overview ---------------- #
+        # The default Contacts view is a clean table of lists and tags; picking
+        # a list (?list=…) drops into the full contact-management dashboard.
+        if request.args.get("list") in (None, "home"):
+            def _disp(raw):
+                if not raw:
+                    return "—"
+                s = str(raw).replace("T", " ")
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d"):
+                    try:
+                        return datetime.strptime(s[:len(fmt) + 6], fmt).strftime("%d %b %Y")
+                    except Exception:
+                        continue
+                return str(raw)[:11]
+
+            home_lists = []
+            for r in lists:
+                d = dict(r)
+                agg = D.query(
+                    "SELECT COALESCE(SUM(sent),0) s, COALESCE(SUM(opens),0) o"
+                    " FROM campaigns WHERE account_id=? AND list_id=?",
+                    (aid, r["id"]), one=True)
+                d["open_rate"] = round(agg["o"] * 100.0 / agg["s"], 2) if agg["s"] else 0.0
+                last_c = D.query("SELECT MAX(created_at) m FROM contacts WHERE"
+                                 " account_id=? AND list_id=?", (aid, r["id"]),
+                                 one=True)["m"]
+                stamps = [s for s in (d.get("created_at"), d.get("last_import_at"),
+                                      last_c) if s]
+                d["last_updated_disp"] = _disp(max(stamps)) if stamps else "—"
+                home_lists.append(d)
+
+            reg = {r["name"]: dict(r) for r in D.query(
+                "SELECT name, color, description, favorite, created_at FROM"
+                " account_tags WHERE account_id=?", (aid,))}
+            counts = {}
+            for row in D.query("SELECT tags FROM contacts WHERE account_id=? AND"
+                               " tags IS NOT NULL AND tags != ''", (aid,)):
+                for t in (row["tags"] or "").split(","):
+                    t = t.strip()
+                    if t:
+                        counts[t] = counts.get(t, 0) + 1
+            home_tags = [{"name": n, "count": counts.get(n, 0),
+                          "color": m.get("color") or "blue",
+                          "description": m.get("description") or "",
+                          "favorite": bool(m.get("favorite")),
+                          "created_disp": _disp(m.get("created_at"))}
+                         for n, m in reg.items()]
+            for n, cnt in counts.items():
+                if n not in reg:
+                    home_tags.append({"name": n, "count": cnt, "color": "blue",
+                                      "description": "", "favorite": False,
+                                      "created_disp": "—"})
+            home_tags.sort(key=lambda t: (not t["favorite"], t["name"].lower()))
+            all_total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
+                                " AND status != 'trashed'", (aid,), one=True)["c"]
+            return render_template("contacts_home.html", lists=home_lists,
+                                   tags=home_tags, all_total=all_total, acct=acct,
+                                   type_icons=LIST_TYPE_ICONS)
+
         sel = (request.args.get("list") or "all").strip()
         sel_list = _own_list(aid, sel) if sel.isdigit() else None
         if sel.isdigit() and not sel_list:
