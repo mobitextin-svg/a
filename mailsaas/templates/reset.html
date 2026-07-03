@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+{% from "_auth_rail.html" import rail, authhead with context %}
+<head>{{ authhead("Set new password") }}</head>
+<body class="auth">
+
+<div class="shell">
+  {{ rail("Choose a stronger one.",
+          "Your new password takes effect immediately and signs out every other active session.",
+          [("Request link", "Done"),
+           ("Set new password", "Checked live as you type"),
+           ("Back in", "All old sessions revoked")], 1) }}
+
+  <main class="pane"><div class="pane-inner">
+    <div class="card">
+      <h1>Create a new password</h1>
+      <p class="sub">Make it long, unique, and yours alone.</p>
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+      {% endwith %}
+      <form method="post" action="{{ url_for('reset', token=token) }}">
+        <div class="pwrow"><label for="pw">New password</label>
+          <button type="button" id="pwToggle" aria-pressed="false">Show</button></div>
+        <input type="password" name="password" id="pw" required autofocus
+               autocomplete="new-password" placeholder="••••••••">
+        <div class="meter"><i id="meterBar"></i></div>
+        <div class="rules" id="rules">
+          <span data-rule="len">At least 8 characters</span>
+          <span data-rule="upper">One uppercase letter</span>
+          <span data-rule="lower">One lowercase letter</span>
+          <span data-rule="num">One number</span>
+          <span data-rule="spec">One special character</span>
+        </div>
+        <button class="btn" type="submit">Reset password</button>
+      </form>
+    </div>
+    <p class="below"><a href="{{ url_for('login') }}">← Back to sign in</a></p>
+  </div></main>
+</div>
+
+<script>
+var pw=document.getElementById('pw'),bar=document.getElementById('meterBar'),
+    tog=document.getElementById('pwToggle'),
+    rules={len:function(v){return v.length>=8;},
+           upper:function(v){return /[A-Z]/.test(v);},
+           lower:function(v){return /[a-z]/.test(v);},
+           num:function(v){return /\d/.test(v);},
+           spec:function(v){return /[^A-Za-z0-9]/.test(v);}};
+tog.onclick=function(){var s=pw.type==='password';
+  pw.type=s?'text':'password';tog.textContent=s?'Hide':'Show';
+  tog.setAttribute('aria-pressed',s);};
+pw.addEventListener('input',function(){
+  var v=pw.value,score=0;
+  Object.keys(rules).forEach(function(k){
+    var ok=rules[k](v);if(ok)score++;
+    document.querySelector('[data-rule='+k+']').className=ok?'on':'';});
+  bar.style.width=(score*20)+'%';
+  bar.style.background=score<3?'var(--bad)':score<5?'var(--warn)':'var(--good)';});
+</script>
+</body></html>

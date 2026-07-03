@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}SMTP Pools{% endblock %}
+{% block content %}
+<h1>🗄️ SMTP Pool Manager</h1>
+<p class="muted">Group relays into pools with round-robin, weighting, failover &amp; health checks.</p>
+
+<div class="grid g3" style="margin-top:14px">
+  <div class="stat"><div class="k">Pools</div><div class="v">2</div></div>
+  <div class="stat"><div class="k">Strategy</div><div class="v" style="font-size:1.2rem">Weighted + Failover</div></div>
+  <div class="stat"><div class="k">Relays</div><div class="v">{{ servers|length }}</div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="section-head"><h2>Pool A — Production</h2><span class="badge b-Healthy">Round Robin</span></div>
+    {% for s in servers %}
+      <div class="kv"><span>{{ s.name }} <span class="faint small">({{ s.dedicated_ip or s.host }})</span></span>
+        <span class="badge b-{{ s.health }}">{{ s.health }}</span></div>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <div class="section-head"><h2>Pool B — Warm-up</h2><span class="badge b-Running">Weight Based</span></div>
+    <div class="kv"><span>Weight distribution</span><span>70 / 30</span></div>
+    <div class="kv"><span>Failover</span><span class="dot-ok">✔ enabled</span></div>
+    <div class="kv"><span>Health check interval</span><span>30s</span></div>
+    <div class="kv"><span>Auto-eject unhealthy</span><span class="dot-ok">✔ on</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Pool health</h2>
+  <table>
+    <thead><tr><th>Relay</th><th>Pool</th><th>Health</th><th>Warm-up</th><th class="num">Weight</th></tr></thead>
+    <tbody>
+    {% for s in servers %}
+      <tr><td><b>{{ s.name }}</b><div class="faint small">{{ s.host }}:{{ s.port }}</div></td>
+        <td>{{ 'Pool A' if loop.first else 'Pool B' }}</td>
+        <td><span class="badge b-{{ s.health }}">{{ s.health }}</span></td>
+        <td class="small">{{ s.warmup }}</td>
+        <td class="num">{{ 70 if loop.first else 30 }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small" style="margin-top:8px">Add relays under <a href="{{ url_for('smtp') }}">SMTP Servers</a> — they're available to pools automatically.</p>
+</div>
+{% endblock %}

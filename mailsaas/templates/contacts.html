@@ -1,0 +1,1072 @@
+{% extends "base.html" %}
+{% block title %}Contacts{% endblock %}
+{% block content %}
+{% set is_list = sel_list is not none %}
+{% set is_supp = sel == 'suppression' %}
+{% set subtab = request.args.get('subtab', 'unsubscribed') %}
+
+<div class="ct-head">
+  <h1 style="margin:0">👥 Contacts</h1>
+  <div class="row" style="gap:8px;align-items:center">
+    {% if not is_supp %}
+    <form method="get" class="inline-form">
+      <input type="hidden" name="list" value="{{ sel }}">
+      {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+      {% if tag_filter %}<input type="hidden" name="tag" value="{{ tag_filter }}">{% endif %}
+      <input name="q" value="{{ q }}" placeholder="🔍 Search email, name, company, city, state…" style="width:280px">
+    </form>
+    {% if tag_filter %}
+    <span style="display:inline-flex;align-items:center;gap:4px;background:var(--accent);color:#fff;padding:3px 8px;border-radius:12px;font-size:12px">
+      🏷 {{ tag_filter }}
+      <a href="{{ url_for('contacts', list=sel) }}" style="color:#fff;text-decoration:none;font-weight:bold;margin-left:2px" title="Clear tag filter">✕</a>
+    </span>
+    {% endif %}
+    {% endif %}
+    <button type="button" class="btn sm" data-open="dlgNewList">＋ New List</button>
+    <button type="button" class="iconbtn" data-open="dlgHistory" title="Import history">📜</button>
+    <button type="button" class="iconbtn" data-open="dlgSettings" title="Contact settings">⚙</button>
+  </div>
+</div>
+
+{% if import_summary %}
+{% set s = import_summary %}
+<div class="card ct-summary">
+  <h2 style="margin-top:0">✅ Import Completed Successfully</h2>
+  <table class="ct-imptable">
+    <tr><td>File Name</td><td class="num"><b>{{ s.filename }}</b></td></tr>
+    <tr><td>Total Records</td><td class="num"><b>{{ '{:,}'.format(s.total) }}</b></td></tr>
+    <tr><td>Imported</td><td class="num"><b style="color:var(--good)">{{ '{:,}'.format(s.added) }}</b></td></tr>
+    <tr><td>Updated</td><td class="num"><b>{{ '{:,}'.format(s.updated) }}</b></td></tr>
+    <tr><td>Duplicates Removed</td><td class="num"><b>{{ '{:,}'.format(s.duplicates) }}</b></td></tr>
+    <tr><td>Invalid Emails</td><td class="num"><b>{{ '{:,}'.format(s.invalid) }}</b></td></tr>
+    <tr><td>Blank Rows</td><td class="num"><b>{{ '{:,}'.format(s.blanks) }}</b></td></tr>
+    <tr class="ct-final"><td>Final Contacts</td><td class="num"><b>{{ '{:,}'.format(s.final) }}</b></td></tr>
+  </table>
+  {% if s.list_name %}<p class="faint small">List: <b>📋 {{ s.list_name }}</b></p>{% endif %}
+  <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">
+    <a class="btn sm" href="{{ url_for('contacts', list=s.list_id or 'all') }}">✓ View Contacts</a>
+    {% if s.has_errors %}<a class="btn ghost sm" href="{{ url_for('contacts_import_errors', imp_id=s.imp_id) }}">⚠ Download Error Report</a>{% endif %}
+    <form method="post" class="inline-form" onsubmit="return confirm('Undo this import? The {{ s.added }} added contact(s) will be removed.')">
+      <input type="hidden" name="action" value="undo_import"><input type="hidden" name="imp_id" value="{{ s.imp_id }}">
+      <input type="hidden" name="sel" value="{{ s.list_id or 'all' }}">
+      <button class="btn ghost sm">↩ Undo Import</button></form>
+  </div>
+</div>
+{% endif %}
+
+<div class="ct-grid">
+  {# ---------------- Left rail: lists ---------------- #}
+  <aside class="ct-rail card">
+    <div class="ct-rail-head"><b>Contact Lists</b><span class="faint small">Total: {{ lists|length }}</span></div>
+    <a class="ct-li {{ 'on' if sel=='all' }}" href="{{ url_for('contacts', list='all') }}">
+      <span>📋 All Contacts</span><span class="ct-n">{{ '{:,}'.format(all_total) }}</span></a>
+    <a class="ct-li {{ 'on' if is_supp }}" href="{{ url_for('contacts', list='suppression') }}">
+      <span>🚫 Suppression</span><span class="ct-n">{{ suppress_count }}</span></a>
+    <a class="ct-li {{ 'on' if sel=='trash' }}" href="{{ url_for('contacts', list='trash') }}">
+      <span>🗑 Trash</span><span class="ct-n">{{ trash_count }}</span></a>
+    <div class="ct-sep"></div>
+    {% for l in lists %}
+    <div class="ct-li-row {{ 'on' if sel==l.id|string }}">
+      <form method="post" class="ct-fav"><input type="hidden" name="action" value="fav_list">
+        <input type="hidden" name="id" value="{{ l.id }}"><input type="hidden" name="sel" value="{{ sel }}">
+        <button type="submit" title="{{ 'Unpin' if l.favorite else 'Pin to top' }}">{{ '⭐' if l.favorite else '☆' }}</button></form>
+      <a class="ct-li" href="{{ url_for('contacts', list=l.id) }}">
+        <span>{{ type_icons.get(l.list_type,'🌐') }} {{ l.name }}</span><span class="ct-n">{{ '{:,}'.format(l.n) }}</span></a>
+      <details class="ct-kebab"><summary title="Manage list">⋮</summary>
+        <div class="pop">
+          <a href="{{ url_for('contacts', list=l.id) }}">👥 View Contacts</a>
+          <button type="button" data-k="dlgAdd"     data-id="{{ l.id }}" data-name="{{ l.name }}">➕ Add Contacts</button>
+          <button type="button" data-k="dlgImport"  data-id="{{ l.id }}" data-name="{{ l.name }}">📥 Import Contacts</button>
+          <a href="{{ url_for('contacts_export', list=l.id, fmt='csv') }}">📤 Export Contacts</a>
+          <button type="button" data-k="dlgRename"  data-id="{{ l.id }}" data-name="{{ l.name }}">✏ Rename List</button>
+          <form method="post" class="k-form"><input type="hidden" name="action" value="duplicate_list">
+            <input type="hidden" name="id" value="{{ l.id }}"><input type="hidden" name="sel" value="{{ l.id }}">
+            <button type="submit">📋 Duplicate List</button></form>
+          <button type="button" data-k="dlgMerge"   data-id="{{ l.id }}" data-name="{{ l.name }}">🔀 Merge Lists</button>
+          <button type="button" data-k="dlgMove"    data-id="{{ l.id }}" data-name="{{ l.name }}">📂 Move Contacts</button>
+          <form method="post" class="k-form" onsubmit="return confirm('Remove duplicate emails from this list?')">
+            <input type="hidden" name="action" value="dedupe"><input type="hidden" name="id" value="{{ l.id }}">
+            <input type="hidden" name="sel" value="{{ l.id }}"><button type="submit">🧹 Remove Duplicates</button></form>
+          <a href="{{ url_for('contacts', list=l.id) }}">📊 Statistics</a>
+          <button type="button" data-k="dlgHistory" data-id="{{ l.id }}" data-name="{{ l.name }}">📜 Import History</button>
+          <div class="ct-ksep"></div>
+          <button type="button" class="danger" data-k="dlgDelContacts" data-id="{{ l.id }}" data-name="{{ l.name }}">🗑 Delete Contacts</button>
+          <button type="button" class="danger" data-k="dlgDelList"     data-id="{{ l.id }}" data-name="{{ l.name }}">❌ Delete List</button>
+        </div>
+      </details>
+    </div>
+    {% else %}
+    <p class="faint small" style="padding:8px">No lists yet — click <b>＋ New List</b>.</p>
+    {% endfor %}
+
+    {# ---- Recently Used Tags (quick pick) ---- #}
+    {% if recent_tags %}
+    <div class="ct-sep" style="margin-top:10px"></div>
+    <div class="ct-rail-head" style="margin-top:4px"><b>Recently Used</b></div>
+    <div style="padding:0 8px 8px;display:flex;flex-wrap:wrap;gap:5px">
+      {% for rt in recent_tags %}
+      <a href="{{ url_for('contacts', list=sel, tag=rt) }}" class="tag-chip" style="text-decoration:none">{{ rt }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ---- Tags section (favorites first, then A-Z) ---- #}
+    {% if all_tags_full %}
+    <div class="ct-sep" style="margin-top:6px"></div>
+    <div class="ct-rail-head" style="margin-top:4px">
+      <b>Tags</b>
+      <span class="faint small">{{ all_tags_full|length }}</span>
+    </div>
+    {% for t in all_tags_full %}
+    <div class="ct-li-row">
+      <a class="ct-li {{ 'on' if tag_filter == t.name }}" href="{{ url_for('contacts', list=sel, tag=t.name) }}" title="{{ t.description or 'Filter by tag' }}">
+        <span class="tag-dot tag-dot-{{ t.color }}"></span>
+        <span>{{ t.name }}</span>
+        {% if t.favorite %}<span style="font-size:10px">⭐</span>{% endif %}
+        <span class="ct-n">{{ '{:,}'.format(t.count) }}</span></a>
+      <details class="ct-kebab"><summary title="Manage tag">⋮</summary>
+        <div class="pop">
+          <button type="button" data-k="dlgTagDetail"  data-tag="{{ t.name }}">📊 View Details</button>
+          <button type="button" data-k="dlgRenameTag"  data-tag="{{ t.name }}" data-color="{{ t.color }}" data-desc="{{ t.description }}">✏ Rename / Edit</button>
+          <button type="button" data-k="dlgMoveTag"    data-tag="{{ t.name }}">📂 Move Contacts</button>
+          <button type="button" data-k="dlgMergeTags"  data-tag="{{ t.name }}">🔀 Merge</button>
+          <button type="button" data-k="toggleFavTag"  data-tag="{{ t.name }}">{{ '★ Unpin Favorite' if t.favorite else '⭐ Pin as Favorite' }}</button>
+          <a href="{{ url_for('contacts_export', list='all', fmt='csv') }}">📤 Export Contacts</a>
+          <div class="ct-ksep"></div>
+          <button type="button" class="danger" data-k="dlgDeleteTag" data-tag="{{ t.name }}">🗑 Delete Tag</button>
+        </div>
+      </details>
+    </div>
+    {% endfor %}
+    {% endif %}
+    <div class="ct-sep" style="margin-top:6px"></div>
+    <div style="padding:4px 8px 8px">
+      <button type="button" class="btn ghost sm" style="width:100%;font-size:12px" data-open="dlgCreateTag">＋ New Tag</button>
+    </div>
+    {# ---- List ↔ Tag map ---- #}
+    {% if lists %}
+    <div class="ct-sep" style="margin-top:4px"></div>
+    <div class="ct-rail-head" style="margin-top:4px"><b>List → Tags</b></div>
+    <div style="padding:0 8px 10px;display:flex;flex-direction:column;gap:6px">
+      {% for l in lists %}
+      {% set ltags = list_tags.get(l.id, []) | unique | list %}
+      <div style="background:var(--surface2,var(--card));border-radius:8px;padding:8px 10px">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="{{ l.name }}">{{ l.name }}</div>
+        {% if ltags %}
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          {% for t in ltags | sort %}
+          <a href="{{ url_for('contacts', list=l.id, tag=t) }}" style="font-size:10px;background:var(--accent20,rgba(99,102,241,.15));color:var(--accent);padding:2px 7px;border-radius:10px;text-decoration:none;white-space:nowrap">{{ t }}</a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <span style="font-size:11px;color:var(--faint)">No tags</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </aside>
+
+  {# ---------------- Right pane ---------------- #}
+  <section class="ct-main">
+  {% if is_supp %}
+    {# ---- Suppression (account-wide) ---- #}
+    <div class="card">
+      <h2 style="margin-top:0">🚫 Suppression List <span class="faint small">— never-contact addresses</span></h2>
+      <div class="tabs">
+        <a class="tab {{ 'active' if subtab=='unsubscribed' }}" href="{{ url_for('contacts', list='suppression', subtab='unsubscribed') }}">Unsubscribed ({{ unsub|length }})</a>
+        <a class="tab {{ 'active' if subtab=='bounced' }}" href="{{ url_for('contacts', list='suppression', subtab='bounced') }}">Bounced ({{ bounced|length }})</a>
+        <a class="tab {{ 'active' if subtab=='complaints' }}" href="{{ url_for('contacts', list='suppression', subtab='complaints') }}">Complaints ({{ complaints|length }})</a>
+        <a class="tab {{ 'active' if subtab=='blocked' }}" href="{{ url_for('contacts', list='suppression', subtab='blocked') }}">Blocked ({{ blocked|length }})</a>
+      </div>
+      {% macro supp_table(rows, kind) %}
+      <table><thead><tr><th>Email</th><th>Name</th><th>Added</th><th></th></tr></thead><tbody>
+        {% for c in rows %}
+        <tr><td>{{ c.email }}</td><td>{{ c.name or '—' }}</td><td class="faint small">{{ c.created_at[:10] }}</td>
+          <td class="num"><form class="inline-form" method="post">
+            <input type="hidden" name="action" value="resubscribe"><input type="hidden" name="id" value="{{ c.id }}">
+            <button class="btn ghost sm">Re-activate</button></form></td></tr>
+        {% else %}<tr><td colspan="4" class="empty">No {{ kind }} addresses.</td></tr>{% endfor %}
+      </tbody></table>
+      {% endmacro %}
+      {% if subtab=='unsubscribed' %}{{ supp_table(unsub,'unsubscribed') }}
+      {% elif subtab=='bounced' %}{{ supp_table(bounced,'bounced') }}
+      {% elif subtab=='complaints' %}
+        <table><thead><tr><th>Email</th><th>Reported</th></tr></thead><tbody>
+          {% for c in complaints %}<tr><td>{{ c.email }}</td><td class="faint small">{{ c.created_at[:10] }}</td></tr>
+          {% else %}<tr><td colspan="2" class="empty">No spam complaints.</td></tr>{% endfor %}
+        </tbody></table>
+      {% else %}
+        <form method="post" class="row" style="gap:8px;align-items:flex-end;margin:10px 0;flex-wrap:wrap">
+          <input type="hidden" name="action" value="block">
+          <div style="flex:1;min-width:200px"><label class="small">Block an email</label>
+            <input name="email" type="email" placeholder="spammer@example.com" required></div>
+          <div style="flex:1;min-width:140px"><label class="small">Reason</label>
+            <input name="reason" placeholder="optional"></div>
+          <button class="btn sm">Block</button>
+        </form>
+        <table><thead><tr><th>Email</th><th>Reason</th><th>Blocked</th><th></th></tr></thead><tbody>
+          {% for b in blocked %}<tr><td>{{ b.email }}</td><td>{{ b.reason or '—' }}</td>
+            <td class="faint small">{{ b.created_at[:10] }}</td>
+            <td class="num"><form class="inline-form" method="post">
+              <input type="hidden" name="action" value="unblock"><input type="hidden" name="id" value="{{ b.id }}">
+              <button class="btn ghost sm">Unblock</button></form></td></tr>
+          {% else %}<tr><td colspan="4" class="empty">No blocked emails.</td></tr>{% endfor %}
+        </tbody></table>
+      {% endif %}
+    </div>
+  {% elif sel=='trash' %}
+    {# ---- Trash (soft-deleted contacts) ---- #}
+    <div class="card">
+      <h2 style="margin-top:0">🗑 Trash <span class="faint small">— deleted contacts, recoverable</span></h2>
+      <p class="faint small">Deleted contacts stay here until you restore them or delete them permanently. They are never sent to.</p>
+
+      <form method="post" id="trashForm"><input type="hidden" name="sel" value="trash"></form>
+      <div class="row" style="gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap">
+        <span class="faint small">With selected:</span>
+        <button class="btn sm" form="trashForm" name="action" value="restore_selected">♻ Restore</button>
+        <button class="btn danger sm" form="trashForm" name="action" value="purge_selected"
+                onclick="return confirm('⚠ Delete the selected contacts permanently?\n\nThis action CANNOT be undone.')">Delete Permanently</button>
+        {% if trash %}
+        <form method="post" style="margin-left:auto" onsubmit="return confirm('⚠ Empty Trash?\n\nAll {{ trash|length }} contact(s) will be permanently deleted. This action CANNOT be undone.')">
+          <input type="hidden" name="action" value="empty_trash"><input type="hidden" name="sel" value="trash">
+          <button class="btn danger sm">🗑 Empty Trash</button></form>
+        {% endif %}
+      </div>
+
+      <table>
+        <thead><tr>
+          <th style="width:24px"><input type="checkbox" id="checkAllTrash"></th>
+          <th>Email</th><th>Name</th><th>Company</th><th>Deleted</th><th></th></tr></thead>
+        <tbody>
+        {% for c in trash %}
+          <tr>
+            <td><input type="checkbox" name="ids" value="{{ c.id }}" class="trashChk" form="trashForm"></td>
+            <td>{{ c.email }}</td>
+            <td>{{ c.name or '—' }}</td>
+            <td class="faint small">{{ c.company or '—' }}</td>
+            <td class="faint small">{{ c.deleted_at[:10] if c.deleted_at else '—' }}</td>
+            <td class="num">
+              <form class="inline-form" method="post"><input type="hidden" name="action" value="restore">
+                <input type="hidden" name="id" value="{{ c.id }}"><button class="btn ghost sm" title="Restore">♻ Restore</button></form>
+              <form class="inline-form" method="post" onsubmit="return confirm('⚠ Delete {{ c.email }} permanently?\n\nThis action CANNOT be undone.')">
+                <input type="hidden" name="action" value="purge"><input type="hidden" name="id" value="{{ c.id }}">
+                <button class="btn danger sm" title="Delete permanently">🗑</button></form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="empty">Trash is empty.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {# ---- List / All Contacts ---- #}
+    <div class="card">
+      <div class="section-head" style="align-items:flex-start">
+        <div>
+          <h2 style="margin:0">{{ ('📋 ' + sel_list.name) if is_list else '📋 All Contacts' }}
+            <span class="faint small">{{ '{:,}'.format(total) }} contacts</span></h2>
+          {% if stats %}
+          <div class="ct-stats">
+            <span>Total <b>{{ '{:,}'.format(stats.total) }}</b></span>
+            <span>Active <b>{{ '{:,}'.format(stats.active) }}</b></span>
+            <span>Blocked <b>{{ '{:,}'.format(stats.blocked) }}</b></span>
+            <span>Unsub <b>{{ '{:,}'.format(stats.unsubscribed) }}</b></span>
+            <span>Bounced <b>{{ '{:,}'.format(stats.bounced) }}</b></span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      {# ---- Toolbar: content actions for the current view ---- #}
+      {# List management (rename/duplicate/merge/move/copy/delete) lives in each
+         list's ⋮ menu in the left rail. #}
+      <div class="ct-toolbar">
+        <button type="button" class="tb primary" data-open="dlgAdd" title="Add a contact (press A)">➕ Add</button>
+        <button type="button" class="tb primary" data-open="dlgImport" title="Import from CSV, Excel or paste (press I)">📥 Import</button>
+        <button type="button" class="tb primary" data-open="dlgExport" title="Export this view to CSV or Excel (press E)">📤 Export</button>
+        <button type="button" class="tb primary" data-open="dlgStats" title="View statistics (press S)">📊 Statistics</button>
+        <form method="post" class="tb-form" onsubmit="return confirm('Remove duplicate emails{{ ' from this list' if is_list else '' }}?')">
+          <input type="hidden" name="action" value="dedupe"><input type="hidden" name="id" value="{{ sel_list.id if is_list else '' }}">
+          <input type="hidden" name="sel" value="{{ sel }}"><button class="tb" title="Remove duplicate emails">🧹 Remove Duplicates</button></form>
+      </div>
+
+      {# ---- Status filter: All / Active / Blocked / Unsubscribed / Bounced ---- #}
+      <div class="tabs" style="margin-top:12px">
+        <a class="tab {{ 'active' if not status_filter }}" href="{{ url_for('contacts', list=sel, q=q) }}">📋 All{% if stats %} ({{ stats.total }}){% endif %}</a>
+        <a class="tab {{ 'active' if status_filter=='active' }}" href="{{ url_for('contacts', list=sel, status='active', q=q) }}">✅ Active{% if stats %} ({{ stats.active }}){% endif %}</a>
+        <a class="tab {{ 'active' if status_filter=='blocked' }}" href="{{ url_for('contacts', list=sel, status='blocked', q=q) }}">🚫 Blocked{% if stats %} ({{ stats.blocked }}){% endif %}</a>
+        <a class="tab {{ 'active' if status_filter=='unsubscribed' }}" href="{{ url_for('contacts', list=sel, status='unsubscribed', q=q) }}">🚫 Unsubscribed{% if stats %} ({{ stats.unsubscribed }}){% endif %}</a>
+        <a class="tab {{ 'active' if status_filter=='bounced' }}" href="{{ url_for('contacts', list=sel, status='bounced', q=q) }}">❌ Bounced{% if stats %} ({{ stats.bounced }}){% endif %}</a>
+      </div>
+
+      {# Bulk bar — move / tag / delete selected #}
+      <form method="post" id="bulkForm"><input type="hidden" name="sel" value="{{ sel }}"></form>
+      <div class="row" style="gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap">
+        <span class="faint small">With selected:</span>
+        <select name="list_id" form="bulkForm" style="width:170px">
+          <option value="">— Move to: no list —</option>
+          {% for l in lists %}<option value="{{ l.id }}">📋 {{ l.name }}</option>{% endfor %}
+        </select>
+        <button class="btn sm" form="bulkForm" name="action" value="assign_list">Move</button>
+        <button type="button" class="btn sm" data-open="dlgTag">🏷 Tag</button>
+        <button class="btn danger sm" form="bulkForm" name="action" value="delete_selected"
+                onclick="return confirm('Delete the selected contacts?\n\nThey will be moved to Trash and can be restored later.')">Delete</button>
+      </div>
+
+      <table>
+        <thead><tr>
+          <th style="width:24px"><input type="checkbox" id="checkAll"></th>
+          <th>Email</th><th>Name</th><th>Mobile</th><th>Company</th>{% if not is_list %}<th>List</th>{% endif %}<th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for c in contacts %}
+          <tr>
+            <td><input type="checkbox" name="ids" value="{{ c.id }}" class="rowChk" form="bulkForm"></td>
+            <td>{{ c.email }}{% for t in (c.tags or '').split(',') if t %} <span class="tag">{{ t.strip() }}</span>{% endfor %}</td>
+            <td>{{ c.name or '—' }}</td>
+            <td class="faint small">{{ c.mobile or '—' }}</td>
+            <td class="faint small">{{ c.company or '—' }}</td>
+            {% if not is_list %}<td class="faint small">{% for l in lists if l.id==c.list_id %}{{ l.name }}{% else %}—{% endfor %}</td>{% endif %}
+            <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+            <td class="num">
+              <button type="button" class="btn ghost sm js-act" data-id="{{ c.id }}" data-email="{{ c.email }}" title="Email activity">📧</button>
+              <button type="button" class="btn ghost sm js-edit" data-id="{{ c.id }}"
+                data-email="{{ c.email }}" data-name="{{ c.name or '' }}"
+                data-tags="{{ c.tags or '' }}" data-mobile="{{ c.mobile or '' }}"
+                data-company="{{ c.company or '' }}" data-city="{{ c.city or '' }}"
+                data-state="{{ c.state or '' }}" data-note="{{ c.note or '' }}"
+                data-country="{{ c.country or '' }}" data-balance="{{ c.balance or '' }}"
+                data-last_purchase="{{ c.last_purchase or '' }}"
+                data-custom="{{ c.custom_json or '{}' }}"
+                data-list="{{ c.list_id or '' }}" title="Edit">✏️</button>
+              {% if c.status != 'blocked' %}
+              <form class="inline-form" method="post"><input type="hidden" name="action" value="block_contact">
+                <input type="hidden" name="sel" value="{{ sel }}"><input type="hidden" name="id" value="{{ c.id }}">
+                <button class="btn ghost sm" title="Block">🚫</button></form>{% endif %}
+              <form class="inline-form" method="post" onsubmit="return confirm('Move {{ c.email }} to Trash?\n\nThis can be undone from the Trash view.')">
+                <input type="hidden" name="action" value="delete"><input type="hidden" name="sel" value="{{ sel }}">
+                <input type="hidden" name="id" value="{{ c.id }}"><button class="btn danger sm" title="Move to Trash">🗑</button></form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="{{ 8 if not is_list else 7 }}" class="empty">{{ 'No contacts match your search.' if q else 'No contacts here yet — use ➕ Add or 📥 Import.' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if pages > 1 %}
+      <div class="section-head" style="margin-top:12px">
+        <span class="faint small">Page {{ page }} of {{ pages }}</span>
+        <div class="row" style="flex:0;gap:6px">
+          {% set base = url_for('contacts') + '?list=' + sel + ('&status=' + status_filter if status_filter else '') + ('&q=' + q if q else '') %}
+          {% if page > 1 %}<a class="btn ghost sm" href="{{ base }}&page={{ page-1 }}">← Prev</a>{% endif %}
+          {% if page < pages %}<a class="btn ghost sm" href="{{ base }}&page={{ page+1 }}">Next →</a>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  {% endif %}
+  </section>
+</div>
+
+{# =================== Modals =================== #}
+
+<dialog id="dlgNewList" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="create_list">
+  <h3>＋ Create New Contact List</h3>
+  <label class="small">List name</label><input name="name" placeholder="e.g. Email Sender" required autofocus>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Create</button></div>
+</form></dialog>
+
+<dialog id="dlgAdd" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="add"><input type="hidden" name="sel" value="{{ sel }}">
+  <h3>➕ Add Contact</h3>
+  <label class="small">📧 Email <span class="faint">(required)</span></label><input name="email" type="email" required>
+  <div class="ct-2col">
+    <div><label class="small">👤 Name</label><input name="name"></div>
+    <div><label class="small">📱 Mobile</label><input name="mobile"></div>
+    <div><label class="small">🏢 Company</label><input name="company"></div>
+    <div><label class="small">🏙 City</label><input name="city"></div>
+    <div><label class="small">🌍 State</label><input name="state"></div>
+    <div><label class="small">🌐 Country</label><input name="country"></div>
+    <div><label class="small">💰 Balance</label><input name="balance" placeholder="₹0"></div>
+    <div><label class="small">🛍 Last Purchase</label><input name="last_purchase"></div>
+    <div><label class="small">🏷 Tags</label><input name="tags" placeholder="vip, lead"></div>
+    {% for f in fields %}
+    <div><label class="small">🔧 {{ f.label }}</label><input name="cf_{{ f.name }}"></div>
+    {% endfor %}
+  </div>
+  <label class="small" style="margin-top:8px">📝 Note <span class="faint">(internal)</span></label><input name="note">
+  <label class="small" style="margin-top:8px">List</label>
+  <select name="list_id" id="add-list"><option value="">— No list —</option>
+    {% for l in lists %}<option value="{{ l.id }}" {{ 'selected' if is_list and l.id==sel_list.id }}>{{ l.name }}</option>{% endfor %}</select>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Add</button></div>
+</form></dialog>
+
+<dialog id="dlgImport" class="ct-dlg"><form method="post" enctype="multipart/form-data">
+  <input type="hidden" name="action" value="import">
+  <h3>📥 Import Contacts</h3>
+  <label class="small"><b>Select contact list</b> — contacts import into this list</label>
+  <select name="list_id" id="imp-list">
+    {% for l in lists %}<option value="{{ l.id }}" {{ 'selected' if is_list and l.id==sel_list.id }}>{{ l.name }} ({{ l.n }})</option>{% endfor %}
+    <option value="">— No list (unassigned) —</option></select>
+  <p class="faint small" id="imp-into" style="margin:4px 0 0"></p>
+  <label class="small" style="margin-top:10px">Assign Tag <span class="faint">(optional)</span></label>
+  <select name="import_tag">
+    <option value="">— No tag —</option>
+    {% for tn, _ in all_tags %}<option value="{{ tn }}">🏷 {{ tn }}</option>{% endfor %}
+  </select>
+  <label class="small" style="margin-top:8px">Upload CSV / Excel (.xlsx)</label>
+  <input type="file" name="file" accept=".csv,.txt,.tsv,.xlsx,.xlsm">
+  <label class="small" style="margin-top:8px">…or copy &amp; paste</label>
+  <textarea name="csv" placeholder="jane@acme.com, Jane Doe&#10;bob@acme.com, Bob Smith"></textarea>
+  <div class="imp-note">🪄 <b>Automatic header mapping.</b> Columns like <i>Email Address, Full Name,
+    Phone, Company Name, District, Province</i> map to the standard fields
+    (Email, Name, Mobile, Company, City, State). No manual mapping needed.</div>
+  <label class="small" style="margin-top:8px">Duplicate handling <span class="faint">(by {{ 'email + name' if acct.dup_check=='email_name' else 'email' }})</span></label>
+  <select name="rule">
+    <option value="remove" {{ 'selected' if acct.default_import_rule=='remove' }}>Remove Duplicates — one record per email (recommended)</option>
+    <option value="skip"   {{ 'selected' if acct.default_import_rule=='skip' }}>Skip Duplicates — keep existing unchanged</option>
+    <option value="update" {{ 'selected' if acct.default_import_rule=='update' }}>Update Existing — refresh name, mobile, company, city, state</option>
+  </select>
+  <p class="faint small" style="margin-top:6px"><a href="{{ url_for('contact_lists_sample') }}">Download sample CSV</a></p>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Import</button></div>
+</form></dialog>
+
+<dialog id="dlgExport" class="ct-dlg"><form method="get" action="{{ url_for('contacts_export') }}">
+  <input type="hidden" name="list" value="{{ sel }}">
+  <h3>📤 Export {{ sel_list.name if is_list else 'All Contacts' }}</h3>
+  <label class="small">Status</label>
+  <select name="status"><option value="">All statuses</option>
+    <option value="active">Active</option><option value="blocked">Blocked</option>
+    <option value="unsubscribed">Unsubscribed</option><option value="bounced">Bounced</option></select>
+  <label class="small" style="margin-top:8px">Format</label>
+  <div class="row" style="gap:8px;margin-top:4px">
+    <button class="btn sm" name="fmt" value="csv">📄 CSV</button>
+    <button class="btn sm" name="fmt" value="excel">📊 Excel</button>
+    <button type="button" class="btn ghost sm" data-close>Close</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgStats" class="ct-dlg">
+  <h3>📊 Statistics <span class="faint small">— {{ sel_list.name if is_list else 'All Contacts' }}</span></h3>
+  {% if stats %}
+  <table class="ct-imptable">
+    <tr><td>Total</td><td class="num"><b>{{ '{:,}'.format(stats.total) }}</b></td></tr>
+    <tr><td>✅ Active</td><td class="num"><b style="color:var(--good)">{{ '{:,}'.format(stats.active) }}</b></td></tr>
+    <tr><td>🚫 Blocked</td><td class="num"><b>{{ '{:,}'.format(stats.blocked) }}</b></td></tr>
+    <tr><td>🚫 Unsubscribed</td><td class="num"><b>{{ '{:,}'.format(stats.unsubscribed) }}</b></td></tr>
+    <tr><td>❌ Bounced</td><td class="num"><b>{{ '{:,}'.format(stats.bounced) }}</b></td></tr>
+  </table>
+  {% endif %}
+  <div class="ct-foot"><button type="button" class="btn sm" data-close>Close</button></div>
+</dialog>
+
+{# List-management modals — filled from the clicked list's ⋮ menu (data-id/name) #}
+<dialog id="dlgRename" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="rename_list"><input type="hidden" name="id" class="k-id"><input type="hidden" name="sel" class="k-id">
+  <h3>✏ Rename List</h3>
+  <label class="small">New name for “<span class="k-name"></span>”</label><input name="name" class="k-rename" required>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Save</button></div>
+</form></dialog>
+
+<dialog id="dlgMerge" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="merge_lists"><input type="hidden" name="id" class="k-id">
+  <h3>🔀 Merge Lists</h3>
+  <p class="faint small">Move all contacts from <b class="k-name"></b> into another list and remove duplicates.</p>
+  <label class="small">Merge into</label><select name="to_id" class="k-dest" required></select>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" name="delete_source"> Delete the source list after merging</label>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Merge</button></div>
+</form></dialog>
+
+<dialog id="dlgMove" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="move_contacts"><input type="hidden" name="id" class="k-id">
+  <h3>📂 Move Contacts</h3>
+  <p class="faint small">Move all contacts from <b class="k-name"></b> to another list (source becomes empty).</p>
+  <label class="small">Move to</label><select name="to_id" class="k-dest" required></select>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Move</button></div>
+</form></dialog>
+
+<dialog id="dlgDelContacts" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="delete_contacts"><input type="hidden" name="id" class="k-id"><input type="hidden" name="sel" class="k-id">
+  <h3>🗑 Delete Contacts</h3>
+  <p>Remove <b>all contacts</b> from “<span class="k-name"></span>”. The list itself is kept.</p>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn danger sm">Delete contacts</button></div>
+</form></dialog>
+
+<dialog id="dlgDelList" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="delete_list"><input type="hidden" name="id" class="k-id">
+  <h3>❌ Delete List</h3>
+  <p class="ct-warn">⚠ Deletes “<span class="k-name"></span>” and its contacts.</p>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" name="keep_contacts"> Keep the contacts (just unassign them)</label>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn danger sm">Delete list</button></div>
+</form></dialog>
+
+{# Edit contact (+ move) #}
+<dialog id="dlgEdit" class="ct-dlg">
+  <form method="post"><input type="hidden" name="action" value="edit"><input type="hidden" name="sel" value="{{ sel }}"><input type="hidden" name="id" id="e-id">
+    <h3>✏️ Edit Contact</h3>
+    <label class="small">📧 Email</label><input name="email" id="e-email" type="email" required>
+    <div class="ct-2col">
+      <div><label class="small">👤 Name</label><input name="name" id="e-name"></div>
+      <div><label class="small">📱 Mobile</label><input name="mobile" id="e-mobile"></div>
+      <div><label class="small">🏢 Company</label><input name="company" id="e-company"></div>
+      <div><label class="small">🏙 City</label><input name="city" id="e-city"></div>
+      <div><label class="small">🌍 State</label><input name="state" id="e-state"></div>
+      <div><label class="small">🌐 Country</label><input name="country" id="e-country"></div>
+      <div><label class="small">💰 Balance</label><input name="balance" id="e-balance"></div>
+      <div><label class="small">🛍 Last Purchase</label><input name="last_purchase" id="e-last_purchase"></div>
+      <div><label class="small">🏷 Tags</label><input name="tags" id="e-tags"></div>
+      {% for f in fields %}
+      <div><label class="small">🔧 {{ f.label }}</label><input name="cf_{{ f.name }}" id="e-cf-{{ f.name }}" class="e-cf" data-cf="{{ f.name }}"></div>
+      {% endfor %}
+    </div>
+    <label class="small" style="margin-top:8px">📝 Note</label><input name="note" id="e-note">
+    <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Save</button></div>
+  </form>
+  <form method="post" style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+    <input type="hidden" name="action" value="assign_list"><input type="hidden" name="sel" value="{{ sel }}"><input type="hidden" name="ids" id="m-id">
+    <label class="small">Move to Contact List</label>
+    <div class="row" style="gap:8px;margin-top:4px">
+      <select name="list_id" id="m-list" style="flex:1"><option value="">— No list —</option>
+        {% for l in lists %}<option value="{{ l.id }}">📋 {{ l.name }}</option>{% endfor %}</select>
+      <button class="btn ghost sm">Move</button>
+    </div>
+  </form>
+</dialog>
+
+{# Settings (folded-in) #}
+<dialog id="dlgSettings" class="ct-dlg" style="width:min(520px,94vw)">
+  <h3>⚙ Contact Settings</h3>
+  <form method="post">
+    <input type="hidden" name="action" value="save_settings">
+    <label class="small">Duplicate Check — match contacts by</label>
+    <select name="dup_check">
+      <option value="email"      {{ 'selected' if acct.dup_check=='email' }}>Email address (recommended)</option>
+      <option value="email_name" {{ 'selected' if acct.dup_check=='email_name' }}>Email address + name</option>
+    </select>
+    <label class="small" style="margin-top:10px">Default Duplicate Handling</label>
+    <select name="default_import_rule">
+      <option value="remove" {{ 'selected' if acct.default_import_rule=='remove' }}>Remove Duplicates (recommended)</option>
+      <option value="skip"   {{ 'selected' if acct.default_import_rule=='skip' }}>Skip Duplicates</option>
+      <option value="update" {{ 'selected' if acct.default_import_rule=='update' }}>Update Existing Contacts</option>
+    </select>
+    <p class="faint small" style="margin-top:4px">No “Keep Both” — a professional list never stores the same email twice.</p>
+    <div style="margin-top:10px"><button class="btn sm">Save settings</button></div>
+  </form>
+  <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+    <b>Default Import Pipeline</b> <span class="faint small">(always on)</span>
+    <div class="ct-pipe">
+      <span>✅ Auto Detect Headers</span><span>✅ Auto Map Columns</span>
+      <span>✅ Remove Blank Rows</span><span>✅ Trim Extra Spaces</span>
+      <span>✅ Validate Email</span><span>✅ Normalize Mobile</span>
+      <span>✅ Remove Duplicate Emails</span><span>✅ Skip Invalid Records</span>
+      <span>✅ Create Missing Fields</span>
+    </div>
+  </div>
+  <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+    <b>Custom Fields</b> <span class="faint small">({{ fields|length }} / {{ max_custom_fields }} used)</span>
+    {% if fields|length < max_custom_fields %}
+    <form method="post" class="row" style="gap:8px;align-items:flex-end;margin:8px 0">
+      <input type="hidden" name="action" value="add_field">
+      <div style="flex:1"><label class="small">Field label</label><input name="label" placeholder="e.g. Postal Pincode" required></div>
+      <button class="btn sm">＋ Add</button>
+    </form>
+    {% else %}
+    <p class="faint small" style="margin:8px 0">Maximum of {{ max_custom_fields }} custom fields reached — delete one to add another.</p>
+    {% endif %}
+    <table><tbody>
+      {% for f in fields %}
+      <tr><td>{{ f.label }}</td><td><code>{{ f.name }}</code></td>
+        <td class="num"><form class="inline-form" method="post"><input type="hidden" name="action" value="del_field">
+          <input type="hidden" name="id" value="{{ f.id }}"><button class="btn danger sm">Delete</button></form></td></tr>
+      {% else %}<tr><td class="empty">No custom fields.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div class="ct-foot"><button type="button" class="btn sm" data-close>Close</button></div>
+</dialog>
+
+{# Manage Tags (bulk, on the checked contacts) #}
+<dialog id="dlgTag" class="ct-dlg"><form method="post" id="tagForm">
+  <input type="hidden" name="action" value="tag"><input type="hidden" name="sel" value="{{ sel }}">
+  <h3>🏷 Manage Tags</h3>
+  <p class="faint small" id="tag-count">Applies to the selected contacts.</p>
+  <label class="small">Add tag</label><input name="tag_add" placeholder="e.g. vip">
+  <label class="small" style="margin-top:8px">Remove tag</label><input name="tag_remove" placeholder="e.g. lead">
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Apply</button></div>
+</form></dialog>
+
+
+{# ---- Tag Management Dialogs ---- #}
+
+{# Create Tag #}
+<dialog id="dlgCreateTag" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="create_tag"><input type="hidden" name="sel" value="{{ sel }}">
+  <h3>🏷 Create New Tag</h3>
+  <label class="small">Tag Name</label>
+  <input name="tag_name" placeholder="e.g. VIP Customers" required maxlength="60" autofocus>
+  <p class="faint small" style="margin-top:8px">🎨 A colour is picked automatically — each tag gets a distinct one.</p>
+  <label class="small" style="margin-top:10px">Description <span class="faint">(optional)</span></label>
+  <input name="tag_description" placeholder="e.g. Customers who opted into premium offers" maxlength="200">
+  <p class="faint small" style="margin-top:6px">The tag will be available to assign to contacts via bulk actions.</p>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Create</button></div>
+</form></dialog>
+
+{# Rename Tag #}
+<dialog id="dlgRenameTag" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="rename_tag"><input type="hidden" name="sel" value="{{ sel }}">
+  <h3>✏ Rename / Edit Tag</h3>
+  <label class="small">Current Name</label>
+  <input name="old_tag" id="renameTagOld" readonly style="opacity:.6">
+  <label class="small" style="margin-top:8px">New Name</label>
+  <input name="new_tag" id="renameTagNew" placeholder="New tag name" required maxlength="60">
+  <label class="small" style="margin-top:8px">Description <span class="faint">(optional)</span></label>
+  <input name="tag_description" id="renameTagDesc" placeholder="What this tag is for" maxlength="200">
+  <p class="faint small" style="margin-top:6px">All contacts with this tag will be updated automatically.</p>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Save</button></div>
+</form></dialog>
+
+{# Tag Detail slide-over panel #}
+<div class="tag-detail-overlay" id="tagDetailOverlay" onclick="closeTagDetail()"></div>
+<div class="tag-detail-panel" id="tagDetailPanel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h3 style="margin:0" id="tdName">🏷 Tag</h3>
+    <button type="button" class="iconbtn" onclick="closeTagDetail()">✕</button>
+  </div>
+  <p class="faint small" id="tdDesc" style="margin-top:-8px"></p>
+  <div class="tag-stat-row"><span>Total Contacts</span><b id="tdTotal">—</b></div>
+  <div class="tag-stat-row"><span>Campaign Count</span><b id="tdCampaigns">—</b></div>
+  <div class="tag-stat-row"><span>Open Rate</span><b id="tdOpenRate">—</b></div>
+  <div class="tag-stat-row"><span>Click Rate</span><b id="tdClickRate">—</b></div>
+  <div class="tag-stat-row"><span>Created</span><b id="tdCreated">—</b></div>
+  <div class="tag-stat-row"><span>Last Used</span><b id="tdLastUsed">—</b></div>
+  <div class="row" style="gap:8px;margin-top:18px;flex-wrap:wrap">
+    <button type="button" class="btn ghost sm" id="tdRenameBtn">✏ Rename / Edit</button>
+    <button type="button" class="btn ghost sm" id="tdMoveBtn">📂 Move</button>
+    <button type="button" class="btn ghost sm" id="tdMergeBtn">🔀 Merge</button>
+    <button type="button" class="btn danger sm" id="tdDeleteBtn">🗑 Delete</button>
+  </div>
+</div>
+
+{# Delete Tag #}
+<dialog id="dlgDeleteTag" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="delete_tag"><input type="hidden" name="sel" value="{{ sel }}">
+  <h3>🗑 Delete Tag</h3>
+  <input type="hidden" name="tag_name" id="deleteTagName">
+  <p>Deleting tag: <b id="deleteTagLabel" style="color:var(--accent)"></b></p>
+  <input type="hidden" name="delete_mode" id="delTagMode" value="tag_only">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">
+    <div class="del-tag-card active" data-val="tag_only" onclick="pickDelMode(this,'tag_only')" style="border:2px solid var(--accent);border-radius:10px;padding:14px 12px;cursor:pointer;transition:all .15s">
+      <div style="font-size:18px;margin-bottom:6px">🏷️</div>
+      <b style="font-size:13px">Delete Tag Only</b>
+      <p style="font-size:11px;color:var(--faint);margin:4px 0 0;line-height:1.4">Remove the tag.<br>Keep all contacts.</p>
+    </div>
+    <div class="del-tag-card" data-val="tag_and_contacts" onclick="pickDelMode(this,'tag_and_contacts')" style="border:2px solid var(--line);border-radius:10px;padding:14px 12px;cursor:pointer;transition:all .15s">
+      <div style="font-size:18px;margin-bottom:6px">🗑️</div>
+      <b style="font-size:13px">Tag + Contacts</b>
+      <p style="font-size:11px;color:var(--faint);margin:4px 0 0;line-height:1.4">Remove the tag.<br>Delete exclusive contacts.</p>
+    </div>
+  </div>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm danger" id="delTagBtn">Delete Tag Only</button></div>
+</form></dialog>
+
+{# Move Tag Contacts #}
+<dialog id="dlgMoveTag" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="move_tag_contacts"><input type="hidden" name="sel" value="{{ sel }}">
+  <h3>📂 Move Tag Contacts</h3>
+  <label class="small">From Tag</label>
+  <input name="from_tag" id="moveTagFrom" readonly style="opacity:.6">
+  <label class="small" style="margin-top:8px">To Tag</label>
+  <input name="to_tag" placeholder="Destination tag name" required maxlength="60" list="tagSuggestions">
+  <datalist id="tagSuggestions">{% for tn, _ in all_tags %}<option value="{{ tn }}">{% endfor %}</datalist>
+  <p class="faint small" style="margin-top:6px">Contacts will be removed from the source tag and added to the destination tag.</p>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Move</button></div>
+</form></dialog>
+
+{# Merge Tags #}
+<dialog id="dlgMergeTags" class="ct-dlg"><form method="post">
+  <input type="hidden" name="action" value="merge_tags"><input type="hidden" name="sel" value="{{ sel }}">
+  <h3>🔀 Merge Tags</h3>
+  <label class="small">Tag A</label>
+  <input name="tag_a" id="mergeTagA" readonly style="opacity:.6">
+  <label class="small" style="margin-top:8px">Tag B</label>
+  <input name="tag_b" placeholder="Second tag to merge" required maxlength="60" list="tagSuggestions">
+  <label class="small" style="margin-top:8px">Merged Tag Name</label>
+  <input name="merged_tag" placeholder="Result tag name" required maxlength="60">
+  <p class="faint small" style="margin-top:6px">Both tags are removed. All contacts receive the new merged tag. Duplicates are skipped.</p>
+  <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Merge</button></div>
+</form></dialog>
+
+{# Import History #}
+<dialog id="dlgHistory" class="ct-dlg" style="width:min(560px,94vw)">
+  <h3>📜 Import History <span class="faint small" id="hist-for"></span></h3>
+  <div id="histBody" style="margin-top:8px"></div>
+  <div class="ct-foot"><button type="button" class="btn sm" data-close>Close</button></div>
+</dialog>
+
+{# Email Activity (per contact) #}
+<dialog id="dlgActivity" class="ct-dlg" style="max-width:480px">
+  <h3>📧 Email Activity</h3>
+  <div class="faint small" id="act-email"></div>
+  <div id="actBody" style="margin-top:10px">Loading…</div>
+  <div class="ct-sep" style="margin:14px 0"></div>
+  <b style="font-size:13px">🕒 Contact Timeline</b>
+  <div id="timelineBody" style="margin-top:8px;max-height:280px;overflow-y:auto">Loading…</div>
+  <div class="ct-foot"><button type="button" class="btn sm" data-close>Close</button></div>
+</dialog>
+
+<style>
+.ct-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.ct-grid{display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:start}
+.ct-rail{padding:10px}
+.ct-rail-head{display:flex;justify-content:space-between;align-items:center;padding:4px 8px 8px}
+.ct-li-row{display:flex;align-items:center;border-radius:8px}
+.ct-li-row:hover{background:var(--panel2)}
+.ct-li-row.on{background:var(--accent)}
+.ct-li-row.on .ct-li,.ct-li-row.on .ct-kebab>summary,.ct-li-row.on .ct-fav button{color:#fff}
+.ct-fav button{background:none;border:none;cursor:pointer;font-size:.95rem;color:var(--muted);padding:4px 2px 4px 6px}
+.ct-li{flex:1;min-width:0;display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:8px 10px;text-decoration:none;color:var(--text);font-size:.9rem}
+.ct-li>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ct-li .ct-n{font-variant-numeric:tabular-nums;opacity:.8;font-size:.82rem}
+/* Standalone (All Contacts / Suppression) rail links */
+a.ct-li{border-radius:8px}
+a.ct-li:hover{background:var(--panel2)}
+a.ct-li.on{background:var(--accent);color:#fff}
+.ct-sep{height:1px;background:var(--line);margin:6px 4px}
+/* Tag colors & chips */
+.tag-dot{width:13px;height:13px;border-radius:50%;display:inline-block;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.18) inset,0 0 0 1px rgba(255,255,255,.06)}
+.tag-dot-red{background:#ef4444}
+.tag-dot-green{background:#22c55e}
+.tag-dot-yellow{background:#eab308}
+.tag-dot-blue{background:#3b82f6}
+.tag-dot-purple{background:#a855f7}
+.tag-dot-gray{background:#9ca3af}
+.tag-chip{display:inline-flex;align-items:center;gap:4px;background:var(--card);border:1px solid var(--line);padding:3px 9px;border-radius:12px;font-size:11px;color:var(--text)}
+.tag-chip:hover{border-color:var(--accent);color:var(--accent)}
+.color-swatch-row{display:flex;gap:8px;margin-top:6px}
+.color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.color-swatch.active{border-color:var(--text);transform:scale(1.1)}
+/* Tag detail slide-over */
+.tag-detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:998;display:none}
+.tag-detail-overlay.show{display:block}
+.tag-detail-panel{position:fixed;top:0;right:0;height:100%;width:380px;max-width:92vw;background:var(--card);box-shadow:-4px 0 24px rgba(0,0,0,.3);z-index:999;transform:translateX(100%);transition:transform .2s;padding:20px;overflow-y:auto}
+.tag-detail-panel.show{transform:translateX(0)}
+.tag-stat-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.tag-stat-row b{font-size:14px}
+/* Contact timeline */
+.timeline-item{display:flex;gap:10px;padding:8px 0;border-left:2px solid var(--line);padding-left:14px;margin-left:6px;position:relative}
+.timeline-item::before{content:'';position:absolute;left:-7px;top:10px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.timeline-time{font-size:11px;color:var(--faint);white-space:nowrap}
+.timeline-label{font-size:13px}
+/* Per-list ⋮ kebab */
+.ct-kebab{position:relative}
+.ct-kebab>summary{list-style:none;cursor:pointer;padding:6px 8px;font-size:1.05rem;color:var(--muted)}
+.ct-kebab>summary::-webkit-details-marker{display:none}
+.ct-kebab .pop{position:absolute;right:0;top:calc(100% + 4px);z-index:50;min-width:200px;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;
+  box-shadow:0 12px 32px rgba(0,0,0,.4)}
+.ct-kebab .pop a,.ct-kebab .pop button{display:block;width:100%;text-align:left;background:none;
+  border:none;color:var(--text);font:inherit;font-size:.84rem;padding:8px 10px;border-radius:7px;
+  cursor:pointer;text-decoration:none}
+.ct-kebab .pop a:hover,.ct-kebab .pop button:hover{background:var(--panel2)}
+.ct-kebab .pop .danger{color:var(--bad)}
+.ct-kebab .k-form{margin:0}
+.ct-ksep{height:1px;background:var(--line);margin:5px 4px}
+.ct-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:.82rem;color:var(--muted)}
+.ct-stats b{color:var(--text)}
+.ct-toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;align-items:center}
+.ct-toolbar .tb{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer;font:inherit}
+.ct-toolbar .tb.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.ct-toolbar .tb:hover{filter:brightness(1.05);border-color:var(--accent)}
+.tb-form{display:inline-block;margin:0}
+.ct-summary{border:1px solid var(--good)}
+.ct-imptable{width:100%;max-width:420px;border-collapse:collapse;margin:6px 0}
+.ct-imptable td{padding:7px 6px;border-bottom:1px dashed var(--line)}
+.ct-imptable .num{text-align:right}
+.ct-imptable .ct-final td{border-bottom:none;border-top:2px solid var(--line);font-size:1.05rem;padding-top:11px}
+.ct-dlg{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);
+  padding:20px;width:min(440px,94vw);box-shadow:0 16px 48px rgba(0,0,0,.45)}
+.ct-dlg::backdrop{background:rgba(0,0,0,.5)}
+.ct-dlg h3{margin:0 0 10px}
+.ct-dlg input:not([type=checkbox]),.ct-dlg select,.ct-dlg textarea{width:100%}
+.ct-dlg textarea{min-height:90px}
+.ct-2col{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-top:8px}
+.ct-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.ct-warn{color:var(--bad);font-size:.88rem}
+.imp-note{margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel2);font-size:.8rem;line-height:1.5}
+.ct-pipe{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:6px;font-size:.8rem;color:var(--muted)}
+.act-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.act-grid .cell{border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center;background:var(--panel2)}
+.act-grid .cell b{display:block;font-size:1.3rem}
+.cl-hist-row{display:grid;grid-template-columns:1.3fr 1fr auto;gap:4px 12px;padding:9px 0;
+  border-bottom:1px dashed var(--line);font-size:.82rem;align-items:center}
+@media (max-width:820px){.ct-grid{grid-template-columns:1fr}}
+</style>
+<script>
+(function(){
+  var LISTS=[{% for l in lists %}{"id":{{ l.id }},"name":{{ l.name|tojson }}}{{ "," if not loop.last }}{% endfor %}];
+  var IMPORTS=[{% for im in imports %}{"id":{{ im.id }},"list":{{ im.list_id if im.list_id else 'null' }},"file":{{ (im.filename or 'pasted rows')|tojson }},"added":{{ im.added }},"updated":{{ im.updated }},"skipped":{{ im.skipped }},"invalid":{{ im.invalid }},"at":{{ (im.created_at or '')|tojson }},"err":{{ 1 if im.errors_json and im.errors_json!='[]' else 0 }}}{{ "," if not loop.last }}{% endfor %}];
+  function open(d){ if(d&&d.showModal) d.showModal(); else if(d) d.setAttribute('open',''); }
+  function closeMenus(except){
+    document.querySelectorAll('details[open]').forEach(function(d){ if(d!==except) d.removeAttribute('open'); });
+  }
+  document.querySelectorAll('[data-open]').forEach(function(b){
+    b.addEventListener('click',function(){ closeMenus(); open(document.getElementById(b.dataset.open)); });
+  });
+  // ---- Per-list ⋮ kebab → fill & open the right management modal ---- #
+  document.querySelectorAll('.ct-kebab [data-k]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var dlg=document.getElementById(b.dataset.k); if(!dlg) return;
+      var id=b.dataset.id, name=b.dataset.name||'';
+      dlg.querySelectorAll('.k-id').forEach(function(x){ x.value=id; });
+      dlg.querySelectorAll('.k-name').forEach(function(x){ x.textContent=name; });
+      var rn=dlg.querySelector('.k-rename'); if(rn) rn.value=name;
+      // Build target-list pickers, excluding the acting list.
+      dlg.querySelectorAll('.k-dest').forEach(function(sel){
+        sel.innerHTML='';
+        LISTS.filter(function(l){ return String(l.id)!==String(id); }).forEach(function(l){
+          var o=document.createElement('option'); o.value=l.id; o.textContent=l.name; sel.appendChild(o);
+        });
+        if(!sel.options.length){ var o=document.createElement('option'); o.textContent='No other list — create one first'; o.disabled=true; sel.appendChild(o); }
+      });
+      // Import / Add from a list's menu → preselect that list.
+      if(dlg.id==='dlgImport'){ var il=document.getElementById('imp-list'); if(il) il.value=id; updateImpHint(); }
+      if(dlg.id==='dlgAdd'){ var al=document.getElementById('add-list'); if(al) al.value=id; }
+      if(dlg.id==='dlgHistory'){ renderHistory(id, name); }
+      closeMenus(); open(dlg);
+    });
+  });
+  // ---- Import History rendering (per list, or all from the 📜 header) ---- #
+  function renderHistory(listId, listName){
+    var box=document.getElementById('histBody'), forEl=document.getElementById('hist-for');
+    if(forEl) forEl.textContent = listName ? ('— '+listName) : '— all lists';
+    var rows=IMPORTS.filter(function(im){ return listId==null || String(im.list)===String(listId); });
+    if(!rows.length){ box.innerHTML='<p class="empty">No imports yet.</p>'; return; }
+    box.innerHTML=rows.map(function(im){
+      return '<div class="cl-hist-row"><div><b>'+(im.at||'').slice(0,16)+'</b>'+
+        '<div class="faint small">'+im.file+'</div></div>'+
+        '<div class="faint small" style="line-height:1.7">'+
+        '<span class="badge b-valid" style="font-size:.72rem">+'+im.added+' added</span> '+
+        (im.updated?'<span class="badge b-risky" style="font-size:.72rem">'+im.updated+' updated</span> ':'')+
+        (im.skipped?'<span class="badge b-Draft" style="font-size:.72rem">'+im.skipped+' dup</span> ':'')+
+        (im.invalid?'<span class="badge b-bounced" style="font-size:.72rem">'+im.invalid+' invalid</span> ':'')+
+        '</div><div>'+(im.err?'<a class="btn ghost sm" href="/contacts/import/'+im.id+'/errors.csv">⚠ Errors</a>':'')+'</div></div>';
+    }).join('');
+  }
+  // Header 📜 button → show all imports.
+  var histBtn=document.querySelector('.ct-head [data-open="dlgHistory"]');
+  if(histBtn) histBtn.addEventListener('click',function(){ renderHistory(null,''); });
+  // ---- Manage Tags → carry the checked contact ids into the tag form ---- #
+  var tagBtn=document.querySelector('[data-open="dlgTag"]');
+  if(tagBtn) tagBtn.addEventListener('click',function(){
+    var form=document.getElementById('tagForm');
+    form.querySelectorAll('.tag-id').forEach(function(x){ x.remove(); });
+    var ids=Array.prototype.map.call(document.querySelectorAll('.rowChk:checked'),function(x){return x.value;});
+    ids.forEach(function(v){ var i=document.createElement('input'); i.type='hidden'; i.name='ids'; i.value=v; i.className='tag-id'; form.appendChild(i); });
+    var cnt=document.getElementById('tag-count');
+    if(cnt) cnt.textContent = ids.length ? ('Applies to '+ids.length+' selected contact(s).') : 'No contacts selected — tick some rows first.';
+  });
+  // ---- Email Activity → fetch counts for the contact ---- #
+  document.querySelectorAll('.js-act').forEach(function(b){
+    b.addEventListener('click',function(){
+      var dlg=document.getElementById('dlgActivity');
+      document.getElementById('act-email').textContent=b.dataset.email;
+      var body=document.getElementById('actBody'); body.textContent='Loading…';
+      var tl=document.getElementById('timelineBody'); tl.textContent='Loading…';
+      open(dlg);
+      fetch('/contacts/'+b.dataset.id+'/activity').then(function(r){return r.json();}).then(function(d){
+        body.innerHTML='<div class="act-grid">'+
+          '<div class="cell"><b>'+d.sent+'</b>Sent</div>'+
+          '<div class="cell"><b>'+d.opens+'</b>Opens</div>'+
+          '<div class="cell"><b>'+d.clicks+'</b>Clicks</div>'+
+          '<div class="cell"><b>'+d.bounces+'</b>Bounces</div>'+
+          '<div class="cell"><b>'+d.complaints+'</b>Complaints</div>'+
+          '<div class="cell"><b>'+d.unsubscribes+'</b>Unsubscribes</div></div>';
+      }).catch(function(){ body.textContent='Could not load activity.'; });
+      fetch('/contacts/'+b.dataset.id+'/timeline').then(function(r){return r.json();}).then(function(d){
+        if (!d.events || !d.events.length) { tl.innerHTML='<p class="faint small">No timeline events yet.</p>'; return; }
+        var icons = {imported:'📥', tag_added:'🏷️', tag_removed:'🚫', note:'📝',
+          campaign_sent:'📤', campaign_opened:'👀', campaign_clicked:'🖱️',
+          campaign_bounced:'⚠️', complaint:'🚩', unsubscribe:'🔕'};
+        tl.innerHTML = d.events.slice().reverse().map(function(ev){
+          var icon = icons[ev.type] || '•';
+          return '<div class="timeline-item"><div style="flex:1"><div class="timeline-label">'+icon+' '+ev.label+'</div>'+
+            '<div class="timeline-time">'+(ev.at||'')+'</div></div></div>';
+        }).join('');
+      }).catch(function(){ tl.textContent='Could not load timeline.'; });
+    });
+  });
+  // Import modal: show which list contacts will go into.
+  function updateImpHint(){
+    var il=document.getElementById('imp-list'), h=document.getElementById('imp-into');
+    if(!il||!h) return;
+    var t=il.options[il.selectedIndex] ? il.options[il.selectedIndex].text : '';
+    h.textContent = il.value ? ('→ Importing into: ' + t) : '→ Importing without a list (unassigned)';
+  }
+  var impSel=document.getElementById('imp-list');
+  if(impSel){ impSel.addEventListener('change',updateImpHint); updateImpHint(); }
+  // Click-away closes any open ⋮ menu.
+  document.addEventListener('click',function(e){
+    document.querySelectorAll('.ct-kebab[open]').forEach(function(d){ if(!d.contains(e.target)) d.removeAttribute('open'); });
+  });
+  document.querySelectorAll('.ct-dlg [data-close]').forEach(function(b){
+    b.addEventListener('click',function(){ var d=b.closest('dialog'); if(d.close) d.close(); else d.removeAttribute('open'); });
+  });
+  var all=document.getElementById('checkAll');
+  if(all) all.addEventListener('change',function(){ document.querySelectorAll('.rowChk').forEach(function(x){x.checked=all.checked}); });
+  var allTrash=document.getElementById('checkAllTrash');
+  if(allTrash) allTrash.addEventListener('change',function(){ document.querySelectorAll('.trashChk').forEach(function(x){x.checked=allTrash.checked}); });
+  // Keyboard shortcuts: A=Add, I=Import, E=Export, S=Statistics, / = search.
+  // Ignored while typing in a field or when a dialog is already open.
+  var SHORTCUTS={a:'dlgAdd',i:'dlgImport',e:'dlgExport',s:'dlgStats'};
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey||e.metaKey||e.altKey) return;
+    var t=e.target, tag=(t.tagName||'').toLowerCase();
+    if(tag==='input'||tag==='textarea'||tag==='select'||t.isContentEditable) return;
+    if(document.querySelector('dialog[open]')) return;
+    if(e.key==='/'){
+      var s=document.querySelector('.ct-head input[name=q]');
+      if(s){ e.preventDefault(); s.focus(); }
+      return;
+    }
+    var id=SHORTCUTS[(e.key||'').toLowerCase()];
+    if(id){ var d=document.getElementById(id); if(d){ e.preventDefault(); open(d); } }
+  });
+  var edit=document.getElementById('dlgEdit');
+  document.querySelectorAll('.js-edit').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.getElementById('e-id').value=b.dataset.id;
+      document.getElementById('m-id').value=b.dataset.id;
+      document.getElementById('e-email').value=b.dataset.email;
+      document.getElementById('e-name').value=b.dataset.name;
+      document.getElementById('e-tags').value=b.dataset.tags;
+      document.getElementById('e-mobile').value=b.dataset.mobile||'';
+      document.getElementById('e-company').value=b.dataset.company||'';
+      document.getElementById('e-city').value=b.dataset.city||'';
+      document.getElementById('e-state').value=b.dataset.state||'';
+      document.getElementById('e-country').value=b.dataset.country||'';
+      document.getElementById('e-balance').value=b.dataset.balance||'';
+      document.getElementById('e-last_purchase').value=b.dataset.last_purchase||'';
+      document.getElementById('e-note').value=b.dataset.note||'';
+      // Custom fields.
+      var cvals={}; try{ cvals=JSON.parse(b.dataset.custom||'{}')||{}; }catch(e){}
+      document.querySelectorAll('.e-cf').forEach(function(inp){ inp.value=cvals[inp.dataset.cf]||''; });
+      var ml=document.getElementById('m-list'); if(ml) ml.value=b.dataset.list||'';
+      open(edit);
+    });
+  });
+})();
+
+  // ---- Tag management dialog wiring ----
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-k]');
+    if (!btn) return;
+    var k = btn.dataset.k, tag = btn.dataset.tag || '';
+    if (k === 'dlgRenameTag') {
+      document.getElementById('renameTagOld').value = tag;
+      document.getElementById('renameTagNew').value = tag;
+      document.getElementById('renameTagDesc').value = btn.dataset.desc || '';
+      document.getElementById('dlgRenameTag').showModal();
+    } else if (k === 'dlgDeleteTag') {
+      document.getElementById('deleteTagName').value = tag;
+      document.getElementById('deleteTagLabel').textContent = tag;
+      document.getElementById('dlgDeleteTag').showModal();
+    } else if (k === 'dlgMoveTag') {
+      document.getElementById('moveTagFrom').value = tag;
+      document.getElementById('dlgMoveTag').showModal();
+    } else if (k === 'dlgMergeTags') {
+      document.getElementById('mergeTagA').value = tag;
+      document.getElementById('dlgMergeTags').showModal();
+    } else if (k === 'dlgTagDetail') {
+      openTagDetail(tag);
+    } else if (k === 'toggleFavTag') {
+      submitQuickAction('toggle_favorite_tag', {tag_name: tag});
+    }
+  });
+  // dlgCreateTag open
+  var ctBtn = document.querySelector('[data-open="dlgCreateTag"]');
+  if (ctBtn) ctBtn.addEventListener('click', function() {
+    document.getElementById('dlgCreateTag').showModal();
+  });
+
+  // Delete Tag card mode picker
+  function pickDelMode(el, val) {
+    document.querySelectorAll('.del-tag-card').forEach(function(c) {
+      c.style.border = '2px solid var(--line)';
+    });
+    el.style.border = '2px solid var(--accent)';
+    document.getElementById('delTagMode').value = val;
+    document.getElementById('delTagBtn').textContent = val === 'tag_only' ? 'Delete Tag Only' : 'Delete Tag + Contacts';
+    document.getElementById('delTagBtn').style.background = val === 'tag_and_contacts' ? 'var(--danger,#ef4444)' : '';
+  }
+
+  // Color swatch picker (used by Create + Rename tag dialogs)
+  function pickColor(el, hiddenId, rowId) {
+    document.querySelectorAll('#' + rowId + ' .color-swatch').forEach(function(s) {
+      s.classList.remove('active');
+    });
+    el.classList.add('active');
+    document.getElementById(hiddenId).value = el.dataset.color;
+  }
+
+  // Fire-and-reload quick POST (used for favorite toggle, no dialog needed)
+  function submitQuickAction(action, fields) {
+    var f = document.createElement('form');
+    f.method = 'post'; f.style.display = 'none';
+    var a = document.createElement('input'); a.name = 'action'; a.value = action; f.appendChild(a);
+    var s = document.createElement('input'); s.name = 'sel'; s.value = '{{ sel }}'; f.appendChild(s);
+    for (var k in fields) {
+      var inp = document.createElement('input'); inp.name = k; inp.value = fields[k]; f.appendChild(inp);
+    }
+    document.body.appendChild(f); f.submit();
+  }
+
+  // Tag Detail slide-over panel
+  function openTagDetail(tagName) {
+    var overlay = document.getElementById('tagDetailOverlay');
+    var panel = document.getElementById('tagDetailPanel');
+    document.getElementById('tdName').textContent = '🏷 ' + tagName;
+    document.getElementById('tdDesc').textContent = 'Loading…';
+    overlay.classList.add('show'); panel.classList.add('show');
+    fetch('/tags/' + encodeURIComponent(tagName) + '/detail')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        document.getElementById('tdDesc').textContent = d.description || 'No description';
+        document.getElementById('tdTotal').textContent = d.total_contacts.toLocaleString();
+        document.getElementById('tdCampaigns').textContent = d.campaign_count;
+        document.getElementById('tdOpenRate').textContent = d.open_rate + '%';
+        document.getElementById('tdClickRate').textContent = d.click_rate + '%';
+        document.getElementById('tdCreated').textContent = (d.created_at || '—').split(' ')[0];
+        document.getElementById('tdLastUsed').textContent = d.last_used_at ? d.last_used_at.split(' ')[0] : 'Never';
+        document.getElementById('tdRenameBtn').onclick = function() {
+          closeTagDetail();
+          document.querySelector('[data-k="dlgRenameTag"][data-tag="' + tagName + '"]')?.click();
+        };
+        document.getElementById('tdMoveBtn').onclick = function() {
+          closeTagDetail();
+          document.getElementById('moveTagFrom').value = tagName;
+          document.getElementById('dlgMoveTag').showModal();
+        };
+        document.getElementById('tdMergeBtn').onclick = function() {
+          closeTagDetail();
+          document.getElementById('mergeTagA').value = tagName;
+          document.getElementById('dlgMergeTags').showModal();
+        };
+        document.getElementById('tdDeleteBtn').onclick = function() {
+          closeTagDetail();
+          document.getElementById('deleteTagName').value = tagName;
+          document.getElementById('deleteTagLabel').textContent = tagName;
+          document.getElementById('dlgDeleteTag').showModal();
+        };
+      })
+      .catch(function() { document.getElementById('tdDesc').textContent = 'Failed to load.'; });
+  }
+  function closeTagDetail() {
+    document.getElementById('tagDetailOverlay').classList.remove('show');
+    document.getElementById('tagDetailPanel').classList.remove('show');
+  }
+</script>
+{% endblock %}

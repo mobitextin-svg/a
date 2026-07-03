@@ -1,0 +1,141 @@
+MailSaaS v69 — what changed
+===========================
+
+1) Email Quality Check — now in TWO places, each with its own purpose
+--------------------------------------------------------------------
+
+   a) Template Module (OPTIONAL) — improve reusable templates before use.
+      When you Save an Email template that has content, an optional
+      "Email Quality Check" popup appears with:
+        • Quality Score        • Spam Risk (Low/Medium/High)
+        • Spam Words count     • Suggestions
+      Buttons:
+        • Save Anyway     — save the template unchanged.
+        • Auto Optimize   — rewrite the subject, soften the preheader,
+                            replace spam words, add unsubscribe/footer and
+                            personalisation, then save automatically.
+        • Back to Edit    — return to the editor without saving.
+      The check is optional — Landing/Block templates and AI-generated
+      (empty-content) saves skip it, and you can always Save Anyway.
+
+   b) Campaign Module (Step 6, "Inbox Analysis") — verify the whole email
+      before sending. The Email Quality Check now shows the overall score,
+      spam risk, spam-word count, authentication (SPF / DKIM / DMARC), and
+      readiness checks (personalisation, mobile-friendly, readability,
+      plain-text) alongside the existing content rows. New buttons:
+        • Preview Email     — live desktop preview with variables resolved.
+        • Send Test Email   — send one throwaway test to any address.
+        • Continue →        — move on to the Send step.
+
+   AI Auto-Optimize (used in both modules) rewrites the subject and
+   preheader, replaces spam-trigger words, improves readability, reduces
+   ALL CAPS, and optimises the HTML — keeping the original meaning.
+
+2) Contact deletion — soft delete to Trash, with permanent delete
+-----------------------------------------------------------------
+
+   • Normal Delete (single or bulk) now MOVES contacts to a new Trash view
+     instead of erasing them. The confirmation says it can be undone.
+   • Trashed contacts are excluded from lists, counts and every send.
+   • Trash view (left rail → 🗑 Trash) offers:
+        • Restore / Restore selected  — back to the previous status.
+        • Delete Permanently          — hard delete, with a "cannot be
+                                        undone" warning.
+        • Empty Trash                 — purge everything at once.
+
+3) Bulk Email Sender — one clean flow
+-------------------------------------
+   Name → Template (auto-fills subject + body) → Send to (list or all) →
+   optional Preview / Send test → Save & send now, with a recipient-count
+   confirmation. (Unchanged flow, documented here for completeness.)
+
+Files changed in this version:
+  mailsaas/app.py, mailsaas/db.py
+  mailsaas/templates/templates.html
+  mailsaas/templates/contacts.html
+  mailsaas/templates/campaign_wizard.html
+  mailsaas/tests/test_quality_and_trash.py
+
+-------------------------------------------------------------------
+
+4) Dynamic Personalization
+--------------------------
+   • Template Builder now has an "Insert Variable" bar that drops merge
+     tags into the last-focused field (subject or body):
+       Name, Email, Mobile, Company, City, State, Country, Balance,
+       Last Purchase, plus any custom contact fields.
+     Fallbacks are supported, e.g. {{city|your area}}.
+   • Contacts gained Country / Balance / Last Purchase fields (add + edit),
+     so those tags resolve to real data on send and in previews.
+   • Campaign Step 6 has a "Personalization Preview" that steps through your
+     REAL recipients (← Prev / Next →), showing the email rendered for each
+     contact so you can verify personalization before sending.
+   (Conditional content — IF city = Chennai … — remains a future item.)
+
+5) Real-time Live Analytics
+---------------------------
+   • Reports → "Live Analytics ⭐" and a "📈 View Live" button on each
+     campaign open a dashboard that refreshes every few seconds:
+       Sent · Delivered · Opened · Clicked · Bounce · Spam · Unsubscribe,
+       engagement bars, hourly performance, location, device and email-
+       client breakdowns.
+   • Headline numbers are real (campaigns / messages / complaints); the
+     device / client / geo splits are derived deterministically from each
+     campaign's own totals (same approach as the Reports trend charts) and
+     scale to the real open count — an empty campaign shows empty splits.
+   • New: analytics.py, /campaigns/<id>/live and /campaigns/<id>/live.json.
+
+Files changed for items 4–5:
+  mailsaas/app.py, mailsaas/db.py, mailsaas/sending.py, mailsaas/nav.py,
+  mailsaas/analytics.py (new),
+  mailsaas/templates/templates.html, contacts.html, campaign_wizard.html,
+  campaigns.html, reports.html, live_analytics.html (new),
+  mailsaas/tests/test_personalization_analytics.py (new)
+
+-------------------------------------------------------------------
+
+6) Custom variables now carry REAL per-contact data
+---------------------------------------------------
+   • Define custom fields at Contacts → Settings → Custom Fields
+     (e.g. "Postal Pincode", "DIN Number", "Main Division Description").
+   • Each defined field now:
+       - shows an input on the Add/Edit Contact form,
+       - can be filled by CSV import (a column whose header matches the
+         field name or label maps automatically),
+       - appears as an insertable chip in the Template Builder, and
+       - resolves to the contact's real value on send and in previews,
+         via {{postal_pincode}}, {{din_number}}, … (fallbacks supported,
+         e.g. {{postal_pincode|N/A}}).
+     Custom keys never override the built-in fields.
+   • Also fixed: the real send now reads every personalization column
+     (previously only name/email/company/mobile/city/state were sent), so
+     Country / Balance / Last Purchase / custom fields all resolve on send.
+   • Per-contact values are stored in contacts.custom_json (JSON).
+
+-------------------------------------------------------------------
+
+7) AI Email Generator + multi-device Preview + limits
+-----------------------------------------------------
+   • Template Builder → "🤖 AI Email Generator": pick Industry, Type, Goal,
+     Audience, Tone, Length, CTA style, Language and Spam-safe mode, and it
+     fills the subject, preview text and a fully branded HTML body (heading,
+     body, CTA button, compliant footer, personalised with {{name}}). With
+     Spam-safe on, the result is auto-optimised for the inbox.
+     New: /templates/ai-generate, ai.generate_email() with 20 industry presets.
+   • Template Builder → "👁 Preview" now supports device/client modes:
+     Desktop, Tablet, Mobile, Dark, Gmail, Outlook and Apple Mail.
+   • Custom personalization fields are capped at 5 per account (the Add form
+     shows "N / 5 used" and blocks the 6th).
+   • Removed the "Warm-up status / 2 pools warming" row from the Bulk Sender
+     toolkit panel.
+
+-------------------------------------------------------------------
+
+8) Industry Preset starters
+---------------------------
+   • Template Builder → "🏭 Industry Presets": 20 one-click starters
+     (Banking, Insurance, Healthcare, Education, E-commerce, Restaurant,
+     Travel, Real Estate, SaaS, Corporate, Automobile, Telecom, Fitness,
+     Hotel, Beauty & Salon, Legal, Manufacturing, Logistics, Entertainment,
+     Non-Profit). Clicking one drafts a branded, spam-safe email (subject,
+     preview, body, CTA, footer) into the editor, ready to tweak and save.

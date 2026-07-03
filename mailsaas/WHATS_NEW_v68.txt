@@ -1,0 +1,35 @@
+MailSaaS v68 — what changed (3 fixes/features)
+================================================
+
+1) Contacts page crash fixed
+   - "Internal Server Error" on /contacts (e.g. ?list=5) after a tag
+     existed is gone. The page now loads every time.
+
+2) Tag colours are automatic & unique
+   - The manual colour picker is removed from Create Tag and Rename Tag.
+   - Each new tag automatically gets a different colour
+     (blue, red, green, yellow, purple, gray; then the least-used one).
+   - Tag colour dots are bigger and easier to see.
+
+3) Campaign recipient picker is now LIST-FIRST
+   - "Lists & Tags" shows only your contact lists (C1, C2, C3 ...).
+   - Click "Tags v" on a list to open ONLY that list's tags
+     (C1's tags, not all 100 account tags).
+   - Inside a list you can choose:
+       * "Everyone in this list"  -> send to the whole list   (CASE 1)
+       * one or more tags         -> send to just those       (CASE 2)
+     Picking a tag auto-unticks "Everyone in this list" so they never mix.
+   - Duplicates are removed automatically when tags overlap.
+
+HOW TO RUN
+==========
+1. Open a terminal in the "mailsaas" folder.
+2. (first time only)  pip install -r requirements.txt
+3. python run.py
+4. Open http://127.0.0.1:5005
+   New Campaign -> Lists & Tags -> Select -> click "Tags v" on a list.
+
+Files changed in this version:
+  mailsaas/app.py
+  mailsaas/templates/contacts.html
+  mailsaas/templates/campaign_wizard.html

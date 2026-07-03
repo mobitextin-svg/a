@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Dedicated Burst Pool{% endblock %}
+{% block content %}
+<h1>⭐ Dedicated Burst Pool — Admin</h1>
+<p class="muted">Reserve IPs, set approval mode, and approve user burst requests.</p>
+
+<div class="card" style="margin-top:14px">
+  <div class="section-head">
+    <div><h2>Burst Requests</h2>
+      <div class="faint small">Approval mode:
+        <b style="color:{{ 'var(--good)' if auto_approve else 'var(--warn)' }}">{{ 'Auto-approve on payment' if auto_approve else 'Manual approval' }}</b></div></div>
+    <form class="inline-form" method="post"><input type="hidden" name="action" value="auto_toggle">
+      <button class="btn ghost sm">Switch to {{ 'Manual' if auto_approve else 'Auto' }}</button></form>
+  </div>
+  <p class="faint small">Flow: <b>Request</b> → Approve → User pays → <b>Activate</b> → Active.</p>
+  <table>
+    <thead><tr><th>Req</th><th>User</th><th>Plan</th><th class="num">Emails</th><th class="num">Validity</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for r in requests %}
+      <tr>
+        <td>#BP{{ '%04d'|format(r.id) }}</td>
+        <td class="small">{{ r.acct }} <span class="faint">#{{ r.account_id }}</span></td>
+        <td class="small">{{ r.plan }}</td>
+        <td class="num">{{ '{:,}'.format(r.emails) }}</td>
+        <td class="num">{{ r.duration_days }}d</td>
+        <td class="num">{{ '₹' if r.currency=='INR' else '$' }}{{ '%g'|format(r.amount) }}</td>
+        <td><span class="badge {{ 'b-valid' if r.status=='active' else ('b-risky' if r.status in ('requested','awaiting-payment','paid') else 'b-invalid') }}">
+          {% if r.status=='awaiting-payment' %}awaiting payment{% elif r.status=='paid' %}paid · verify{% else %}{{ r.status }}{% endif %}</span></td>
+        <td class="num">
+          {% if r.status=='requested' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="approve">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn sm">Approve</button></form>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="reject">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn danger sm">Reject</button></form>
+          {% elif r.status=='awaiting-payment' %}
+          <span class="faint small">waiting for payment</span>
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="reject">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn danger sm">Cancel</button></form>
+          {% elif r.status=='paid' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="activate">
+            <input type="hidden" name="id" value="{{ r.id }}"><button class="btn sm">Activate Burst Pool</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="8" class="empty">No burst requests.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if not plan_ok %}
+<div class="flash error">Burst sending is a premium feature — upgrade to <b>Business</b> or
+  <b>Enterprise</b> on <a href="{{ url_for('billing') }}">Billing</a> to run burst jobs.
+  You can still configure the reserved pool below.</div>
+{% endif %}
+
+<div class="card" style="margin-top:14px">
+  <h3>Reserved pool</h3>
+  <p class="muted small">Move relays into the reserved pool. Reserved IPs are isolated and auto-released after each job.</p>
+  <table>
+    <thead><tr><th>Relay</th><th>IP</th><th>Pool</th><th>State</th><th class="num">Daily limit</th><th></th></tr></thead>
+    <tbody>
+    {% for s in servers %}
+      <tr>
+        <td><b>{{ s.name }}</b></td><td class="faint small">{{ s.dedicated_ip or s.host }}</td>
+        <td><span class="badge {{ 'b-risky' if s.purpose=='burst' else 'b-Running' }}">{{ 'reserved' if s.purpose=='burst' else 'normal' }}</span></td>
+        <td>{% if s.busy %}<span class="badge b-invalid">in use</span>{% else %}<span class="badge b-valid">free</span>{% endif %}</td>
+        <td class="num">{{ '{:,}'.format(s.daily_limit) }}</td>
+        <td class="num">
+          {% if s.purpose=='burst' %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="release_pool">
+            <input type="hidden" name="id" value="{{ s.id }}"><button class="btn ghost sm" {{ 'disabled' if s.busy }}>To normal</button></form>
+          {% else %}
+          <form class="inline-form" method="post"><input type="hidden" name="action" value="reserve">
+            <input type="hidden" name="id" value="{{ s.id }}"><button class="btn sm">Reserve</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Run a burst job</h3>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="action" value="run">
+    <div style="flex:2"><label>Campaign size</label><input name="size" type="number" value="100000" required></div>
+    <div style="flex:1"><label>Per-IP batch limit</label><input name="batch" type="number" value="5000"></div>
+    <div style="flex:0"><button class="btn" {{ 'disabled' if not plan_ok }}>Start burst</button></div>
+  </form>
+  {% if result %}
+    {% for w in result.warnings %}<div class="flash {{ 'error' if not result.ok else 'success' }}">⚠ {{ w }}</div>{% endfor %}
+    {% if result.ok %}
+    <table style="margin-top:10px">
+      <thead><tr><th>Reserved IP</th><th class="num">Assigned</th></tr></thead>
+      <tbody>{% for n, c in result.assigned %}<tr><td><b>{{ n.name }}</b> · {{ n.ip }}</td><td class="num">{{ '{:,}'.format(c) }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% endif %}
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>Burst jobs</h3>
+  <table>
+    <thead><tr><th>Job</th><th class="num">Size</th><th>IPs</th><th>Status</th><th>Started</th><th></th></tr></thead>
+    <tbody>
+    {% for j in jobs %}
+      <tr><td>#{{ j.id }}</td><td class="num">{{ '{:,}'.format(j.size) }}</td>
+        <td class="faint small">{{ j.ips_used }}</td>
+        <td><span class="badge {{ 'b-Running' if j.status=='running' else 'b-valid' }}">{{ j.status }}</span></td>
+        <td class="faint small">{{ j.created_at }}</td>
+        <td class="num">{% if j.status=='running' %}<form class="inline-form" method="post">
+          <input type="hidden" name="action" value="complete"><input type="hidden" name="id" value="{{ j.id }}">
+          <button class="btn sm">Complete &amp; release</button></form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="6" class="empty">No burst jobs yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

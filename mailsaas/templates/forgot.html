@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+{% from "_auth_rail.html" import rail, authhead with context %}
+<head>{{ authhead("Forgot password") }}</head>
+<body class="auth">
+
+<div class="shell">
+  {{ rail("Locked out happens.",
+          "We'll email you a single-use reset link. It expires in one hour and signs out every other session once used.",
+          [("Request link", "Sent to your work email"),
+           ("Set new password", "Strong, checked live"),
+           ("Back in", "All old sessions revoked")], 0) }}
+
+  <main class="pane"><div class="pane-inner">
+    <div class="card">
+      <h1>Forgot your password?</h1>
+      <p class="sub">Enter your work email and we'll send you a password reset link.</p>
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+      {% endwith %}
+      <form method="post">
+        <label for="email">Work email</label>
+        <input type="email" name="email" id="email" placeholder="you@company.com"
+               required autofocus autocomplete="username">
+        <div class="hint">If an account exists for this address, the link arrives within a minute — check spam too.</div>
+        <button class="btn" type="submit">Send reset link</button>
+      </form>
+    </div>
+    <p class="below"><a href="{{ url_for('login') }}">← Back to sign in</a>
+      · <a href="{{ url_for('signup') }}">Create account</a></p>
+  </div></main>
+</div>
+</body></html>

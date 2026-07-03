@@ -1,0 +1,57 @@
+# Production topology:  NGINX → Gunicorn(Flask) → Redis → Celery → PostgreSQL
+#
+#   docker compose up --build
+#
+# This is the target architecture from the roadmap. The application code runs
+# as-is on SQLite for development; set DATABASE_URL to point at Postgres in
+# production (see PRODUCTION.md for the storage-layer migration notes).
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports: ["80:80"]
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [web]
+
+  web:
+    build: .
+    command: gunicorn -w 4 -b 0.0.0.0:8000 mailsaas.wsgi:app
+    environment:
+      - DATABASE_URL=postgresql://mailsaas:mailsaas@postgres:5432/mailsaas
+      - REDIS_URL=redis://redis:6379/0
+      - MAILSAAS_SECRET=change-me-in-production
+    depends_on: [postgres, redis]
+    expose: ["8000"]
+
+  worker:
+    build: .
+    command: celery -A mailsaas.tasks.celery worker -l info -Q mailsaas
+    environment:
+      - DATABASE_URL=postgresql://mailsaas:mailsaas@postgres:5432/mailsaas
+      - REDIS_URL=redis://redis:6379/0
+    depends_on: [postgres, redis]
+
+  beat:
+    build: .
+    command: celery -A mailsaas.tasks.celery beat -l info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on: [redis]
+
+  redis:
+    image: redis:7-alpine
+    expose: ["6379"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=mailsaas
+      - POSTGRES_PASSWORD=mailsaas
+      - POSTGRES_DB=mailsaas
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    expose: ["5432"]
+
+volumes:
+  pgdata:

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+{% from "_auth_rail.html" import rail, authhead with context %}
+<head>{{ authhead("Verify your mobile") }}</head>
+<body class="auth">
+
+<div class="shell">
+  {{ rail("Add a second lock.",
+          "A verified mobile number protects your account and enables SMS two-factor sign-in.",
+          [("Create account", "Done"),
+           ("Verify email", "Done"),
+           ("Verify mobile", "Enter number, confirm the code"),
+           ("Guided setup", "Domain, contacts, first campaign")], 2) }}
+
+  <main class="pane"><div class="pane-inner">
+    <div class="card">
+
+      <!-- stage 1: enter number -->
+      <div id="stageNum">
+        <h1>Add your mobile number</h1>
+        <p class="sub">Enter a number that can receive text messages. We'll send a
+          verification code to confirm your identity and enable two-factor authentication.</p>
+        <label for="mobile">Mobile number</label>
+        <input type="tel" id="mobile" placeholder="+91 98xxxxxx10"
+               value="{{ prefill }}" autocomplete="tel" autofocus>
+        <div class="hint">Include your country code — Indian numbers can be entered as 10 digits.</div>
+        <div class="hint err" id="numErr" style="display:none"></div>
+        <button class="btn" id="sendBtn" type="button">Send verification code</button>
+        <button class="btn ghost" id="skipBtn" type="button">Skip for now</button>
+      </div>
+
+      <!-- stage 2: enter OTP -->
+      <div id="stageOtp" style="display:none" class="center">
+        <div class="crest">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1F4E78"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="2" width="12" height="20" rx="3"/><path d="M12 18h.01"/></svg>
+        </div>
+        <h1 style="font-size:1.3rem">Confirm your mobile number</h1>
+        <p class="sub">We've sent a 6-digit verification code to<br><b id="maskedNum"></b></p>
+        <form id="otpForm" autocomplete="off">
+          <div class="otp" id="otpBoxes" aria-label="6-digit verification code">
+            {% for i in range(6) %}
+            <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1"
+                   aria-label="Digit {{ i + 1 }}">
+            {% endfor %}
+          </div>
+          <div class="hint err" id="otpErr" style="text-align:center;display:none"></div>
+          <div class="otp-meta">
+            <span class="exp">Code expires in <b id="expTimer">{{ ttl_min }}:00</b></span>
+            <button type="button" class="resend" id="resendBtn" disabled>Resend code</button>
+          </div>
+          <button class="btn" type="submit" id="verifyBtn">Verify mobile number</button>
+        </form>
+        <p class="below" style="margin-top:14px">
+          <a href="#" id="changeNum">Change mobile number</a></p>
+        <div class="devline" id="devLine" style="display:none"></div>
+      </div>
+
+    </div>
+    <p class="below"><a href="{{ url_for('logout') }}">Sign out</a></p>
+  </div></main>
+</div>
+
+<script>
+(function(){
+var CSRF=document.querySelector('meta[name=csrf-token]').content;
+function post(url,body){return fetch(url,{method:'POST',
+  headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+  body:JSON.stringify(body||{})}).then(function(r){return r.json();});}
+
+var sNum=document.getElementById('stageNum'),
+    sOtp=document.getElementById('stageOtp'),
+    mobile=document.getElementById('mobile'),
+    numErr=document.getElementById('numErr'),
+    sendBtn=document.getElementById('sendBtn'),
+    boxes=[].slice.call(document.querySelectorAll('#otpBoxes input')),
+    wrap=document.getElementById('otpBoxes'),
+    err=document.getElementById('otpErr'),
+    btn=document.getElementById('verifyBtn'),
+    resend=document.getElementById('resendBtn'),
+    expEl=document.getElementById('expTimer'),
+    dev=document.getElementById('devLine');
+var busy=false,cdTimer=null,expTimer=null;
+
+function setNumErr(m){numErr.textContent=m||'';numErr.style.display=m?'block':'none';
+  mobile.classList.toggle('bad',!!m);}
+function setErr(m){err.textContent=m||'';err.style.display=m?'block':'none';
+  wrap.classList.toggle('err',!!m);}
+function code(){return boxes.map(function(b){return b.value;}).join('');}
+function clearBoxes(){boxes.forEach(function(b){b.value='';});boxes[0].focus();}
+
+function startExpiry(mins){clearInterval(expTimer);
+  var end=Date.now()+mins*60000;
+  expTimer=setInterval(function(){
+    var s=Math.max(0,Math.round((end-Date.now())/1000));
+    expEl.textContent=Math.floor(s/60)+':'+('0'+s%60).slice(-2);
+    if(s<=0){clearInterval(expTimer);
+      setErr('Your verification code has expired. Request a new one.');}
+  },250);}
+function startCooldown(s){clearInterval(cdTimer);
+  if(s<=0){resend.disabled=false;resend.textContent='Resend code';return;}
+  resend.disabled=true;var end=Date.now()+s*1000;
+  cdTimer=setInterval(function(){
+    var left=Math.max(0,Math.ceil((end-Date.now())/1000));
+    resend.textContent='Resend code ('+left+'s)';
+    if(left<=0){clearInterval(cdTimer);resend.disabled=false;
+      resend.textContent='Resend code';}
+  },250);}
+
+function sendCode(){
+  var num=mobile.value.trim();
+  if(!num){setNumErr('Please enter your mobile number.');return;}
+  setNumErr('');sendBtn.disabled=true;sendBtn.textContent='Sending…';
+  post('/verify/mobile/send',{mobile:num}).then(function(j){
+    sendBtn.disabled=false;sendBtn.textContent='Send verification code';
+    if(!j.ok){setNumErr(j.msg||'Could not send the code.');return;}
+    document.getElementById('maskedNum').textContent=j.masked;
+    sNum.style.display='none';sOtp.style.display='block';
+    clearBoxes();startExpiry({{ ttl_min }});
+    startCooldown(j.cooldown!=null?j.cooldown:60);
+    if(j.dev_code){dev.style.display='block';
+      dev.innerHTML='Dev build — your code: <code>'+j.dev_code+'</code>';}
+  }).catch(function(){sendBtn.disabled=false;
+    sendBtn.textContent='Send verification code';
+    setNumErr('Network error — please try again.');});}
+sendBtn.onclick=sendCode;
+mobile.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();sendCode();}});
+
+resend.onclick=function(){setErr('');clearBoxes();
+  post('/verify/mobile/send',{mobile:mobile.value.trim()}).then(function(j){
+    if(!j.ok){setErr(j.msg||'Could not resend the code.');
+      startCooldown(j.cooldown||0);return;}
+    startExpiry({{ ttl_min }});startCooldown(j.cooldown!=null?j.cooldown:60);
+    if(j.dev_code){dev.style.display='block';
+      dev.innerHTML='Dev build — your code: <code>'+j.dev_code+'</code>';}
+  });};
+
+document.getElementById('changeNum').onclick=function(e){e.preventDefault();
+  sOtp.style.display='none';sNum.style.display='block';mobile.focus();};
+
+document.getElementById('skipBtn').onclick=function(){
+  post('/verify/mobile/skip').then(function(j){location.href=j.next||'/welcome';});};
+
+boxes.forEach(function(b,i){
+  b.addEventListener('input',function(){
+    b.value=b.value.replace(/\D/g,'').slice(-1);
+    if(b.value&&i<5)boxes[i+1].focus();
+    setErr('');maybeSubmit();});
+  b.addEventListener('keydown',function(e){
+    if(e.key==='Backspace'&&!b.value&&i>0){boxes[i-1].focus();boxes[i-1].value='';e.preventDefault();}
+    if(e.key==='ArrowLeft'&&i>0)boxes[i-1].focus();
+    if(e.key==='ArrowRight'&&i<5)boxes[i+1].focus();});
+  b.addEventListener('paste',function(e){
+    var t=(e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
+    if(!t)return;e.preventDefault();
+    for(var k=0;k<6;k++)boxes[k].value=t[k]||'';
+    boxes[Math.min(t.length,5)].focus();setErr('');maybeSubmit();});
+});
+function maybeSubmit(){if(code().length===6&&!busy)submit();}
+
+function submit(){
+  if(busy)return;var c=code();
+  if(c.length<6){setErr('Please enter the verification code.');return;}
+  busy=true;btn.disabled=true;btn.textContent='Verifying…';
+  post('/verify/mobile/code',{code:c}).then(function(j){
+    busy=false;
+    if(j.ok){wrap.classList.remove('err');wrap.classList.add('ok');
+      btn.textContent='Verified ✓';
+      setTimeout(function(){location.href=j.next;},450);return;}
+    btn.disabled=false;btn.textContent='Verify mobile number';
+    setErr(j.msg||'Verification failed.');clearBoxes();
+  }).catch(function(){busy=false;btn.disabled=false;
+    btn.textContent='Verify mobile number';
+    setErr('Unable to verify your code. Please try again.');});}
+document.getElementById('otpForm').addEventListener('submit',function(e){
+  e.preventDefault();submit();});
+})();
+</script>
+</body></html>

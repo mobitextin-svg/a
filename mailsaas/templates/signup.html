@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create account · ZyvoMail</title>
+<meta name="csrf-token" content="{{ csrf_token }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0F2B4C; --navy:#1F4E78; --navy2:#163B5C; --teal:#00A8CC; --teal2:#0089A7;
+  --sky:#E8F4FB; --paper:#F7FAFD; --card:#FFFFFF; --line:#DBE7F1; --muted:#5C7189;
+  --good:#0E9F6E; --warn:#B45309; --bad:#DC2626;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+body{font-family:Inter,system-ui,sans-serif;color:var(--ink);
+  background:
+    radial-gradient(900px 520px at 88% -10%, rgba(0,168,204,.10), transparent 60%),
+    radial-gradient(700px 460px at -8% 112%, rgba(31,78,120,.10), transparent 62%),
+    linear-gradient(180deg,#fbfdff,var(--paper));
+  background-attachment:fixed;
+  font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Sora,Inter,sans-serif;letter-spacing:-.02em}
+a{color:var(--teal2);text-decoration:none}a:hover{text-decoration:underline}
+.split{display:grid;grid-template-columns:340px 1fr;height:100vh;height:100dvh}
+
+/* ---- left brand rail: flight path ---- */
+.rail{background:linear-gradient(168deg,var(--navy) 0%,var(--navy2) 70%,#102A44 100%);
+  color:#EAF4FB;padding:26px 30px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;overflow:hidden}
+.rail .brand{font-family:Sora;font-weight:700;font-size:1.2rem;display:flex;align-items:center;gap:10px}
+.rail .brand .mark{width:28px;height:28px;border-radius:8px;background:var(--teal);
+  display:grid;place-items:center;color:#04222B;font-size:.95rem}
+.rail h2{font-size:1.3rem;font-weight:600;margin:20px 0 6px;line-height:1.22;color:#fff}
+.rail p.lead{color:#B9D2E6;margin:0 0 18px;font-size:.85rem}
+.flight{position:relative;padding-left:26px;margin-top:2px}
+.flight::before{content:"";position:absolute;left:8px;top:8px;bottom:8px;
+  border-left:2px dashed rgba(140,200,230,.45)}
+.fstep{position:relative;padding:6px 0 6px 6px;color:#A7C4DB;font-size:.82rem}
+.fstep::before{content:"";position:absolute;left:-24px;top:14px;width:12px;height:12px;
+  border-radius:50%;background:#28516F;border:2px solid #4F82A8;transition:all .2s}
+.fstep.now{color:#fff;font-weight:600}
+.fstep.now::before{background:var(--teal);border-color:#7FE3F7;box-shadow:0 0 0 5px rgba(0,198,255,.18)}
+.fstep.done{color:#8FD8B8}
+.fstep.done::before{background:var(--good);border-color:#8FD8B8}
+.fstep .pin{display:none}
+.fstep .tick{display:none;position:absolute;left:-21px;top:9px;font-size:.68rem;color:#04351F;font-weight:700}
+.fstep.done .tick{display:block}
+.rail .foot{margin-top:auto;font-size:.72rem;color:#7FA2BE}
+.rail .badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.rail .badge{border:1px solid rgba(150,210,235,.35);border-radius:999px;padding:3px 9px;
+  font-size:.66rem;color:#BFE0F0}
+
+/* ---- right: stepped form ---- */
+.pane{display:flex;align-items:center;justify-content:center;padding:14px 24px;height:100vh;height:100dvh;overflow:hidden}
+.card{width:100%;max-width:520px}
+.card h1{font-size:1.25rem;margin:0 0 2px}
+.card p.sub{color:var(--muted);margin:0 0 10px;font-size:.82rem}
+.dots{display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:.76rem;color:var(--muted)}
+.dots .d{width:26px;height:4px;border-radius:3px;background:#E1EAF2;transition:background .2s}
+.dots .d.on{background:var(--teal)}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:16px 20px;box-shadow:0 1px 3px rgba(15,43,76,.05);
+  max-height:calc(100vh - 150px);max-height:calc(100dvh - 150px);overflow-y:auto}
+.fstage{display:none;animation:in .3s ease}
+.fstage.on{display:block}
+@keyframes in{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.fstage h3{font-size:.95rem;margin:0 0 2px;display:flex;align-items:center;gap:8px}
+.fstage h3 .n{width:20px;height:20px;border-radius:6px;background:var(--sky);color:var(--navy);
+  font-size:.72rem;display:grid;place-items:center;font-weight:700;font-family:Inter}
+.fstage p.desc{color:var(--muted);font-size:.78rem;margin:0 0 8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+label{display:block;font-size:.78rem;font-weight:600;margin:7px 0 3px;color:#31465E}
+label .opt{color:var(--muted);font-weight:400}
+input,select{width:100%;padding:6px 10px;border:1.5px solid var(--line);border-radius:8px;
+  font:inherit;font-size:.85rem;background:#fff;color:var(--ink);transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(0,168,204,.15)}
+input.bad{border-color:var(--bad)}
+.hint{font-size:.7rem;color:var(--muted);margin-top:2px}
+.errline{color:var(--bad);font-size:.78rem;margin-top:6px;display:none}
+.pwwrap{position:relative}
+.pwwrap .eye{position:absolute;right:9px;top:5px;cursor:pointer;border:none;background:none;
+  font-size:.9rem;color:var(--muted)}
+.meter{height:5px;border-radius:4px;background:#E7EEF5;margin-top:6px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;border-radius:4px;background:var(--bad);transition:width .25s,background .25s}
+.rules{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;margin-top:6px;font-size:.72rem;color:var(--muted)}
+.rules span::before{content:"○ ";color:#B7C7D6}
+.rules span.ok{color:var(--good)}.rules span.ok::before{content:"✓ ";color:var(--good)}
+.rules #strengthTag::before{content:""}
+.checks label{display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:.78rem;margin:5px 0}
+.checks input{width:auto;margin-top:2px}
+.navbtns{display:flex;justify-content:space-between;gap:12px;margin-top:10px}
+.btn{padding:8px 22px;border:none;border-radius:9px;background:var(--navy);color:#fff;
+  font:600 .85rem Sora,Inter,sans-serif;cursor:pointer;transition:background .15s,transform .1s}
+.btn:hover{background:#255C8C}.btn:active{transform:translateY(1px)}
+.btn.ghost{background:#fff;color:var(--navy);border:1.5px solid var(--line)}
+.btn.ghost:hover{background:var(--sky)}
+.btn.go{background:var(--navy)}.btn.go:hover{background:#255C8C}
+.or{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:.72rem;margin:8px 0 6px}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
+.social{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sbtn{padding:7px;border:1.5px solid var(--line);border-radius:8px;background:#fff;
+  font:500 .8rem Inter,sans-serif;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;gap:8px;color:#31465E}
+.sbtn:hover{border-color:#B9CDDE}
+.flash{padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:.8rem}
+.flash.error{background:#FDECEC;color:#9B1C1C;border:1px solid #F5C6C6}
+.flash.success{background:#E7F7EF;color:#0B6B4A;border:1px solid #BFE8D4}
+.signin{text-align:center;font-size:.78rem;color:var(--muted);margin-top:8px}
+
+/* loading overlay */
+.overlay{position:fixed;inset:0;background:rgba(247,250,253,.96);display:none;place-items:center;z-index:50}
+.overlay.on{display:grid}
+.ovcard{text-align:center}
+.ovcard .plane{font-size:2.2rem;animation:fly 1.2s ease-in-out infinite alternate;display:inline-block}
+@keyframes fly{from{transform:translateY(4px) rotate(38deg)}to{transform:translateY(-6px) rotate(42deg)}}
+.ovcard h3{font-size:1.15rem;margin:14px 0 16px}
+.ovsteps{text-align:left;display:inline-block;font-size:.9rem;color:var(--muted)}
+.ovsteps div{margin:6px 0;opacity:.35;transition:opacity .3s}
+.ovsteps div::before{content:"○ "}
+.ovsteps div.on{opacity:1;color:var(--ink)}
+.ovsteps div.on::before{content:"✓ ";color:var(--good);font-weight:700}
+@media (max-width:960px){
+  html,body{height:auto;overflow:auto}
+  .split{grid-template-columns:1fr;height:auto}
+  .rail{display:none}
+  .pane{height:auto;padding:24px 20px}
+  .sec{max-height:none;overflow-y:visible}
+  .grid2{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.ovcard .plane{animation:none}}
+</style>
+</head><body>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+
+<div class="split">
+  <aside class="rail">
+    <div class="brand"><span class="mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#04222B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg></span>Zyvo<span style="color:var(--teal)">Mail</span></div>
+    <h2>From sign-up to inbox,<br>with confidence.</h2>
+    <p class="lead">Three quick steps and your workspace is ready for take-off.</p>
+    <div class="flight" id="railSteps">
+      <div class="fstep now"><span class="pin">✈</span><span class="tick">✓</span>Personal information</div>
+      <div class="fstep"><span class="pin">✈</span><span class="tick">✓</span>Account security</div>
+      <div class="fstep"><span class="pin">✈</span><span class="tick">✓</span>Region &amp; language</div>
+      <div class="fstep"><span class="pin">✈</span><span class="tick">✓</span>Verify email</div>
+      <div class="fstep"><span class="pin">✈</span><span class="tick">✓</span>Guided setup</div>
+    </div>
+    <div class="foot">
+      Built for Indian businesses
+      <div class="badges">
+        <span class="badge">DPDP-ready consent</span>
+        <span class="badge">GST invoicing</span>
+        <span class="badge">₹ INR billing</span>
+        <span class="badge">IST time zone</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="pane"><div class="card">
+    <h1>Create your account</h1>
+    <p class="sub">Takes under a minute · 1,000 free verifications included</p>
+    <div class="dots">
+      <span class="d on" data-d="1"></span><span class="d" data-d="2"></span>
+      <span class="d" data-d="3"></span>
+      <span id="dotLabel" style="margin-left:6px">Step 1 of 3</span>
+    </div>
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}
+        {% if 'already exists' in msg %}
+          <div class="flash error">An account already exists for that email.
+            <div style="margin-top:8px;display:flex;gap:14px">
+              <a href="{{ url_for('login') }}"><b>Sign in instead →</b></a>
+              <a href="{{ url_for('forgot') }}">Forgot password?</a>
+            </div></div>
+        {% else %}<div class="flash {{ cat }}">{{ msg }}</div>{% endif %}
+      {% endfor %}
+    {% endwith %}
+
+    <form method="post" id="suForm" enctype="multipart/form-data" novalidate>
+    <div class="sec">
+
+      <!-- STAGE 1 · Personal information -->
+      <div class="fstage on" data-f="1">
+        <h3><span class="n">1</span>Personal information</h3>
+        <p class="desc">Who are you and where do we reach you?</p>
+        <div class="grid2">
+          <div><label>Full name *</label>
+            <input name="name" id="fName" placeholder="e.g. Arjun Kumar" required minlength="2" maxlength="100" autofocus></div>
+          <div><label>Mobile number <span class="opt">(optional)</span></label>
+            <input name="mobile" placeholder="+91 98xxxxxx10" inputmode="tel" maxlength="16"></div>
+        </div>
+        <label>Business email address *</label>
+        <input type="email" name="email" id="fEmail" placeholder="you@yourcompany.com" required>
+        <div class="hint" id="freeMailHint" style="display:none;color:var(--warn)">
+          Free mailbox detected — a company-domain address improves deliverability and trust.</div>
+        <label>Company name *</label>
+        <input name="company" id="fCompany" placeholder="e.g. ABC Technologies Pvt. Ltd." required minlength="2" maxlength="100">
+        <div class="grid2">
+          <div><label>Company website <span class="opt">(optional)</span></label>
+            <input name="website" placeholder="example.com" maxlength="120">
+            <div class="hint">Used later for domain verification.</div></div>
+          <div><label>Business type / industry <span class="opt">(optional)</span></label>
+            <select name="industry">
+              <option value="">Select…</option>
+              <option>Technology / SaaS</option><option>Real Estate</option>
+              <option>Education</option><option>Insurance</option>
+              <option>Healthcare</option><option>Finance / Banking</option>
+              <option>E-commerce / Retail</option><option>Manufacturing</option>
+              <option>Travel &amp; Hospitality</option><option>Media &amp; Events</option>
+              <option>Consulting / Services</option><option>Other</option>
+            </select></div>
+        </div>
+        <div class="grid2">
+          <div><label>Company logo <span class="opt">(optional)</span></label>
+            <input type="file" name="logo" accept=".png,.jpg,.jpeg,.webp,.svg" style="padding:8px">
+            <div class="hint">PNG / JPG / SVG, up to 2 MB — shown on invoices.</div></div>
+          <div><label>Referral code <span class="opt">(optional)</span></label>
+            <input name="referral" placeholder="e.g. ZYVO2026" maxlength="40" style="text-transform:uppercase"></div>
+        </div>
+        <div class="errline" id="e1"></div>
+        <div class="navbtns"><span></span>
+          <button type="button" class="btn" onclick="next(1)">Next →</button></div>
+      </div>
+
+      <!-- STAGE 2 · Account security -->
+      <div class="fstage" data-f="2">
+        <h3><span class="n">2</span>Account security</h3>
+        <p class="desc">A strong password keeps your campaigns and contacts safe.</p>
+        <label>Password *</label>
+        <div class="pwwrap">
+          <input type="password" name="password" id="pw" required minlength="8" placeholder="Minimum 8 characters">
+          <button type="button" class="eye" id="eye" aria-pressed="false" style="font:500 .78rem Inter;color:var(--teal2)">Show</button>
+        </div>
+        <div class="hint" id="capsWarn" style="display:none;color:var(--warn)">Caps Lock is on</div>
+        <div class="meter"><i id="meterBar"></i></div>
+        <div class="rules" id="rules">
+          <span data-r="len">8+ characters</span><span data-r="up">Uppercase letter</span>
+          <span data-r="lo">Lowercase letter</span><span data-r="num">Number</span>
+          <span data-r="sp">Special character</span>
+          <span id="strengthTag" style="font-weight:600"></span>
+        </div>
+        <label>Confirm password *</label>
+        <input type="password" id="pw2" required placeholder="Re-enter password">
+        <div class="hint" id="matchHint"></div>
+        <div class="errline" id="e2"></div>
+        <div class="navbtns">
+          <button type="button" class="btn ghost" onclick="go(1)">← Back</button>
+          <button type="button" class="btn" onclick="next(2)">Next →</button></div>
+      </div>
+
+      <!-- STAGE 3 · Region & language -->
+      <div class="fstage" data-f="3">
+        <h3><span class="n">3</span>Region &amp; language</h3>
+        <p class="desc">Sets your invoices, send-time scheduling and interface language.</p>
+        <div class="grid2">
+          <div><label>Country *</label>
+            <select name="country" id="country">
+              <option selected>India</option><option>United Arab Emirates</option>
+              <option>Singapore</option><option>United States</option>
+              <option>United Kingdom</option><option>Australia</option><option>Other</option>
+            </select></div>
+          <div><label>Time zone *</label>
+            <select name="timezone" id="tz">
+              <option value="Asia/Kolkata" selected>(GMT+05:30) Asia/Kolkata</option>
+            </select>
+            <div class="hint">Auto-detected — you can change it.</div></div>
+        </div>
+        <label>Preferred language <span class="opt">(optional)</span></label>
+        <select name="language">
+          <option selected>English</option><option>Tamil</option><option>Hindi</option>
+          <option>Telugu</option><option>Kannada</option><option>Malayalam</option>
+        </select>
+        <div class="checks" style="margin-top:14px">
+          <label><input type="checkbox" id="tos">
+            <span>I agree to the <a href="#" onclick="return false">Terms of Service</a> *</span></label>
+          <label><input type="checkbox" id="priv">
+            <span>I agree to the <a href="#" onclick="return false">Privacy Policy</a> *</span></label>
+          <label><input type="checkbox" id="spam">
+            <span>I agree to the <a href="#" onclick="return false">Anti-Spam Policy</a> — I will only email people who gave consent *</span></label>
+          <label><input type="checkbox" id="cook">
+            <span>I accept the <a href="#" onclick="return false">Cookie Policy</a> *</span></label>
+          <label><input type="checkbox" name="updates" checked>
+            <span>Send me product updates and feature announcements <span class="opt">(optional)</span></span></label>
+        </div>
+        <div class="errline" id="e3"></div>
+        <div class="navbtns">
+          <button type="button" class="btn ghost" onclick="go(2)">← Back</button>
+          <button type="submit" class="btn go" id="createBtn">
+            <span id="crTxt">Create account</span>
+            <span id="crSpin" style="display:none">⏳ Creating…</span>
+          </button></div>
+      </div>
+
+    </div>
+    </form>
+
+{% if oauth_enabled.google or oauth_enabled.microsoft %}
+    <div class="or">or sign up with</div>
+    <div class="social" style="grid-template-columns:{{ '1fr 1fr' if oauth_enabled.google and oauth_enabled.microsoft else '1fr' }}">
+      {% if oauth_enabled.google %}<a class="sbtn" href="{{ url_for('oauth_start', provider='google') }}" style="text-decoration:none">Google</a>{% endif %}
+      {% if oauth_enabled.microsoft %}<a class="sbtn" href="{{ url_for('oauth_start', provider='microsoft') }}" style="text-decoration:none">Microsoft</a>{% endif %}
+    </div>
+{% endif %}
+    <p class="signin">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
+  </div></main>
+</div>
+
+<div class="overlay" id="ov"><div class="ovcard">
+  <div class="spin" style="width:36px;height:36px;border-radius:50%;margin:0 auto;
+    border:3px solid var(--line);border-top-color:var(--teal);animation:sp 1s linear infinite"></div>
+  <style>@keyframes sp{to{transform:rotate(360deg)}}</style>
+  <h3>Creating your account…</h3>
+  <div class="ovsteps">
+    <div>Validating information</div>
+    <div>Creating workspace</div>
+    <div>Configuring account</div>
+    <div>Preparing your workspace</div>
+  </div>
+</div></div>
+
+<script>
+(function(){
+  var cur=1, maxDone=0;
+  var form=document.getElementById('suForm');
+
+  function go(n){
+    cur=n;
+    document.querySelectorAll('.fstage').forEach(function(s){
+      s.classList.toggle('on', +s.dataset.f===n);});
+    document.querySelectorAll('.dots .d').forEach(function(d){
+      d.classList.toggle('on', +d.dataset.d<=n);});
+    document.getElementById('dotLabel').textContent='Step '+n+' of 3';
+    document.querySelectorAll('#railSteps .fstep').forEach(function(f,i){
+      f.classList.toggle('now', i===n-1);
+      f.classList.toggle('done', i<n-1);});
+    window.scrollTo({top:0});
+  }
+  window.go=go;
+
+  function fail(id,msg){var e=document.getElementById(id);e.textContent=msg;e.style.display='block';}
+  function clearErr(id){document.getElementById(id).style.display='none';}
+
+  window.next=function(from){
+    clearErr('e'+from);
+    if(from===1){
+      var n=document.getElementById('fName'), em=document.getElementById('fEmail'),
+          co=document.getElementById('fCompany');
+      [n,em,co].forEach(function(x){x.classList.remove('bad');});
+      if(n.value.trim().length<2){n.classList.add('bad');n.focus();return fail('e1','Please enter your full name (2+ characters).');}
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em.value)){em.classList.add('bad');em.focus();return fail('e1','Please enter a valid business email address, e.g. you@yourcompany.com.');}
+      if(co.value.trim().length<2){co.classList.add('bad');co.focus();return fail('e1','Please enter your company name.');}
+      go(2); document.getElementById('pw').focus();
+    }
+    if(from===2){
+      if(check()<5){document.getElementById('pw').focus();return fail('e2','Please meet all 5 password rules.');}
+      if(!match()||!document.getElementById('pw2').value){document.getElementById('pw2').focus();return fail('e2','Passwords must match.');}
+      go(3);
+    }
+  };
+
+  // password rules + strength
+  var pw=document.getElementById('pw'), pw2=document.getElementById('pw2'),
+      bar=document.getElementById('meterBar'), rules=document.getElementById('rules'),
+      tag=document.getElementById('strengthTag');
+  function check(){
+    var v=pw.value, r={len:v.length>=8, up:/[A-Z]/.test(v), lo:/[a-z]/.test(v),
+      num:/[0-9]/.test(v), sp:/[^A-Za-z0-9]/.test(v)};
+    var n=0; for(var k in r){var el=rules.querySelector('[data-r='+k+']');
+      el.classList.toggle('ok',r[k]); if(r[k])n++;}
+    var col=n<=2?'#DC2626':(n===3?'#D97706':(n===4?'#65A30D':'#0E9F6E'));
+    bar.style.width=(n*20)+'%'; bar.style.background=col;
+    tag.textContent=v?(n<=2?'Weak':(n===3?'Fair':(n===4?'Good':'Strong'))):'';
+    tag.style.color=col; return n;
+  }
+  function match(){
+    var h=document.getElementById('matchHint');
+    if(!pw2.value){h.textContent='';return true;}
+    var ok=pw.value===pw2.value;
+    h.textContent=ok?'✓ Passwords match':'✗ Passwords do not match';
+    h.style.color=ok?'var(--good)':'var(--bad)'; return ok;
+  }
+  pw.addEventListener('input',function(){check();match();});
+  pw2.addEventListener('input',match);
+  document.getElementById('eye').onclick=function(){
+    var show=pw.type==='password';
+    pw.type=show?'text':'password';
+    this.textContent=show?'Hide':'Show';
+    this.setAttribute('aria-pressed',show);
+  };
+
+  // free-mailbox nudge
+  var em2=document.getElementById('fEmail');
+  em2.addEventListener('blur',function(){
+    var d=(em2.value.split('@')[1]||'').toLowerCase();
+    document.getElementById('freeMailHint').style.display=
+      /gmail|yahoo|outlook|hotmail|rediff|icloud/.test(d)?'block':'none';
+  });
+
+  // time-zone auto-detect
+  try{
+    var z=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if(z && z!=='Asia/Kolkata'){
+      var off=-new Date().getTimezoneOffset(), s=(off<0?'-':'+'),
+          hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0'),
+          mm=String(Math.abs(off)%60).padStart(2,'0'),
+          o=document.createElement('option');
+      o.value=z; o.textContent='(GMT'+s+hh+':'+mm+') '+z; o.selected=true;
+      document.getElementById('tz').appendChild(o);
+    }
+  }catch(e){}
+
+  // Caps Lock warning
+  var caps=document.getElementById('capsWarn');
+  ['keydown','keyup'].forEach(function(ev){
+    pw.addEventListener(ev,function(e){
+      if(e.getModifierState)caps.style.display=e.getModifierState('CapsLock')?'block':'none';
+    });
+  });
+  pw.addEventListener('blur',function(){caps.style.display='none';});
+
+  // Country auto-detect from time zone
+  try{
+    var tzc=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+    var map={'Asia/Kolkata':'India','Asia/Calcutta':'India','Asia/Dubai':'United Arab Emirates',
+      'Asia/Singapore':'Singapore','Europe/London':'United Kingdom',
+      'Australia/Sydney':'Australia','Australia/Melbourne':'Australia'};
+    var guess=map[tzc]||(tzc.indexOf('America/')===0?'United States':null);
+    if(guess){var cs=document.getElementById('country');
+      [].some.call(cs.options,function(o){if(o.text===guess){o.selected=true;return true;}});}
+  }catch(e){}
+
+  // final submit
+  form.addEventListener('submit',function(e){
+    clearErr('e3');
+    var pols=['tos','priv','spam','cook'].every(function(id){
+      return document.getElementById(id).checked;});
+    if(!pols){
+      e.preventDefault();return fail('e3','Please accept all four policies — Terms, Privacy, Anti-Spam and Cookies.');}
+    if(check()<5||!match()){e.preventDefault();go(2);return fail('e2','Please complete your password.');}
+    document.getElementById('crTxt').style.display='none';
+    document.getElementById('crSpin').style.display='inline';
+    var ov=document.getElementById('ov'); ov.classList.add('on');
+    var st=ov.querySelectorAll('.ovsteps div'), i=0;
+    (function tick(){ if(i<st.length){st[i++].classList.add('on');setTimeout(tick,350);} })();
+  });
+
+})();
+</script>
+</body></html>

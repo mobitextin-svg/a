@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+
+{% macro linechart(series, color, suffix='') %}
+  {% set mx = (series | max) or 1 %}
+  {% set w = 300 %}{% set h = 80 %}{% set step = w / (series|length - 1) %}
+  <svg viewBox="0 0 {{ w }} {{ h+10 }}" width="100%" height="90" preserveAspectRatio="none">
+    <polyline fill="none" stroke="{{ color }}" stroke-width="2"
+      points="{% for v in series %}{{ loop.index0 * step }},{{ h - (v / mx * (h-10)) }} {% endfor %}"/>
+    <circle cx="{{ (series|length - 1) * step }}" cy="{{ h - (series[-1] / mx * (h-10)) }}" r="3" fill="{{ color }}"/>
+  </svg>
+  <div class="faint small" style="text-align:right">now: <b>{{ series[-1] }}{{ suffix }}</b></div>
+{% endmacro %}
+
+{% macro barchart(series, color) %}
+  {% set mx = (series | max) or 1 %}
+  <svg viewBox="0 0 300 80" width="100%" height="90" preserveAspectRatio="none">
+    {% set bw = 300 / series|length %}
+    {% for v in series %}
+      <rect x="{{ loop.index0 * bw + 1 }}" y="{{ 80 - (v / mx * 76) }}" width="{{ bw - 2 }}"
+            height="{{ (v / mx * 76) }}" fill="{{ color }}" rx="1"/>
+    {% endfor %}
+  </svg>
+  <div class="faint small" style="text-align:right">today: <b>{{ '{:,}'.format(series[-1]) }}</b></div>
+{% endmacro %}
+
+{% block content %}
+<h1>Reports &amp; Analytics</h1>
+<p class="muted">Delivery, opens, clicks, bounces, complaints, geo &amp; device breakdowns.</p>
+
+{# ---- Live Analytics ⭐ — real-time per-campaign dashboards ---- #}
+<div class="card" style="margin-top:12px;border-color:var(--brand)">
+  <div class="section-head" style="margin-bottom:6px">
+    <h2 style="margin:0">📈 Live Analytics <span class="badge b-Running">⭐ Real-time</span></h2>
+  </div>
+  <p class="faint small" style="margin-top:0">Watch a campaign update every few seconds — opens, clicks, bounces, device, client, location &amp; hourly performance.</p>
+  {% if live_campaigns %}
+  <table><thead><tr><th>Campaign</th><th>Status</th><th class="num">Sent</th><th></th></tr></thead><tbody>
+    {% for c in live_campaigns %}
+    <tr><td><b>{{ c.name }}</b></td>
+      <td><span class="badge b-{{ c.status }}">{{ c.status }}</span></td>
+      <td class="num">{{ '{:,}'.format(c.sent or 0) }}</td>
+      <td class="num"><a class="btn sm" href="{{ url_for('campaign_live', cid=c.id) }}">View Live →</a></td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% else %}
+  <p class="faint small">No campaigns have started sending yet. Live Analytics appears here once a campaign is running or sent.</p>
+  {% endif %}
+</div>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card"><h3>📨 Daily Send Volume</h3>{{ barchart(charts.volume, 'var(--brand)') }}</div>
+  <div class="card"><h3>📥 Inbox Rate</h3>{{ linechart(charts.inbox, '#22c55e', '%') }}</div>
+</div>
+<div class="grid g3">
+  <div class="card"><h3>👁️ Open Rate</h3>{{ linechart(charts.open_rate, '#5b8cff', '%') }}</div>
+  <div class="card"><h3>🖱️ Click Rate</h3>{{ linechart(charts.click_rate, '#22d3a6', '%') }}</div>
+  <div class="card"><h3>↩️ Bounce Trend</h3>{{ linechart(charts.bounce, '#f59e0b', '%') }}</div>
+</div>
+<div class="grid g3">
+  <div class="card"><h3>🚫 Spam Trend</h3>{{ linechart(charts.spam, '#ef4444', '%') }}</div>
+  <div class="card" style="grid-column:span 2"><h3>🖧 SMTP Health</h3>
+    {% for s in smtp %}
+      <div class="kv"><span>{{ s.name }}</span><span class="badge b-{{ s.health }}">{{ s.health }}</span></div>
+    {% else %}<div class="faint small">No SMTP servers configured.</div>{% endfor %}
+  </div>
+</div>
+
+{% set sent = agg.sent or 0 %}
+<div class="grid g4" style="margin-top:14px">
+  <div class="stat"><div class="k">Delivered</div><div class="v">{{ '{:,}'.format((agg.sent - agg.bounces)|int) }}</div></div>
+  <div class="stat"><div class="k">Open rate</div><div class="v">{{ (100*agg.opens/sent)|round(1) if sent else 0 }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Click rate</div><div class="v">{{ (100*agg.clicks/sent)|round(1) if sent else 0 }}<span class="unit">%</span></div></div>
+  <div class="stat"><div class="k">Bounce rate</div><div class="v">{{ (100*agg.bounces/sent)|round(1) if sent else 0 }}<span class="unit">%</span></div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Geo reports</h2>
+    {% for country, pct in [('United States',42),('India',18),('United Kingdom',11),('Germany',8),('Other',21)] %}
+      <div class="kv"><span>{{ country }}</span><span>{{ pct }}%</span></div>
+      <div class="meter" style="margin-bottom:8px"><i style="width:{{ pct }}%"></i></div>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <h2>Device reports</h2>
+    {% for dev, pct in [('Mobile',58),('Desktop',34),('Tablet',5),('Other',3)] %}
+      <div class="kv"><span>{{ dev }}</span><span>{{ pct }}%</span></div>
+      <div class="meter" style="margin-bottom:8px"><i style="width:{{ pct }}%"></i></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Per-campaign performance</h2>
+  <table>
+    <thead><tr><th>Campaign</th><th class="num">Sent</th><th class="num">Open %</th><th class="num">Click %</th><th class="num">Bounce %</th></tr></thead>
+    <tbody>
+    {% for c in per_campaign %}
+      <tr><td>{{ c.name }}</td><td class="num">{{ '{:,}'.format(c.sent) }}</td>
+        <td class="num">{{ (100*c.opens/c.sent)|round(1) }}</td>
+        <td class="num">{{ (100*c.clicks/c.sent)|round(1) }}</td>
+        <td class="num">{{ (100*c.bounces/c.sent)|round(1) }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No sent campaigns to report on yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

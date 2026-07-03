@@ -1,0 +1,200 @@
+ZyvoMail / MailSaaS — v73  (Guided Onboarding + Advanced Signup UI)
+====================================================================
+
+NEW — Advanced signup page (templates/signup.html, full redesign, light UI)
+  • Split-screen layout: ZyvoMail navy "flight path" brand rail + form pane
+  • Sora/Inter typography, Zyvo navy #1F4E78 + teal accent, light-mode only
+  • Live password strength meter with 5-rule checklist (8+ chars, upper,
+    lower, number, special) + show/hide toggle + confirm-match indicator
+  • Free-mailbox warning (gmail/yahoo/etc → suggests company domain)
+  • Country selector (India default), time zone auto-detect (Intl API,
+    Asia/Kolkata default), language selector (EN/TA/HI/TE/KN/ML)
+  • Mobile number (optional), Terms/Privacy consents, product-updates opt-in
+  • Post-submit loading sequence: Validating → Workspace → Configuring → Ready
+  • Old template kept as templates/signup_v69_backup.html.bak
+  • Backend unchanged — form stays compatible; extra fields captured by hook
+
+NEW — Guided onboarding wizard  (/welcome)  — onboarding_v73.py (additive)
+  Step 1  Business profile: type chips (Individual/Startup/Company/Agency/
+          NGO/Government), industry, size, GST (15-char format validated),
+          business email, logo upload (PNG/JPG/WEBP/SVG → static/uploads/logos)
+  Step 2  Sending purpose: multi-select cards (marketing, transactional,
+          OTP, newsletter, product, events, support, internal)
+  Step 3  Expected volume: 6 tiers → live plan recommendation (Free…
+          Enterprise) + warm-up schedule guidance
+  Step 4  Compliance check: contact-source cards → ★ compliance score with
+          verdict; purchased lists flagged HIGH SPAM RISK
+  Step 5  Domain setup: LIVE DNS checklist (added/verified/SPF/DKIM/DMARC
+          read from the domains table) + deep link to the Domains page
+  Step 6  Account health: full launch checklist with per-item points
+
+  • Deliverability Readiness ring (0–100) in the rail, animated, computed
+    from REAL account state (domain auth, contacts, templates, profile) —
+    not from wizard clicks. Updates live after every step.
+  • Step state persists (ob_step) — refresh resumes where you left off
+  • Rail steps are clickable to revisit completed steps
+  • "Skip setup for now" always available; finish/skip release the funnel
+  • New signups are funneled into /welcome; EXISTING accounts and admin
+    workspaces are exempt (ob_done defaults to 1 for old accounts)
+
+INTERNALS
+  • onboarding_v73.py — self-contained: own column migrations on accounts
+    (ob_done, ob_step, ob_business_type, ob_industry, ob_size, ob_gst,
+    ob_biz_email, ob_logo, ob_purpose, ob_volume, ob_source, ob_country,
+    ob_timezone, ob_language, ob_mobile)
+  • app.py — 4-line additive patch in create_app() only
+  • CSRF enforced on all wizard POSTs (X-CSRFToken header)
+  • All 79 existing tests pass; new flow covered by end-to-end smoke test
+
+UPDATE — v73b (login + 3-step signup + dashboard theme)
+--------------------------------------------------------
+• templates/login.html — full redesign matching the new signup: split-screen
+  navy flight-path rail + light form card, show/hide password, Remember me,
+  Google/Microsoft placeholders, admin-login hint box (light styled).
+  Old version kept as templates/login_v69_backup.html.bak
+• templates/signup.html — now a 3-STEP wizard in the same card:
+    Step 1 Personal information → Next
+    Step 2 Account security (strength meter) → Next
+    Step 3 Region & language + Terms → Create account ✓
+  Progress dots ("Step X of 3") + rail flight path animates now/done states;
+  per-step validation with inline errors; Back buttons; single POST at the
+  end (backend unchanged).
+• DASHBOARD / whole app shell rebranded to the same design:
+    – Light theme is now the DEFAULT (dark still available via ☀️ toggle)
+    – ZyvoMail light palette: navy #1F4E78 brand, teal #00A8CC accent,
+      paper #F7FAFD background, white sidebar with sky active pill
+    – Sora headings + brand + buttons (matches auth pages)
+    – Sidebar brand mark changed to ✈ ZyvoMail; page titles → ZyvoMail
+    – Admin workspaces keep a distinct violet accent
+  All via additive CSS overrides appended to style.css — dark theme intact.
+• 79/79 tests pass.
+
+UPDATE — v73c (login security + signup extras + success screen)
+----------------------------------------------------------------
+LOGIN
+• Account lockout: failures tracked per email in login_history; counter
+  shown after a failed attempt ("N failed attempts remaining before a
+  15-minute lock"); 5 failures → temporarily locked 15 min (HTTP 429),
+  auto-unlocks; a successful sign-in resets the counter.
+• ⇪ Caps Lock ON warning while typing the password (login + signup).
+• "Signing in…" loading state with spinner on submit.
+• GitHub added to social buttons (Google · Microsoft · GitHub).
+• Trust strip under the form: SSL · DPDP & GDPR · ISO-aligned · 99.99%.
+SIGNUP (step 1 additions)
+• Company website (stored, cleaned of protocol — used for domain verify)
+• Business type / industry dropdown (pre-fills the onboarding wizard)
+• Company logo upload at signup (PNG/JPG/WEBP/SVG ≤ 2 MB)
+• Referral code (optional)
+• Country now auto-detected from the browser time zone (tz already was)
+• Password strength now 4 levels: 🔴 Weak / 🟠 Fair / 🟢 Good / 💪 Strong
+• Four required policies: Terms · Privacy · Anti-Spam · Cookie
+• Smarter "email exists" state: "An account already exists" with
+  Sign in instead → / Forgot password? actions
+• Clearer error copy ("valid business email address…")
+SUCCESS SCREEN
+• New /welcome-success after signup: 🎉 Welcome to ZyvoMail, verification
+  notice (check inbox + spam), Resend button unlocked after a 60 s
+  countdown (POST /resend-verification), then "Start guided setup →".
+DASHBOARD
+• "Last sign-in: Chrome · Windows 10/11 · Yesterday · IP …" line with a
+  "Not you? Review security →" link (parsed from login_history).
+ALREADY COVERED from the enterprise list: TOTP two-factor auth (/2fa),
+per-device session tokens + "sign out everywhere" on password reset,
+login history log, per-IP login rate limiting. Still open: passkeys,
+email-OTP 2FA, backup codes, captcha, remember-device, geo lookup.
+
+UPDATE — v73d (FINAL: glassmorphism login · magic link · trusted devices ·
+                backup codes · guided Basic-setup dashboard)
+------------------------------------------------------------------------
+LOGIN — full glassmorphism redesign (light default, page-local dark toggle)
+• Animated background: drifting soft gradient blobs + faint paper planes
+  (respects prefers-reduced-motion)
+• Frosted-glass card, logo + tagline "Email that lands."
+• 🌙/☀️ Dark–Light toggle (auth pages, saved to localStorage)
+• 🌐 Language selector (EN/TA/HI/TE/KN/ML — preference stored; interface
+  copy currently English)
+• 🪄 MAGIC LINK sign-in — real backend: POST /magic-link issues a single-use
+  15-minute token; GET /magic/<token> signs the user in (honours 2FA by
+  routing to the challenge). Dev build surfaces the link inline; set
+  app.config["MAGIC_LINK_DEV"]=False in production so it is only emailed.
+• 🔑 Login with Passkey button (WebAuthn — placeholder, coming soon)
+• Footer: ❓ Help Center · 💬 Live Chat · ZyvoMail v73 · 🔒 256-bit TLS badge
+• Kept: attempts counter + 15-min lockout, Caps Lock warning, spinner,
+  Remember me, 3 social buttons, trust strip, admin hint box
+EMAIL VERIFICATION
+• Opening the verification link now AUTO-LOGS THE USER IN (2FA-aware) and
+  lands on the dashboard — no second sign-in needed.
+TWO-FACTOR
+• Redesigned /2fa challenge page (ZyvoMail light card)
+• ✅ "Trust this device for 30 days" checkbox → sets a hashed token cookie
+  (trusted_devices table); future logins on that device skip the challenge
+• ✅ BACKUP RECOVERY CODES: generate 8 single-use codes from Settings →
+  Security (shown once, SHA-256 hashed at rest, old set invalidated);
+  entering a code like AB12-CD34 at the 2FA prompt signs you in
+DASHBOARD — guided "Basic setup" experience
+• Until setup is complete the dashboard shows a centred hero:
+  "{Good morning}, {name} 👋 — complete these simple steps", with a
+  vertical numbered stepper and offset-shadow step cards (teal/amber/
+  green/blue), each deep-linking to the right page; completed steps show ✓
+• Skip ⏭ button (POST /dashboard/skip-setup marks all steps done)
+• Sidebar "Basic setup — Step X of N" progress ring (conic gradient),
+  visible on every page until setup completes
+• Greeting follows IST (Asia/Kolkata) time of day
+NOTES
+• Layout patterns inspired by leading ESP onboarding flows; all visuals,
+  copy, and branding are original ZyvoMail — no third-party assets.
+• 79/79 regression tests pass. New tables: trusted_devices, twofa_backup.
+  New user columns: magic_token, magic_expires.
+
+UPDATE — v73e (ENTERPRISE POLISH PASS)
+---------------------------------------
+• Passkey button removed (per request).
+• ICONOGRAPHY: emojis replaced or neutralised across the product —
+  – ZyvoMail brand mark is now an SVG paper-plane monogram (sidebar,
+    login, signup, wizard)
+  – Sidebar nav / group / step icons render MONOCHROME (uniform icon set)
+  – Success screen: SVG check-circle; 2FA page: SVG shield
+  – Show/Hide password is a text control (aria-pressed), no eye emoji
+  – Strength labels are plain text: Weak / Fair / Good / Strong
+• LOGIN redesigned enterprise-clean: centred white card on neutral
+  background — no animated blobs, no glassmorphism, no dark toggle,
+  no language flags, NO ADMIN CREDENTIALS ON SCREEN (they now print to
+  the server console at startup), no dead social buttons. Kept: magic
+  link (real), lockout counter, Caps Lock warning, loading state,
+  Remember me, quiet footer (Help Center · Contact support · SSL/TLS ·
+  version). alert() popups replaced with a small toast.
+• SIGNUP: social buttons removed; loading overlay uses a spinner ring;
+  professional copy throughout.
+• DASHBOARD: step cards now flat enterprise style — 1px border, soft
+  elevation, teal accent bar on pending steps (colored offset shadows
+  removed); greeting without emoji ("Working late" → "Welcome back");
+  theme toggle removed from the top bar (light is the standard theme).
+• Keyboard focus rings (:focus-visible) and tabular numerals on stats.
+• 79/79 regression tests pass.
+
+UPDATE — v73f (real OAuth + dashboard refinements)
+---------------------------------------------------
+OAUTH SIGN-IN (real, not placeholders)
+• Google and Microsoft login via the standard OAuth 2.0 authorization-code
+  flow (CSRF state check, token exchange, OIDC userinfo).
+• Configure with env vars or app.config:
+    GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+    MS_CLIENT_ID     / MS_CLIENT_SECRET
+  Redirect URIs to register:  /auth/google/callback  /auth/microsoft/callback
+• Buttons appear on login AND signup ONLY when the provider is configured —
+  no dead buttons otherwise.
+• First OAuth sign-in creates a workspace (email pre-verified by the
+  provider) and routes into the guided setup; existing users are linked on
+  first use; 2FA is honoured.
+DASHBOARD
+• Recent activity card (last 6 audit events, live from the activity log)
+• Revenue tile shows ₹ (INR)
+• Sparkline uses brand colours (CSS variables) instead of hardcoded hex
+• Stat sub-labels rewritten to be factual ("12,340 emails sent") instead
+  of decorative arrows; remaining emoji stripped from section headings
+REVIEW NOTES (items your checklist marked missing that ALREADY EXIST):
+• Forgot Password + Password Reset via email link — /forgot and /reset,
+  rate-limited, 1-hour token expiry, enumeration-safe
+• Show/Hide password, Remember me, strength meter, login rate limiting,
+  account lockout, session management, login history, last-login display,
+  trusted devices, 2FA + backup codes — all shipped in v73b–v73e

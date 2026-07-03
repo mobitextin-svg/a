@@ -1,0 +1,50 @@
+ZyvoMail v82 — Enterprise verification flow + unified design system
+====================================================================
+
+NEW: 6-digit EMAIL OTP verification  (auth_v81.py + welcome_success.html)
+  • After signup: "Account created 🎉" screen with 6 OTP boxes
+  • Auto-focus, auto-advance, full-code paste, auto-submit on 6th digit
+  • Code expires in 10 minutes (live countdown shown)
+  • Resend with 60-second cooldown, max 3 resends/hour, max 5 attempts
+  • Single-use codes; a resend invalidates the previous code
+  • Classic /verify-email/<token> link still works (sent in the same email)
+  • Dev builds (no SMTP): code shown on screen; production: emailed only
+
+NEW: MOBILE NUMBER verification step  (/verify/mobile)
+  • Optional, skippable step after email verification
+  • India-first validation: 10 digits starting 6-9, +91 normalisation,
+    E.164 for other countries; "too short / too long / invalid / already
+    associated with another account" messages per spec
+  • 6-digit SMS OTP, 5-minute expiry, same attempt/resend policy
+  • SMS delivery via MAILSAAS_SMS_WEBHOOK (POST JSON {to, message} —
+    point it at your MSG91/Twilio relay); dev builds log the code
+  • All events written to the activity/audit log
+
+NEW: unified auth design system  (static/auth.css + _auth_rail.html)
+  • One enterprise family for Sign in · Forgot · Reset · 2FA · Verify
+    email · Verify mobile — navy/teal Zyvo identity, Sora + Inter
+  • Signature "delivery path" rail: dashed route with waypoint stops
+    showing where the user is in the flow
+  • Sign in redesigned (split layout); magic link, Google/Microsoft
+    OAuth, lockout warnings, caps-lock hint all preserved
+  • Reset password: live strength meter + rule checklist
+  • Responsive (rail collapses on mobile), keyboard focus rings,
+    prefers-reduced-motion respected
+
+APP-WIDE: v82 enterprise polish pass (appended to style.css, additive)
+  • Flat paper background, solid white topbar, Sora headings everywhere
+  • Admin shell: violet identity strip on topbar + sidebar (clear
+    context without a dark theme)
+  • Table row hover, tabular numerals in stats, refined buttons/inputs
+    matching the auth family, themed scrollbars, light-theme toasts
+
+WIRING (small edits)
+  • app.py: registers auth_v81; email-link verification now continues
+    to the mobile step; dashboard banner links to /verify
+  • onboarding_v73.py: /verify exempted from the onboarding funnel;
+    APP_VERSION → v82
+  • Flow: signup → /welcome-success (email OTP) → /verify/mobile →
+    /welcome (guided setup) → dashboard
+
+Backups of replaced templates kept as *_v81_backup.html.bak
+All 79 existing tests pass. New flow tested end to end.

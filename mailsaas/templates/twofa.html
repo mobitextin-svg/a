@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+{% from "_auth_rail.html" import rail, authhead with context %}
+<head>{{ authhead("Two-factor check") }}</head>
+<body class="auth">
+
+<div class="shell">
+  {{ rail("Second lock, ten seconds.",
+          "This account has two-factor authentication enabled. Enter the rotating code from your authenticator app.",
+          [("Password", "Accepted"),
+           ("Authenticator code", "6 digits, refreshes every 30 s"),
+           ("Signed in", "Session secured")], 1) }}
+
+  <main class="pane"><div class="pane-inner">
+    <div class="card center">
+      <div class="crest">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1F4E78"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h1 style="font-size:1.3rem">Two-factor authentication</h1>
+      <p class="sub">Enter the 6-digit code from your authenticator app.</p>
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+      {% endwith %}
+      <form method="post">
+        <input name="code" inputmode="numeric" pattern="[0-9]*" maxlength="8"
+               placeholder="••••••" required autofocus autocomplete="one-time-code"
+               style="text-align:center;font-size:1.3rem;letter-spacing:.35em;height:52px;font-weight:600">
+        <div class="hint" style="margin-top:8px">Lost your device? A saved backup code works here too.</div>
+        <button class="btn" type="submit">Verify and sign in</button>
+      </form>
+    </div>
+    <p class="below"><a href="{{ url_for('login') }}">← Back to sign in</a></p>
+  </div></main>
+</div>
+</body></html>

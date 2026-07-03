@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome · ZyvoMail</title>
+<meta name="csrf-token" content="{{ csrf_token }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0F2B4C; --navy:#1F4E78; --navy2:#163B5C; --teal:#00A8CC; --teal2:#0089A7;
+  --sky:#E8F4FB; --paper:#F7FAFD; --card:#FFFFFF; --line:#DBE7F1; --muted:#5C7189;
+  --good:#0E9F6E; --warn:#B45309; --bad:#DC2626;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;color:var(--ink);
+  background:
+    radial-gradient(900px 520px at 88% -10%, rgba(0,168,204,.10), transparent 60%),
+    radial-gradient(700px 460px at -8% 112%, rgba(31,78,120,.10), transparent 62%),
+    linear-gradient(180deg,#fbfdff,var(--paper));
+  background-attachment:fixed;
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Sora,Inter,sans-serif;letter-spacing:-.02em}
+a{color:var(--teal2);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:340px 1fr;min-height:100vh}
+
+/* ---- left rail: flight path + readiness ring ---- */
+.rail{background:linear-gradient(168deg,var(--navy) 0%,var(--navy2) 72%,#102A44 100%);
+  color:#EAF4FB;padding:36px 34px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{font-family:Sora;font-weight:700;font-size:1.3rem;display:flex;align-items:center;gap:10px;margin-bottom:34px}
+.brand .mark{width:30px;height:30px;border-radius:8px;background:var(--teal);
+  display:grid;place-items:center;color:#04222B}
+.flight{position:relative;padding-left:26px;flex:1}
+.flight::before{content:"";position:absolute;left:8px;top:10px;bottom:10px;
+  border-left:2px dashed rgba(140,200,230,.45)}
+.fstep{position:relative;padding:11px 0 11px 6px;color:#A7C4DB;font-size:.9rem;cursor:pointer}
+.fstep::before{content:"";position:absolute;left:-24px;top:16px;width:12px;height:12px;
+  border-radius:50%;background:#28516F;border:2px solid #4F82A8;transition:all .2s}
+.fstep.now{color:#fff;font-weight:600}
+.fstep.now::before{background:var(--teal);border-color:#7FE3F7;box-shadow:0 0 0 5px rgba(0,198,255,.18)}
+.fstep.done{color:#8FD8B8}
+.fstep.done::before{background:var(--good);border-color:#8FD8B8;content:""}
+.fstep .tick{display:none;position:absolute;left:-22px;top:9px;font-size:.7rem;color:#04351F}
+.fstep.done .tick{display:block}
+.fstep .pin{display:none}
+.ring-wrap{text-align:center;padding-top:22px;border-top:1px solid rgba(140,200,230,.25)}
+.ring{position:relative;width:118px;height:118px;margin:0 auto 8px}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{position:absolute;inset:0;display:grid;place-items:center;
+  font:700 1.5rem Sora;color:#fff}
+.ring .val small{display:block;font:500 .62rem Inter;color:#9FC3DB;letter-spacing:.08em;text-transform:uppercase}
+.ring-cap{font-size:.78rem;color:#9FC3DB}
+
+/* ---- right: steps ---- */
+.pane{padding:40px 48px 80px;max-width:860px}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}
+.topbar .who{font-size:.85rem;color:var(--muted)}
+.skip{font-size:.82rem;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline}
+.step{display:none;animation:in .3s ease}
+.step.on{display:block}
+@keyframes in{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.step h1{font-size:1.45rem;margin:0 0 4px}
+.step p.sub{color:var(--muted);margin:0 0 24px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:24px 26px;box-shadow:0 1px 3px rgba(15,43,76,.05)}
+label{display:block;font-size:.82rem;font-weight:600;margin:14px 0 6px;color:#31465E}
+label .opt{color:var(--muted);font-weight:400}
+input,select{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;
+  font:inherit;background:#fff;color:var(--ink)}
+input:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(0,168,204,.15)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+.hint{font-size:.75rem;color:var(--muted);margin-top:4px}
+.err{color:var(--bad);font-size:.82rem;margin-top:10px;display:none}
+
+/* choice chips / cards */
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
+.chip{border:1.5px solid var(--line);border-radius:10px;padding:11px;text-align:center;
+  cursor:pointer;font-size:.86rem;background:#fff;transition:all .15s;user-select:none}
+.chip:hover{border-color:#AFCBDF}
+.chip.sel{border-color:var(--teal);background:var(--sky);color:var(--navy);font-weight:600;
+  box-shadow:0 0 0 3px rgba(0,168,204,.12)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pick{border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;
+  background:#fff;display:flex;gap:12px;align-items:center;transition:all .15s;user-select:none}
+.pick:hover{border-color:#AFCBDF}
+.pick.sel{border-color:var(--teal);background:var(--sky);box-shadow:0 0 0 3px rgba(0,168,204,.12)}
+.pick .em{font-size:1.3rem;filter:grayscale(1);opacity:.8}
+.pick b{display:block;font-size:.9rem}
+.pick small{color:var(--muted);font-size:.76rem}
+.reco{margin-top:16px;border:1.5px solid #BFE8D4;background:#E7F7EF;border-radius:12px;
+  padding:14px 16px;display:none;font-size:.88rem}
+.reco.on{display:block}
+.reco b{color:#0B6B4A}
+.score-box{margin-top:16px;border-radius:12px;padding:16px 18px;display:none}
+.score-box.on{display:block}
+.score-box.good{background:#E7F7EF;border:1.5px solid #BFE8D4}
+.score-box.warn{background:#FDF3E4;border:1.5px solid #F1D6A8}
+.score-box.bad{background:#FDECEC;border:1.5px solid #F5C6C6}
+.stars{font-size:1.15rem;letter-spacing:2px}
+
+/* DNS checklist */
+.dns{list-style:none;margin:0;padding:0}
+.dns li{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);font-size:.92rem}
+.dns li:last-child{border-bottom:none}
+.dns .st{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  font-size:.72rem;font-weight:700;flex:none}
+.dns .ok{background:#D9F2E6;color:var(--good)}
+.dns .no{background:#F0F4F8;color:#9AAEC0;border:1.5px dashed #C5D5E2}
+.dns .why{margin-left:auto;font-size:.76rem;color:var(--muted)}
+
+/* checklist step 6 */
+.launch{list-style:none;margin:0;padding:0}
+.launch li{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line);font-size:.92rem}
+.launch li:last-child{border-bottom:none}
+.launch .pts{margin-left:auto;font-size:.76rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.navbtns{display:flex;justify-content:space-between;margin-top:22px;gap:12px}
+.btn{padding:12px 26px;border:none;border-radius:10px;background:var(--navy);color:#fff;
+  font:600 .95rem Sora,Inter,sans-serif;cursor:pointer;transition:background .15s}
+.btn:hover{background:#255C8C}
+.btn.ghost{background:#fff;color:var(--navy);border:1.5px solid var(--line)}
+.btn.ghost:hover{background:var(--sky)}
+.btn.go{background:var(--good)}
+.btn.go:hover{background:#0B8A5F}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+.logo-drop{border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;
+  color:var(--muted);font-size:.83rem;cursor:pointer;margin-top:6px}
+.logo-drop:hover{border-color:var(--teal)}
+.logo-drop img{max-height:48px;display:block;margin:0 auto 6px}
+@media (max-width:920px){.layout{grid-template-columns:1fr}.rail{position:static;height:auto;flex-direction:row;
+  flex-wrap:wrap;align-items:center;gap:16px;padding:20px}.flight{display:none}
+  .ring-wrap{border:none;padding:0;margin-left:auto}.ring{width:74px;height:74px}
+  .pane{padding:26px 18px 60px}.cards,.chips{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+</style>
+</head><body>
+
+<div class="layout">
+  <aside class="rail">
+    <div class="brand"><span class="mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#04222B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg></span>Zyvo<span style="color:var(--teal)">Mail</span></div>
+    <nav class="flight" id="flight">
+      <div class="fstep" data-go="1"><span class="pin">✈</span><span class="tick">✓</span>Business profile</div>
+      <div class="fstep" data-go="2"><span class="pin">✈</span><span class="tick">✓</span>Sending purpose</div>
+      <div class="fstep" data-go="3"><span class="pin">✈</span><span class="tick">✓</span>Email volume</div>
+      <div class="fstep" data-go="4"><span class="pin">✈</span><span class="tick">✓</span>Compliance check</div>
+      <div class="fstep" data-go="5"><span class="pin">✈</span><span class="tick">✓</span>Domain setup</div>
+      <div class="fstep" data-go="6"><span class="pin">✈</span><span class="tick">✓</span>Ready to send</div>
+    </nav>
+    <div class="ring-wrap">
+      <div class="ring">
+        <svg width="118" height="118" viewBox="0 0 118 118">
+          <circle cx="59" cy="59" r="52" fill="none" stroke="rgba(140,200,230,.25)" stroke-width="9"/>
+          <circle id="ringArc" cx="59" cy="59" r="52" fill="none" stroke="#00C6FF" stroke-width="9"
+            stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7"
+            style="transition:stroke-dashoffset .6s ease"/>
+        </svg>
+        <div class="val"><span><span id="ringVal">0</span><small>Readiness</small></span></div>
+      </div>
+      <div class="ring-cap">Deliverability readiness climbs<br>as you complete each step.</div>
+    </div>
+  </aside>
+
+  <main class="pane">
+    <div class="topbar">
+      <div class="who">Setting up <b>{{ acct['name'] }}</b> · {{ user['email'] }}</div>
+      <button class="skip" onclick="skipAll()">Skip setup for now →</button>
+    </div>
+
+    <!-- STEP 1 · Business profile -->
+    <section class="step" data-step="1">
+      <h1>Tell us about your business</h1>
+      <p class="sub">This configures invoicing, sending limits and compliance defaults for you.</p>
+      <div class="panel">
+        <label>Business type *</label>
+        <div class="chips" id="btChips">
+          {% for bt in business_types %}<div class="chip{{ ' sel' if acct['ob_business_type']==bt }}" data-v="{{ bt }}">{{ bt }}</div>{% endfor %}
+        </div>
+        <div class="grid2">
+          <div><label>Industry</label>
+            <select id="industry">{% for i in industries %}<option {{ 'selected' if acct['ob_industry']==i }}>{{ i }}</option>{% endfor %}</select></div>
+          <div><label>Company size</label>
+            <select id="size">{% for s in sizes %}<option {{ 'selected' if acct['ob_size']==s }}>{{ s }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="grid2">
+          <div><label>GST number <span class="opt">(optional)</span></label>
+            <input id="gst" placeholder="33ABCDE1234F1Z5" maxlength="15" value="{{ acct['ob_gst'] or '' }}" style="text-transform:uppercase">
+            <div class="hint">Used on your ₹ INR invoices.</div></div>
+          <div><label>Business email <span class="opt">(optional)</span></label>
+            <input id="bizEmail" type="email" placeholder="billing@yourcompany.com" value="{{ acct['ob_biz_email'] or '' }}"></div>
+        </div>
+        <label>Company logo <span class="opt">(optional)</span></label>
+        <div class="logo-drop" id="logoDrop">
+          {% if acct['ob_logo'] %}<img src="{{ url_for('static', filename='uploads/logos/' + acct['ob_logo']) }}" alt="logo">{% endif %}
+          <span id="logoTxt">{{ 'Replace logo' if acct['ob_logo'] else 'Click to upload PNG / JPG / SVG — appears on invoices and email footers' }}</span>
+          <input type="file" id="logoFile" accept=".png,.jpg,.jpeg,.webp,.svg" hidden>
+        </div>
+        <div class="err" id="err1"></div>
+      </div>
+      <div class="navbtns"><span></span><button class="btn" onclick="save(1)">Continue →</button></div>
+    </section>
+
+    <!-- STEP 2 · Purpose -->
+    <section class="step" data-step="2">
+      <h1>What will you use ZyvoMail for?</h1>
+      <p class="sub">Pick everything that applies — we pre-configure tracking, headers and templates to match.</p>
+      <div class="panel">
+        <div class="cards" id="purposeCards">
+          {% for key, lbl, em in purposes %}
+          <div class="pick{{ ' sel' if key in purpose_set }}" data-v="{{ key }}">
+            <span class="em">{{ em }}</span><span><b>{{ lbl }}</b></span>
+          </div>{% endfor %}
+        </div>
+        <div class="err" id="err2"></div>
+      </div>
+      <div class="navbtns"><button class="btn ghost" onclick="go(1)">← Back</button>
+        <button class="btn" onclick="save(2)">Continue →</button></div>
+    </section>
+
+    <!-- STEP 3 · Volume -->
+    <section class="step" data-step="3">
+      <h1>How many emails will you send?</h1>
+      <p class="sub">Your answer sets the recommended plan and a safe warm-up schedule.</p>
+      <div class="panel">
+        <div class="cards" id="volCards">
+          {% for key, lbl, plan, warm in volumes %}
+          <div class="pick{{ ' sel' if acct['ob_volume']==key }}" data-v="{{ key }}" data-plan="{{ plan }}" data-warm="{{ warm }}">
+            <span class="em">📨</span><span><b>{{ lbl }}</b><small>per month</small></span>
+          </div>{% endfor %}
+        </div>
+        <div class="reco" id="volReco"></div>
+        <div class="err" id="err3"></div>
+      </div>
+      <div class="navbtns"><button class="btn ghost" onclick="go(2)">← Back</button>
+        <button class="btn" onclick="save(3)">Continue →</button></div>
+    </section>
+
+    <!-- STEP 4 · Compliance -->
+    <section class="step" data-step="4">
+      <h1>How did you obtain your contacts?</h1>
+      <p class="sub">Honest answers keep your sender reputation — and your account — healthy.</p>
+      <div class="panel">
+        <div class="cards" id="srcCards">
+          {% for key, lbl, stars, verdict, tone in sources %}
+          <div class="pick{{ ' sel' if acct['ob_source']==key }}" data-v="{{ key }}" data-stars="{{ stars }}"
+               data-verdict="{{ verdict }}" data-tone="{{ tone }}">
+            <span class="em">{{ '🌐' if key=='website' else '📰' if key=='newsletter' else '🛒' if key=='purchase' else '🗂️' if key=='crm' else '🔌' if key=='api' else '🎟️' if key=='event' else '⚠️' if key=='purchased' else '❔' }}</span>
+            <span><b>{{ lbl }}</b></span>
+          </div>{% endfor %}
+        </div>
+        <div class="score-box" id="srcScore"></div>
+        <div class="err" id="err4"></div>
+      </div>
+      <div class="navbtns"><button class="btn ghost" onclick="go(3)">← Back</button>
+        <button class="btn" onclick="save(4)">Continue →</button></div>
+    </section>
+
+    <!-- STEP 5 · Domain -->
+    <section class="step" data-step="5">
+      <h1>Domain setup</h1>
+      <p class="sub">Authentication is what separates the inbox from the spam folder. Live status below.</p>
+      <div class="panel">
+        <ul class="dns">
+          {% set dnsitems = [('Domain added', 'domadd'), ('Domain verified', 'domver'),
+                             ('SPF record', 'spf'), ('DKIM record', 'dkim'),
+                             ('DMARC record', 'dmarc')] %}
+          <li><span class="st no" data-k="Domain added">•</span>Add your sending domain
+            <span class="why">e.g. mail.yourcompany.com</span></li>
+          <li><span class="st no" data-k="Domain verified">•</span>Verify ownership
+            <span class="why">TXT record</span></li>
+          <li><span class="st no" data-k="SPF record">•</span>SPF
+            <span class="why">authorises our servers</span></li>
+          <li><span class="st no" data-k="DKIM record">•</span>DKIM
+            <span class="why">cryptographic signature</span></li>
+          <li><span class="st no" data-k="DMARC record">•</span>DMARC
+            <span class="why">policy &amp; reporting</span></li>
+        </ul>
+        <div class="reco on" style="margin-top:18px">
+          <b>Open the Domains page</b> to add records with copy-paste values, then return here —
+          status refreshes automatically. <a href="{{ url_for('domains') }}" target="_blank">Go to Domains ↗</a>
+        </div>
+      </div>
+      <div class="navbtns"><button class="btn ghost" onclick="go(4)">← Back</button>
+        <button class="btn" onclick="save(5)">Continue →</button></div>
+    </section>
+
+    <!-- STEP 6 · Ready -->
+    <section class="step" data-step="6">
+      <h1>Account health</h1>
+      <p class="sub">Everything that affects whether your first campaign lands in the inbox.</p>
+      <div class="panel">
+        <ul class="launch" id="launchList"></ul>
+      </div>
+      <div class="navbtns"><button class="btn ghost" onclick="go(5)">← Back</button>
+        <button class="btn go" onclick="finish()">Get started →</button></div>
+    </section>
+  </main>
+</div>
+
+<script>
+var CSRF=document.querySelector('meta[name=csrf-token]').content;
+var READY={{ ready | tojson }};
+var cur={{ acct['ob_step'] or 1 }};
+if(cur<1||cur>6)cur=1;
+var maxSeen=cur;
+
+function ringSet(score){
+  var C=326.7;
+  document.getElementById('ringArc').style.strokeDashoffset=C-(C*score/100);
+  document.getElementById('ringVal').textContent=score;
+}
+function renderReady(r){
+  READY=r; ringSet(r.score);
+  // step-5 DNS list
+  r.items.forEach(function(it){
+    var el=document.querySelector('.dns .st[data-k="'+it.label+'"]');
+    if(el){el.className='st '+(it.ok?'ok':'no');el.textContent=it.ok?'✓':'•';}
+  });
+  // step-6 launch list
+  var L=document.getElementById('launchList'); L.innerHTML='';
+  r.items.forEach(function(it){
+    var li=document.createElement('li');
+    li.innerHTML='<span class="st '+(it.ok?'ok':'no')+'" style="width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:.72rem;font-weight:700;flex:none;'+
+      (it.ok?'background:#D9F2E6;color:#0E9F6E':'background:#F0F4F8;color:#9AAEC0;border:1.5px dashed #C5D5E2')+'">'+
+      (it.ok?'✓':'•')+'</span>'+it.label+
+      '<span class="pts">'+(it.ok?it.points:0)+' / '+it.points+'</span>';
+    L.appendChild(li);
+  });
+}
+function go(n){
+  cur=n; if(n>maxSeen)maxSeen=n;
+  document.querySelectorAll('.step').forEach(function(s){
+    s.classList.toggle('on', +s.dataset.step===n);});
+  document.querySelectorAll('#flight .fstep').forEach(function(f,i){
+    f.classList.toggle('now', i+1===n);
+    f.classList.toggle('done', i+1<maxSeen && i+1!==n);});
+  window.scrollTo({top:0});
+}
+document.querySelectorAll('#flight .fstep').forEach(function(f){
+  f.onclick=function(){var n=+f.dataset.go; if(n<=maxSeen)go(n);};
+});
+
+// selection helpers
+function single(containerId){
+  var c=document.getElementById(containerId);
+  c.addEventListener('click',function(e){
+    var t=e.target.closest('[data-v]'); if(!t)return;
+    c.querySelectorAll('[data-v]').forEach(function(x){x.classList.remove('sel');});
+    t.classList.add('sel');
+    if(containerId==='volCards')volReco(t);
+    if(containerId==='srcCards')srcScore(t);
+  });
+}
+function multi(containerId){
+  document.getElementById(containerId).addEventListener('click',function(e){
+    var t=e.target.closest('[data-v]'); if(t)t.classList.toggle('sel');
+  });
+}
+single('btChips'); multi('purposeCards'); single('volCards'); single('srcCards');
+
+function volReco(t){
+  var r=document.getElementById('volReco');
+  r.className='reco on';
+  r.innerHTML='Recommended plan: <b>'+t.dataset.plan+'</b> &nbsp;·&nbsp; '+t.dataset.warm;
+}
+function srcScore(t){
+  var b=document.getElementById('srcScore'), n=+t.dataset.stars,
+      stars='★'.repeat(n)+'☆'.repeat(5-n);
+  b.className='score-box on '+t.dataset.tone;
+  b.innerHTML='<div class="stars">'+stars+'</div><b>Compliance score</b> — '+t.dataset.verdict;
+}
+// restore recommendation boxes on load
+var v0=document.querySelector('#volCards .sel'); if(v0)volReco(v0);
+var s0=document.querySelector('#srcCards .sel'); if(s0)srcScore(s0);
+
+// logo upload
+var drop=document.getElementById('logoDrop'), lf=document.getElementById('logoFile');
+drop.onclick=function(){lf.click();};
+lf.onchange=function(){
+  var fd=new FormData(); fd.append('logo', lf.files[0]);
+  fetch('/welcome/logo',{method:'POST',headers:{'X-CSRFToken':CSRF},body:fd})
+    .then(function(r){return r.json();}).then(function(j){
+      if(!j.ok){alert(j.error||'Upload failed');return;}
+      drop.querySelector('img')&&drop.querySelector('img').remove();
+      var im=document.createElement('img'); im.src=j.url; drop.prepend(im);
+      document.getElementById('logoTxt').textContent='Replace logo';
+    });
+};
+
+function payload(step){
+  if(step===1){
+    var bt=document.querySelector('#btChips .sel');
+    return {step:1, business_type:bt?bt.dataset.v:'',
+      industry:document.getElementById('industry').value,
+      size:document.getElementById('size').value,
+      gst:document.getElementById('gst').value,
+      biz_email:document.getElementById('bizEmail').value};
+  }
+  if(step===2){
+    return {step:2, purposes:[].map.call(
+      document.querySelectorAll('#purposeCards .sel'),function(x){return x.dataset.v;})};
+  }
+  if(step===3){var v=document.querySelector('#volCards .sel');
+    return {step:3, volume:v?v.dataset.v:''};}
+  if(step===4){var s=document.querySelector('#srcCards .sel');
+    return {step:4, source:s?s.dataset.v:''};}
+  return {step:step};
+}
+function save(step){
+  var err=document.getElementById('err'+step); if(err)err.style.display='none';
+  fetch('/welcome/save',{method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body:JSON.stringify(payload(step))})
+  .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+  .then(function(o){
+    if(!o.j.ok){if(err){err.textContent=o.j.error||'Something went wrong.';err.style.display='block';}return;}
+    renderReady(o.j.ready); go(step+1);
+  });
+}
+function finish(){
+  fetch('/welcome/finish',{method:'POST',headers:{'X-CSRFToken':CSRF}})
+    .then(function(r){return r.json();}).then(function(j){location.href=j.next;});
+}
+function skipAll(){
+  fetch('/welcome/skip',{method:'POST',headers:{'X-CSRFToken':CSRF}})
+    .then(function(r){return r.json();}).then(function(j){location.href=j.next;});
+}
+
+renderReady(READY);
+go(cur);
+</script>
+</body></html>

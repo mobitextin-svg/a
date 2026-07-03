@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Microsoft SNDS{% endblock %}
+{% block content %}
+<h1>🪟 Microsoft SNDS</h1>
+<p class="muted">Smart Network Data Services — Outlook/Hotmail IP status &amp; complaints.
+  <span class="badge {{ 'b-valid' if connected else 'b-Draft' }}">{{ 'Connected' if connected else 'Demo data' }}</span></p>
+{% if not connected %}<div class="flash error" style="margin-top:12px">Not connected to Microsoft SNDS. Connect it under <a href="{{ url_for('integrations') }}">Integrations</a> for live data.</div>{% endif %}
+<div class="card" style="margin-top:14px">
+  <table>
+    <thead><tr><th>IP</th><th>SNDS status</th><th class="num">Complaint rate</th><th class="num">Trap hits</th><th>Filter result</th></tr></thead>
+    <tbody>
+    {% for i in ips %}
+      <tr><td><b>{{ i.ip }}</b></td>
+        <td><span class="badge {{ 'b-valid' if i.status=='Green' else ('b-risky' if i.status=='Yellow' else 'b-invalid') }}">{{ i.status }}</span></td>
+        <td class="num">{{ i.complaint }}%</td><td class="num">{{ i.traps }}</td>
+        <td><span class="badge {{ 'b-valid' if i.filter=='Inbox' else 'b-invalid' }}">{{ i.filter }}</span></td></tr>
+    {% else %}<tr><td colspan="5" class="empty">No sending IPs configured.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
