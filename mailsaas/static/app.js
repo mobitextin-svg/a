@@ -30,9 +30,9 @@
     if (btn) btn.textContent = theme === "light" ? "🌙" : "☀️";
   }
   function initTheme() {
-    var saved = "dark";
-    try { saved = localStorage.getItem("mailsaas-theme") || "light"; } catch (e) {}
-    applyTheme(saved);
+    // The product ships light-only now — a previously saved "dark" choice is
+    // ignored so every page renders the clean light template.
+    applyTheme("light");
     var btn = document.getElementById("themeToggle");
     if (btn) btn.addEventListener("click", function () {
       var cur = document.documentElement.getAttribute("data-theme") || "dark";

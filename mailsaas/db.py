@@ -403,6 +403,16 @@ CREATE TABLE IF NOT EXISTS contact_imports (
     created_at   TEXT NOT NULL
 );
 
+-- Every contact export a user runs (scope + row count) — the Export History.
+CREATE TABLE IF NOT EXISTS export_history (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    scope        TEXT,                         -- list name / 'all' / tag:<name>
+    fmt          TEXT,                         -- csv / excel
+    rows         INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS account_tags (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id   INTEGER NOT NULL,
@@ -537,6 +547,11 @@ _MIGRATIONS = [
     # stored as a JSON object {field_name: value}. Lets ANY custom variable
     # (e.g. {{postal_pincode}}, {{din_number}}) resolve to real data.
     ("contacts", "custom_json", "TEXT"),
+    # Contact List Management upgrade: archivable lists + richer contact profile.
+    ("contact_lists", "archived", "INTEGER NOT NULL DEFAULT 0"),
+    ("contacts", "job_title", "TEXT"),
+    ("contacts", "birthday", "TEXT"),
+    ("contacts", "source", "TEXT"),
 ]
 
 

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}{{ c.name or c.email }}{% endblock %}
+{% block content %}
+<style>
+.cp-wrap{max-width:1180px}
+.cp-back{color:var(--muted);font-size:.85rem}
+.cp-head{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:8px 0 20px}
+.cp-avatar{width:56px;height:56px;border-radius:50%;background:#eef3fd;color:#1a48b8;
+  display:grid;place-items:center;font-size:1.4rem;font-weight:700}
+.cp-head h1{margin:0;font-size:1.5rem}
+.cp-head .sub{color:var(--muted)}
+.cp-score{margin-left:auto;text-align:center;background:var(--panel);
+  border:1px solid var(--line);border-radius:14px;padding:10px 22px}
+.cp-score b{display:block;font-size:1.5rem;color:#1a73e8}
+.cp-score span{font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--faint);font-weight:600}
+.cp-grid{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+@media(max-width:960px){.cp-grid{grid-template-columns:1fr}}
+.cp-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:18px;margin-bottom:18px}
+.cp-card h2{font-size:.95rem;margin:0 0 12px}
+.cp-kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;
+  border-bottom:1px solid var(--line);font-size:.9rem}
+.cp-kv:last-child{border-bottom:none}
+.cp-kv span:first-child{color:var(--muted)}
+.cp-kv span:last-child{text-align:right;word-break:break-word}
+.cp-chip{display:inline-block;background:#eef3fd;color:#1a48b8;border-radius:999px;
+  padding:3px 12px;font-size:.8rem;font-weight:600;margin:0 6px 6px 0}
+.cp-note{background:var(--panel2);border-radius:10px;padding:10px 12px;font-size:.9rem}
+.cp-ev{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);
+  font-size:.88rem}
+.cp-ev:last-child{border-bottom:none}
+.cp-ev .when{color:var(--faint);white-space:nowrap;min-width:150px}
+.cp-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.cp-tab{background:var(--panel2);border:1px solid var(--line);border-radius:999px;
+  padding:6px 14px;font-size:.82rem;font-weight:600;color:var(--muted);cursor:pointer}
+.cp-tab.on{background:#0b0d13;color:#fff;border-color:#0b0d13}
+.cp-pane{display:none}
+.cp-pane.on{display:block}
+.v-valid{color:#0e9f6e;font-weight:600}.v-risky{color:#b45309;font-weight:600}
+.v-invalid{color:#c81e1e;font-weight:600}
+</style>
+
+<div class="cp-wrap">
+  <a class="cp-back" href="{{ url_for('contacts', list=(c.list_id or 'all')) }}">← Back to contacts</a>
+  <div class="cp-head">
+    <div class="cp-avatar">{{ (c.name or c.email)[:1]|upper }}</div>
+    <div>
+      <h1>{{ c.name or c.email }}</h1>
+      <div class="sub">{{ c.email }} · <span class="badge b-{{ c.status }}">{{ c.status }}</span></div>
+    </div>
+    <div class="cp-score"><b>{{ score }}</b><span>Engagement</span></div>
+  </div>
+
+  <div class="cp-grid">
+    <div>
+      <div class="cp-card">
+        <h2>Profile</h2>
+        <div class="cp-kv"><span>Email</span><span>{{ c.email }}</span></div>
+        <div class="cp-kv"><span>Mobile</span><span>{{ c.mobile or '--' }}</span></div>
+        <div class="cp-kv"><span>Company</span><span>{{ c.company or '--' }}</span></div>
+        <div class="cp-kv"><span>Job Title</span><span>{{ c.job_title or '--' }}</span></div>
+        <div class="cp-kv"><span>Country</span><span>{{ c.country or '--' }}</span></div>
+        <div class="cp-kv"><span>State</span><span>{{ c.state or '--' }}</span></div>
+        <div class="cp-kv"><span>City</span><span>{{ c.city or '--' }}</span></div>
+        <div class="cp-kv"><span>Birthday</span><span>{{ c.birthday or '--' }}</span></div>
+        <div class="cp-kv"><span>Balance</span><span>{{ c.balance or '--' }}</span></div>
+        <div class="cp-kv"><span>Last Purchase</span><span>{{ c.last_purchase or '--' }}</span></div>
+        <div class="cp-kv"><span>Source</span><span>{{ c.source or 'manual' }}</span></div>
+        <div class="cp-kv"><span>Created</span><span>{{ c.created_at }}</span></div>
+      </div>
+
+      <div class="cp-card">
+        <h2>Email Verification</h2>
+        {% if ver %}
+        <div class="cp-kv"><span>Status</span><span class="v-{{ ver.result }}">{{ ver.result|capitalize }}</span></div>
+        <div class="cp-kv"><span>Score</span><span>{{ ver.score }}/100</span></div>
+        <div class="cp-kv"><span>Reason</span><span>{{ ver.reason }}</span></div>
+        <div class="cp-kv"><span>Checked</span><span>{{ ver.created_at }}</span></div>
+        {% else %}
+        <p class="cp-note">Not verified yet — run verification from the contacts list
+          (select the contact → <b>Verify</b>).</p>
+        {% endif %}
+      </div>
+
+      <div class="cp-card">
+        <h2>Lists &amp; Tags</h2>
+        <div class="cp-kv"><span>List</span>
+          <span>{% if lst %}<a href="{{ url_for('contacts', list=lst.id) }}">{{ lst.name }}</a>{% else %}— No list —{% endif %}</span></div>
+        <div style="margin-top:10px">
+          {% for t in tags %}<a class="cp-chip" href="{{ url_for('contacts', list='all', tag=t) }}">🏷 {{ t }}</a>{% else %}<span class="cp-note" style="display:block">No tags.</span>{% endfor %}
+        </div>
+      </div>
+
+      {% if custom or fields %}
+      <div class="cp-card">
+        <h2>Custom Fields</h2>
+        {% for f in fields %}
+        <div class="cp-kv"><span>{{ f.label or f.name }}</span><span>{{ custom.get(f.name) or '--' }}</span></div>
+        {% else %}
+        {% for k, v in custom.items() %}<div class="cp-kv"><span>{{ k }}</span><span>{{ v }}</span></div>{% endfor %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if c.note %}
+      <div class="cp-card"><h2>Notes</h2><div class="cp-note">{{ c.note }}</div></div>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="cp-card">
+        <h2 style="margin-bottom:4px">Engagement</h2>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px">
+          <div><b style="font-size:1.2rem">{{ msgs|length }}</b><div class="small" style="color:var(--faint)">Emails sent</div></div>
+          <div><b style="font-size:1.2rem">{{ opens }}</b><div class="small" style="color:var(--faint)">Opens</div></div>
+          <div><b style="font-size:1.2rem">{{ clicks }}</b><div class="small" style="color:var(--faint)">Clicks</div></div>
+          <div><b style="font-size:1.2rem">{{ bounces|length }}</b><div class="small" style="color:var(--faint)">Bounces</div></div>
+        </div>
+      </div>
+
+      <div class="cp-card">
+        <div class="cp-tabs">
+          <button type="button" class="cp-tab on" data-pane="timeline">Activity Timeline</button>
+          <button type="button" class="cp-tab" data-pane="campaigns">Campaign History</button>
+          <button type="button" class="cp-tab" data-pane="opens">Opens &amp; Clicks</button>
+          <button type="button" class="cp-tab" data-pane="bounces">Bounces &amp; Complaints</button>
+        </div>
+
+        <div class="cp-pane on" id="pane-timeline">
+          {% for e in events %}
+          <div class="cp-ev"><span class="when">{{ e.created_at }}</span>
+            <span>{{ {'imported':'📥 Imported','tag_added':'🏷 Tag added','tag_removed':'🏷 Tag removed','note':'📝 Note'}.get(e.kind, e.kind) }}{% if e.detail %} — {{ e.detail }}{% endif %}</span></div>
+          {% else %}
+          <p class="cp-note">No recorded activity yet.</p>
+          {% endfor %}
+        </div>
+
+        <div class="cp-pane" id="pane-campaigns">
+          {% for m in msgs %}
+          <div class="cp-ev"><span class="when">{{ m.created_at }}</span>
+            <span>🚀 {{ m.cname or 'Campaign' }} — {{ m.status }}{% if m.opened %} · opened{% endif %}{% if m.clicked %} · clicked{% endif %}</span></div>
+          {% else %}
+          <p class="cp-note">No campaigns have reached this contact yet.</p>
+          {% endfor %}
+        </div>
+
+        <div class="cp-pane" id="pane-opens">
+          {% set ns = namespace(any=false) %}
+          {% for m in msgs %}
+            {% if m.opened %}{% set ns.any = true %}
+            <div class="cp-ev"><span class="when">{{ m.opened_at or m.created_at }}</span><span>👁 Opened — {{ m.cname or 'Campaign' }}</span></div>
+            {% endif %}
+            {% if m.clicked %}{% set ns.any = true %}
+            <div class="cp-ev"><span class="when">{{ m.clicked_at or m.created_at }}</span><span>🔗 Clicked — {{ m.cname or 'Campaign' }}</span></div>
+            {% endif %}
+          {% endfor %}
+          {% if not ns.any %}<p class="cp-note">No opens or clicks recorded.</p>{% endif %}
+        </div>
+
+        <div class="cp-pane" id="pane-bounces">
+          {% for m in bounces %}
+          <div class="cp-ev"><span class="when">{{ m.created_at }}</span><span>↩️ Bounced — {{ m.cname or 'Campaign' }}</span></div>
+          {% endfor %}
+          {% for r in complaints %}
+          <div class="cp-ev"><span class="when">{{ r.created_at }}</span>
+            <span>{{ '🚨 Marked as spam' if r.kind == 'complaint' else '🚫 Unsubscribed' }}</span></div>
+          {% endfor %}
+          {% if not bounces and not complaints %}<p class="cp-note">No bounces or complaints — clean record.</p>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.cp-tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.cp-tab').forEach(function(x){x.classList.remove('on');});
+    document.querySelectorAll('.cp-pane').forEach(function(x){x.classList.remove('on');});
+    t.classList.add('on');
+    document.getElementById('pane-'+t.dataset.pane).classList.add('on');});});
+</script>
+{% endblock %}

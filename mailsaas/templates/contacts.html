@@ -313,7 +313,12 @@
           {% for l in lists %}<option value="{{ l.id }}">📋 {{ l.name }}</option>{% endfor %}
         </select>
         <button class="btn sm" form="bulkForm" name="action" value="assign_list">Move</button>
+        <button class="btn sm" form="bulkForm" name="action" value="copy_selected">Copy</button>
         <button type="button" class="btn sm" data-open="dlgTag">🏷 Tag</button>
+        <button class="btn sm" form="bulkForm" name="action" value="verify_selected"
+                onclick="return confirm('Verify the selected contacts now?\n\nInvalid addresses will be marked bounced.')">✅ Verify</button>
+        <button class="btn ghost sm" form="bulkForm" name="action" value="unsub_selected">Unsubscribe</button>
+        <button class="btn ghost sm" form="bulkForm" name="action" value="resub_selected">Resubscribe</button>
         <button class="btn danger sm" form="bulkForm" name="action" value="delete_selected"
                 onclick="return confirm('Delete the selected contacts?\n\nThey will be moved to Trash and can be restored later.')">Delete</button>
       </div>
@@ -326,8 +331,8 @@
         {% for c in contacts %}
           <tr>
             <td><input type="checkbox" name="ids" value="{{ c.id }}" class="rowChk" form="bulkForm"></td>
-            <td>{{ c.email }}{% for t in (c.tags or '').split(',') if t %} <span class="tag">{{ t.strip() }}</span>{% endfor %}</td>
-            <td>{{ c.name or '—' }}</td>
+            <td><a href="{{ url_for('contact_profile', cid=c.id) }}" title="Open full profile">{{ c.email }}</a>{% for t in (c.tags or '').split(',') if t %} <span class="tag">{{ t.strip() }}</span>{% endfor %}</td>
+            <td><a href="{{ url_for('contact_profile', cid=c.id) }}" style="color:inherit">{{ c.name or '—' }}</a></td>
             <td class="faint small">{{ c.mobile or '—' }}</td>
             <td class="faint small">{{ c.company or '—' }}</td>
             {% if not is_list %}<td class="faint small">{% for l in lists if l.id==c.list_id %}{{ l.name }}{% else %}—{% endfor %}</td>{% endif %}
@@ -341,6 +346,8 @@
                 data-state="{{ c.state or '' }}" data-note="{{ c.note or '' }}"
                 data-country="{{ c.country or '' }}" data-balance="{{ c.balance or '' }}"
                 data-last_purchase="{{ c.last_purchase or '' }}"
+                data-job_title="{{ c.job_title or '' }}" data-birthday="{{ c.birthday or '' }}"
+                data-source="{{ c.source or '' }}"
                 data-custom="{{ c.custom_json or '{}' }}"
                 data-list="{{ c.list_id or '' }}" title="Edit">✏️</button>
               {% if c.status != 'blocked' %}
@@ -389,6 +396,9 @@
     <div><label class="small">👤 Name</label><input name="name"></div>
     <div><label class="small">📱 Mobile</label><input name="mobile"></div>
     <div><label class="small">🏢 Company</label><input name="company"></div>
+    <div><label class="small">💼 Job Title</label><input name="job_title"></div>
+    <div><label class="small">🎂 Birthday</label><input name="birthday" placeholder="YYYY-MM-DD"></div>
+    <div><label class="small">🧭 Source</label><input name="source" placeholder="manual"></div>
     <div><label class="small">🏙 City</label><input name="city"></div>
     <div><label class="small">🌍 State</label><input name="state"></div>
     <div><label class="small">🌐 Country</label><input name="country"></div>
@@ -432,6 +442,9 @@
     <option value="skip"   {{ 'selected' if acct.default_import_rule=='skip' }}>Skip Duplicates — keep existing unchanged</option>
     <option value="update" {{ 'selected' if acct.default_import_rule=='update' }}>Update Existing — refresh name, mobile, company, city, state</option>
   </select>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:10px" class="small">
+    <input type="checkbox" name="verify_after" value="1" style="width:auto">
+    ✅ Verify emails after import <span class="faint">(invalid → marked bounced)</span></label>
   <p class="faint small" style="margin-top:6px"><a href="{{ url_for('contact_lists_sample') }}">Download sample CSV</a></p>
   <div class="ct-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Import</button></div>
 </form></dialog>
@@ -514,6 +527,9 @@
       <div><label class="small">👤 Name</label><input name="name" id="e-name"></div>
       <div><label class="small">📱 Mobile</label><input name="mobile" id="e-mobile"></div>
       <div><label class="small">🏢 Company</label><input name="company" id="e-company"></div>
+      <div><label class="small">💼 Job Title</label><input name="job_title" id="e-job_title"></div>
+      <div><label class="small">🎂 Birthday</label><input name="birthday" id="e-birthday"></div>
+      <div><label class="small">🧭 Source</label><input name="source" id="e-source"></div>
       <div><label class="small">🏙 City</label><input name="city" id="e-city"></div>
       <div><label class="small">🌍 State</label><input name="state" id="e-state"></div>
       <div><label class="small">🌐 Country</label><input name="country" id="e-country"></div>
@@ -948,6 +964,9 @@ a.ct-li.on{background:var(--accent);color:#fff}
       document.getElementById('e-tags').value=b.dataset.tags;
       document.getElementById('e-mobile').value=b.dataset.mobile||'';
       document.getElementById('e-company').value=b.dataset.company||'';
+      document.getElementById('e-job_title').value=b.dataset.job_title||'';
+      document.getElementById('e-birthday').value=b.dataset.birthday||'';
+      document.getElementById('e-source').value=b.dataset.source||'';
       document.getElementById('e-city').value=b.dataset.city||'';
       document.getElementById('e-state').value=b.dataset.state||'';
       document.getElementById('e-country').value=b.dataset.country||'';

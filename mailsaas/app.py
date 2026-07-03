@@ -813,7 +813,7 @@ def login_required(view):
 
 # Every Contacts endpoint lights up the single "Contacts" sidebar entry.
 CONTACTS_ENDPOINTS = {"contacts", "contact_lists", "contacts_export",
-                      "contact_lists_sample", "tags_page"}
+                      "contact_lists_sample", "tags_page", "contact_profile"}
 
 
 def _active_keys():
@@ -1490,6 +1490,68 @@ def register_modules(app):
                               (lst["id"], aid))
                     flash(f"'{lst['name']}' — {msg}.", "success")
                 sel = "all"
+            elif action == "archive_list":
+                lst = _own_list(aid, request.form.get("id"))
+                if lst:
+                    D.execute("UPDATE contact_lists SET archived=1 WHERE id=? AND"
+                              " account_id=?", (lst["id"], aid))
+                    flash(f"'{lst['name']}' archived.", "success")
+                sel = "home"
+            elif action == "unarchive_list":
+                lst = _own_list(aid, request.form.get("id"))
+                if lst:
+                    D.execute("UPDATE contact_lists SET archived=0 WHERE id=? AND"
+                              " account_id=?", (lst["id"], aid))
+                    flash(f"'{lst['name']}' restored from archive.", "success")
+                sel = "home"
+            elif action == "copy_contacts":
+                # Copy every contact from the source list into a target list,
+                # skipping emails the target already has. Source is untouched.
+                src = _own_list(aid, request.form.get("id"))
+                dst = _own_list(aid, request.form.get("to_id"))
+                if src and dst and src["id"] != dst["id"]:
+                    D.execute(
+                        "INSERT INTO contacts (account_id, list_id, email, name,"
+                        " tags, status, company, mobile, city, state, country,"
+                        " job_title, birthday, source, custom_json, note, created_at)"
+                        " SELECT account_id, ?, email, name, tags, status, company,"
+                        " mobile, city, state, country, job_title, birthday, source,"
+                        " custom_json, note, ? FROM contacts s WHERE account_id=?"
+                        " AND list_id=? AND status != 'trashed' AND NOT EXISTS"
+                        " (SELECT 1 FROM contacts t WHERE t.account_id=s.account_id"
+                        "  AND t.list_id=? AND t.email=s.email)",
+                        (dst["id"], D.now(), aid, src["id"], dst["id"]))
+                    flash(f"Copied contacts from '{src['name']}' to"
+                          f" '{dst['name']}' (existing emails skipped).", "success")
+                    sel = str(dst["id"])
+                else:
+                    flash("Pick two different lists.", "error")
+            elif action == "split_list":
+                # Split: move the first N contacts into a brand-new list.
+                src = _own_list(aid, request.form.get("id"))
+                new_name = (request.form.get("name") or "").strip()[:60]
+                try:
+                    n_move = max(1, int(request.form.get("count") or 0))
+                except ValueError:
+                    n_move = 0
+                if src and new_name and n_move:
+                    nid = D.execute("INSERT INTO contact_lists (account_id, name,"
+                                    " list_type, created_at) VALUES (?,?,?,?)",
+                                    (aid, new_name, src["list_type"], D.now()))
+                    ids = [r["id"] for r in D.query(
+                        "SELECT id FROM contacts WHERE account_id=? AND list_id=?"
+                        " AND status != 'trashed' ORDER BY id LIMIT ?",
+                        (aid, src["id"], n_move))]
+                    if ids:
+                        qs = ",".join("?" for _ in ids)
+                        D.execute(f"UPDATE contacts SET list_id=? WHERE id IN ({qs})",
+                                  [nid] + ids)
+                    flash(f"Moved {len(ids)} contact(s) from '{src['name']}' into"
+                          f" new list '{new_name}'.", "success")
+                    sel = str(nid)
+                else:
+                    flash("Give the new list a name and how many contacts to move.",
+                          "error")
 
             # ---------- Import (de-duplicated, with summary) ---------- #
             elif action == "import":
@@ -1554,18 +1616,35 @@ def register_modules(app):
                     new_cid = D.execute(
                         "INSERT INTO contacts (account_id, list_id, email, name, mobile,"
                         " company, city, state, custom_json, status, tags, import_id,"
-                        " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        " source, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (aid, lid, rec["email"], rec["name"], rec["mobile"],
                          rec["company"], rec["city"], rec["state"],
                          json.dumps(rec["custom"]) if rec.get("custom") else None,
                          "active", imp_tag if imp_tag else None,
-                         imp_id, D.now()))
+                         imp_id, f"import: {fname}" if fname else "import",
+                         D.now()))
                     D.log_contact_event(aid, new_cid, "imported", fname or "pasted rows")
                     if imp_tag:
                         D.log_contact_event(aid, new_cid, "tag_added", imp_tag)
                     added += 1
                 if imp_tag:
                     D.touch_recent_tag(aid, imp_tag)
+                # Optional: verify the freshly imported addresses right away
+                # (capped so a huge file can't stall the request).
+                if request.form.get("verify_after"):
+                    for row in D.query(
+                            "SELECT id, email FROM contacts WHERE account_id=? AND"
+                            " import_id=? LIMIT 200", (aid, imp_id)):
+                        res = verify_email(row["email"])
+                        D.execute(
+                            "INSERT INTO verifications (account_id, email, result,"
+                            " score, reason, source, created_at)"
+                            " VALUES (?,?,?,?,?,?,?)",
+                            (aid, res["email"], res["result"], res["score"],
+                             res["reason"], "import", D.now()))
+                        if res["result"] == "invalid":
+                            D.execute("UPDATE contacts SET status='bounced' WHERE"
+                                      " id=?", (row["id"],))
                 # "Remove Duplicates" also collapses any pre-existing duplicates so
                 # only one record per email survives.
                 if rule == "remove":
@@ -1615,8 +1694,8 @@ def register_modules(app):
                 D.execute(
                     "INSERT INTO contacts (account_id, list_id, email, name, tags,"
                     " mobile, company, city, state, country, balance, last_purchase,"
-                    " custom_json, note, status, created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " job_title, birthday, source, custom_json, note, status,"
+                    " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (aid, _list_id(), request.form.get("email", "").strip().lower(),
                      request.form.get("name", "").strip(),
                      request.form.get("tags", "").strip(),
@@ -1627,6 +1706,9 @@ def register_modules(app):
                      request.form.get("country", "").strip(),
                      request.form.get("balance", "").strip(),
                      request.form.get("last_purchase", "").strip(),
+                     request.form.get("job_title", "").strip(),
+                     request.form.get("birthday", "").strip(),
+                     request.form.get("source", "").strip() or "manual",
                      _collect_custom(aid),
                      request.form.get("note", "").strip(), "active", D.now()))
                 flash("Contact added.", "success")
@@ -1637,8 +1719,8 @@ def register_modules(app):
                     D.execute(
                         "UPDATE contacts SET email=?, name=?, tags=?, mobile=?,"
                         " company=?, city=?, state=?, country=?, balance=?,"
-                        " last_purchase=?, custom_json=?, note=? WHERE id=? AND"
-                        " account_id=?",
+                        " last_purchase=?, job_title=?, birthday=?, source=?,"
+                        " custom_json=?, note=? WHERE id=? AND account_id=?",
                         (email, request.form.get("name", "").strip(),
                          request.form.get("tags", "").strip(),
                          _normalize_mobile(request.form.get("mobile", "")),
@@ -1648,6 +1730,9 @@ def register_modules(app):
                          request.form.get("country", "").strip(),
                          request.form.get("balance", "").strip(),
                          request.form.get("last_purchase", "").strip(),
+                         request.form.get("job_title", "").strip(),
+                         request.form.get("birthday", "").strip(),
+                         request.form.get("source", "").strip(),
                          _collect_custom(aid),
                          request.form.get("note", "").strip(), cid, aid))
                     flash("Contact updated.", "success")
@@ -1851,6 +1936,40 @@ def register_modules(app):
                     flash(f"Merged '{tag_a}' + '{tag_b}' → '{merged}' on {updated} contact(s).", "success")
                 else:
                     flash("Fill in all three tag fields.", "error")
+            elif action == "duplicate_tag":
+                # Duplicate a tag: register "<name> (copy)" and apply it to every
+                # contact that carries the original.
+                src_tag = (request.form.get("tag_name") or "").strip()
+                if src_tag:
+                    base = f"{src_tag} (copy)"[:60]
+                    new_tag, i = base, 2
+                    while D.query("SELECT 1 FROM account_tags WHERE account_id=?"
+                                  " AND name=?", (aid, new_tag), one=True):
+                        new_tag = f"{base} {i}"[:60]
+                        i += 1
+                    meta = D.query("SELECT color, description FROM account_tags"
+                                   " WHERE account_id=? AND name=?", (aid, src_tag),
+                                   one=True)
+                    D.execute("INSERT INTO account_tags (account_id, name, color,"
+                              " description, created_at) VALUES (?,?,?,?,?)",
+                              (aid, new_tag, _pick_tag_color(aid),
+                               (meta["description"] if meta else "") or "", D.now()))
+                    applied = 0
+                    for row in D.query("SELECT id, tags FROM contacts WHERE"
+                                       " account_id=? AND tags LIKE ?",
+                                       (aid, f"%{src_tag}%")):
+                        tags = [t.strip() for t in (row["tags"] or "").split(",")
+                                if t.strip()]
+                        if src_tag in tags and new_tag not in tags:
+                            tags.append(new_tag)
+                            D.execute("UPDATE contacts SET tags=? WHERE id=? AND"
+                                      " account_id=?",
+                                      (", ".join(tags), row["id"], aid))
+                            applied += 1
+                    flash(f"Tag duplicated as '{new_tag}' ({applied} contact(s)).",
+                          "success")
+                else:
+                    flash("No tag specified.", "error")
             elif action == "assign_list":
                 # Move the selected contacts (checkboxes) to a chosen list.
                 ids = request.form.getlist("ids")
@@ -1871,6 +1990,79 @@ def register_modules(app):
                         [D.now(), aid] + ids)
                     flash(f"Moved {len(ids)} contact(s) to Trash. "
                           "Restore them any time from the Trash view.", "success")
+            elif action == "copy_selected":
+                # Copy the selected contacts into a chosen list (skip existing).
+                ids = request.form.getlist("ids")
+                dst = _list_id()
+                if ids and dst:
+                    qs = ",".join("?" for _ in ids)
+                    D.execute(
+                        f"INSERT INTO contacts (account_id, list_id, email, name,"
+                        f" tags, status, company, mobile, city, state, country,"
+                        f" job_title, birthday, source, custom_json, note, created_at)"
+                        f" SELECT account_id, ?, email, name, tags, status, company,"
+                        f" mobile, city, state, country, job_title, birthday, source,"
+                        f" custom_json, note, ? FROM contacts s WHERE account_id=?"
+                        f" AND id IN ({qs}) AND NOT EXISTS (SELECT 1 FROM contacts t"
+                        f" WHERE t.account_id=s.account_id AND t.list_id=?"
+                        f" AND t.email=s.email)",
+                        [dst, D.now(), aid] + ids + [dst])
+                    flash(f"Copied {len(ids)} contact(s).", "success")
+                else:
+                    flash("Select contacts and a target list.", "error")
+            elif action == "untag_selected":
+                # Remove one tag from all selected contacts.
+                ids = request.form.getlist("ids")
+                del_t = (request.form.get("tag_remove") or "").strip()
+                n = 0
+                if ids and del_t:
+                    qs = ",".join("?" for _ in ids)
+                    for row in D.query(f"SELECT id, tags FROM contacts WHERE"
+                                       f" account_id=? AND id IN ({qs})",
+                                       [aid] + ids):
+                        tags = [t.strip() for t in (row["tags"] or "").split(",")
+                                if t.strip()]
+                        if del_t in tags:
+                            tags = [t for t in tags if t != del_t]
+                            D.execute("UPDATE contacts SET tags=? WHERE id=?",
+                                      (", ".join(tags), row["id"]))
+                            D.log_contact_event(aid, row["id"], "tag_removed", del_t)
+                            n += 1
+                    flash(f"Removed tag '{del_t}' from {n} contact(s).", "success")
+                else:
+                    flash("Select contacts and the tag to remove.", "error")
+            elif action in ("unsub_selected", "resub_selected"):
+                ids = request.form.getlist("ids")
+                if ids:
+                    qs = ",".join("?" for _ in ids)
+                    new_status = ("unsubscribed" if action == "unsub_selected"
+                                  else "active")
+                    D.execute(f"UPDATE contacts SET status=? WHERE account_id=?"
+                              f" AND status != 'trashed' AND id IN ({qs})",
+                              [new_status, aid] + ids)
+                    verb = ("unsubscribed" if new_status == "unsubscribed"
+                            else "resubscribed")
+                    flash(f"{len(ids)} contact(s) {verb}.", "success")
+            elif action == "verify_selected":
+                # Run email verification on the selected contacts (capped so a
+                # huge selection can't stall the request).
+                ids = request.form.getlist("ids")[:200]
+                checked = 0
+                for row in D.query(
+                        f"SELECT id, email FROM contacts WHERE account_id=? AND id IN"
+                        f" ({','.join('?' for _ in ids)})", [aid] + ids) if ids else []:
+                    res = verify_email(row["email"])
+                    D.execute(
+                        "INSERT INTO verifications (account_id, email, result, score,"
+                        " reason, source, created_at) VALUES (?,?,?,?,?,?,?)",
+                        (aid, res["email"], res["result"], res["score"],
+                         res["reason"], "contacts", D.now()))
+                    if res["result"] == "invalid":
+                        D.execute("UPDATE contacts SET status='bounced' WHERE id=?"
+                                  " AND account_id=?", (row["id"], aid))
+                    checked += 1
+                flash(f"Verified {checked} contact(s) — invalid addresses were"
+                      " marked bounced.", "success")
             elif action == "block_contact":
                 D.execute("UPDATE contacts SET status='blocked' WHERE id=? AND"
                           " account_id=?", (request.form.get("id"), aid))
@@ -2011,50 +2203,105 @@ def register_modules(app):
                         continue
                 return str(raw)[:11]
 
-            home_lists = []
+            # Verified addresses (latest verdict per email) for this account.
+            verified_emails = {r["email"].lower() for r in D.query(
+                "SELECT email FROM verifications v WHERE account_id=? AND"
+                " result='valid' AND id=(SELECT MAX(id) FROM verifications v2 WHERE"
+                " v2.account_id=v.account_id AND v2.email=v.email)", (aid,))}
+
+            home_lists, archived_lists = [], []
             for r in lists:
                 d = dict(r)
+                # status breakdown
+                by_status = {s["status"]: s["c"] for s in D.query(
+                    "SELECT status, COUNT(*) c FROM contacts WHERE account_id=?"
+                    " AND list_id=? GROUP BY status", (aid, r["id"]))}
+                d["active"] = by_status.get("active", 0)
+                d["bounced"] = by_status.get("bounced", 0)
+                d["unsub"] = by_status.get("unsubscribed", 0)
+                emails = [c["email"].lower() for c in D.query(
+                    "SELECT email FROM contacts WHERE account_id=? AND list_id=?"
+                    " AND status != 'trashed'", (aid, r["id"]))]
+                d["verified"] = sum(1 for e in emails if e in verified_emails)
+                d["unverified"] = len(emails) - d["verified"]
                 agg = D.query(
-                    "SELECT COALESCE(SUM(sent),0) s, COALESCE(SUM(opens),0) o"
-                    " FROM campaigns WHERE account_id=? AND list_id=?",
-                    (aid, r["id"]), one=True)
+                    "SELECT COALESCE(SUM(sent),0) s, COALESCE(SUM(opens),0) o,"
+                    " COALESCE(SUM(clicks),0) k FROM campaigns WHERE account_id=?"
+                    " AND list_id=?", (aid, r["id"]), one=True)
                 d["open_rate"] = round(agg["o"] * 100.0 / agg["s"], 2) if agg["s"] else 0.0
+                d["click_rate"] = round(agg["k"] * 100.0 / agg["s"], 2) if agg["s"] else 0.0
+                last_camp = D.query(
+                    "SELECT name FROM campaigns WHERE account_id=? AND list_id=?"
+                    " ORDER BY id DESC LIMIT 1", (aid, r["id"]), one=True)
+                d["last_campaign"] = last_camp["name"] if last_camp else "--"
                 last_c = D.query("SELECT MAX(created_at) m FROM contacts WHERE"
                                  " account_id=? AND list_id=?", (aid, r["id"]),
                                  one=True)["m"]
                 stamps = [s for s in (d.get("created_at"), d.get("last_import_at"),
                                       last_c) if s]
                 d["last_updated_disp"] = _disp(max(stamps)) if stamps else "—"
-                home_lists.append(d)
+                (archived_lists if d.get("archived") else home_lists).append(d)
+
+            # Account-wide dashboard tiles.
+            acct_status = {s["status"]: s["c"] for s in D.query(
+                "SELECT status, COUNT(*) c FROM contacts WHERE account_id=?"
+                " GROUP BY status", (aid,))}
+            all_emails = [c["email"].lower() for c in D.query(
+                "SELECT email FROM contacts WHERE account_id=? AND"
+                " status != 'trashed'", (aid,))]
+            n_verified = sum(1 for e in all_emails if e in verified_emails)
+            suppressed = (acct_status.get("unsubscribed", 0)
+                          + acct_status.get("bounced", 0)
+                          + acct_status.get("blocked", 0)
+                          + D.query("SELECT COUNT(*) c FROM blocked_emails WHERE"
+                                    " account_id=?", (aid,), one=True)["c"])
+            tiles = {
+                "total": len(all_emails),
+                "active": acct_status.get("active", 0),
+                "verified": n_verified,
+                "unverified": len(all_emails) - n_verified,
+                "bounced": acct_status.get("bounced", 0),
+                "unsub": acct_status.get("unsubscribed", 0),
+                "suppressed": suppressed,
+            }
 
             reg = {r["name"]: dict(r) for r in D.query(
-                "SELECT name, color, description, favorite, created_at FROM"
-                " account_tags WHERE account_id=?", (aid,))}
-            counts = {}
-            for row in D.query("SELECT tags FROM contacts WHERE account_id=? AND"
-                               " tags IS NOT NULL AND tags != ''", (aid,)):
+                "SELECT name, color, description, favorite, last_used_at,"
+                " created_at FROM account_tags WHERE account_id=?", (aid,))}
+            counts, tag_lists = {}, {}
+            for row in D.query("SELECT tags, list_id FROM contacts WHERE"
+                               " account_id=? AND tags IS NOT NULL AND tags != ''",
+                               (aid,)):
                 for t in (row["tags"] or "").split(","):
                     t = t.strip()
                     if t:
                         counts[t] = counts.get(t, 0) + 1
+                        if row["list_id"]:
+                            tag_lists.setdefault(t, set()).add(row["list_id"])
             home_tags = [{"name": n, "count": counts.get(n, 0),
                           "color": m.get("color") or "blue",
                           "description": m.get("description") or "",
                           "favorite": bool(m.get("favorite")),
+                          "lists_using": len(tag_lists.get(n, ())),
+                          "last_used_disp": _disp(m.get("last_used_at")),
                           "created_disp": _disp(m.get("created_at"))}
                          for n, m in reg.items()]
             for n, cnt in counts.items():
                 if n not in reg:
                     home_tags.append({"name": n, "count": cnt, "color": "blue",
                                       "description": "", "favorite": False,
+                                      "lists_using": len(tag_lists.get(n, ())),
+                                      "last_used_disp": "—",
                                       "created_disp": "—"})
             home_tags.sort(key=lambda t: (not t["favorite"], t["name"].lower()))
-            all_total = D.query("SELECT COUNT(*) c FROM contacts WHERE account_id=?"
-                                " AND status != 'trashed'", (aid,), one=True)["c"]
             return render_template("contacts_home.html", lists=home_lists,
-                                   tags=home_tags, all_total=all_total, acct=acct,
+                                   archived=archived_lists, tags=home_tags,
+                                   tiles=tiles, all_total=tiles["total"], acct=acct,
                                    type_icons=LIST_TYPE_ICONS)
 
+        # Archived lists live only on the Contacts home; hide them in the
+        # detail rail and pickers.
+        lists = [l for l in lists if not l["archived"]]
         sel = (request.args.get("list") or "all").strip()
         sel_list = _own_list(aid, sel) if sel.isdigit() else None
         if sel.isdigit() and not sel_list:
@@ -2293,6 +2540,50 @@ def register_modules(app):
         events.sort(key=lambda e: e["at"] or "")
         return jsonify({"email": email, "name": c["name"], "events": events})
 
+    @app.route("/contacts/<int:cid>/profile")
+    @login_required
+    def contact_profile(cid):
+        """Full contact profile: fields, engagement score, verification status,
+        campaign/open/click history, bounces, complaints and the timeline."""
+        aid = current_account()["id"]
+        c = D.query("SELECT * FROM contacts WHERE id=? AND account_id=?",
+                    (cid, aid), one=True)
+        if not c:
+            abort(404)
+        email = c["email"]
+        lst = (D.query("SELECT * FROM contact_lists WHERE id=? AND account_id=?",
+                       (c["list_id"], aid), one=True) if c["list_id"] else None)
+        tags = [t.strip() for t in (c["tags"] or "").split(",") if t.strip()]
+        tag_meta = {r["name"]: dict(r) for r in D.query(
+            "SELECT name, color FROM account_tags WHERE account_id=?", (aid,))}
+        ver = D.query("SELECT * FROM verifications WHERE account_id=? AND email=?"
+                      " ORDER BY id DESC LIMIT 1", (aid, email), one=True)
+        msgs = D.query(
+            "SELECT m.*, c2.name AS cname FROM messages m LEFT JOIN campaigns c2"
+            " ON c2.id=m.campaign_id WHERE m.account_id=? AND m.email=?"
+            " ORDER BY m.id DESC", (aid, email))
+        opens = sum(1 for m in msgs if m["opened"])
+        clicks = sum(1 for m in msgs if m["clicked"])
+        bounces = [m for m in msgs if m["status"] == "failed"]
+        complaint_rows = D.query("SELECT * FROM complaints WHERE account_id=? AND"
+                                 " email=? ORDER BY id DESC", (aid, email))
+        # Simple engagement score: opens + clicks, capped at 100.
+        score = min(100, opens * 10 + clicks * 25
+                    + (5 if c["status"] == "active" else 0))
+        events = D.query("SELECT * FROM contact_events WHERE account_id=? AND"
+                         " contact_id=? ORDER BY id DESC LIMIT 50", (aid, cid))
+        try:
+            custom = json.loads(c["custom_json"]) if c["custom_json"] else {}
+        except Exception:
+            custom = {}
+        fields = D.query("SELECT * FROM contact_fields WHERE account_id=?"
+                         " ORDER BY id", (aid,))
+        return render_template(
+            "contact_profile.html", c=c, lst=lst, tags=tags, tag_meta=tag_meta,
+            ver=ver, msgs=msgs[:25], opens=opens, clicks=clicks, bounces=bounces,
+            complaints=complaint_rows, score=score, events=events, custom=custom,
+            fields=fields)
+
     @app.route("/tags/<tag_name>/detail")
     @login_required
     def tag_detail(tag_name):
@@ -2358,6 +2649,7 @@ def register_modules(app):
         aid = current_account()["id"]
         sel = (request.args.get("list") or "all").strip()
         status_filter = (request.args.get("status") or "").strip()
+        tag_filter = (request.args.get("tag") or "").strip()
         where, args = "account_id=?", [aid]
         label = "contacts"
         if sel.isdigit():
@@ -2370,15 +2662,27 @@ def register_modules(app):
         if status_filter:
             where += " AND status=?"
             args.append(status_filter)
-        rows = D.query(f"SELECT email,name,tags,status,created_at FROM contacts"
+        if tag_filter:
+            where += " AND (',' || REPLACE(tags,' ','') || ',' LIKE ?)"
+            args.append(f"%,{tag_filter.replace(' ', '')},%")
+            label = re.sub(r"[^A-Za-z0-9_-]+", "_", f"tag_{tag_filter}") or label
+        rows = D.query(f"SELECT email,name,mobile,company,job_title,city,state,"
+                       f"country,tags,status,source,created_at FROM contacts"
                        f" WHERE {where} ORDER BY id DESC", args)
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["email", "name", "tags", "status", "added"])
+        w.writerow(["email", "name", "mobile", "company", "job_title", "city",
+                    "state", "country", "tags", "status", "source", "added"])
         for r in rows:
-            w.writerow([r["email"], r["name"], r["tags"], r["status"],
-                        r["created_at"]])
+            w.writerow([r["email"], r["name"], r["mobile"], r["company"],
+                        r["job_title"], r["city"], r["state"], r["country"],
+                        r["tags"], r["status"], r["source"], r["created_at"]])
         excel = request.args.get("fmt") == "excel"
+        scope = (f"tag:{tag_filter}" if tag_filter
+                 else (label if sel.isdigit() else "all"))
+        D.execute("INSERT INTO export_history (account_id, scope, fmt, rows,"
+                  " created_at) VALUES (?,?,?,?,?)",
+                  (aid, scope, "excel" if excel else "csv", len(rows), D.now()))
         ext = "xls" if excel else "csv"
         mime = "application/vnd.ms-excel" if excel else "text/csv"
         return Response(buf.getvalue(), mimetype=mime, headers={
