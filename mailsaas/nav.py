@@ -476,9 +476,9 @@ USER_GROUPS = [
                      "gmail_pm", "ms_snds", "blacklist", "inboxtest", "bounce",
                      "complaints", "dmarc"]),
     ("🚀 Marketing", ["finder", "landing", "marketplace"]),
-    ("⚡ Automation", ["automation", "webhooks", "integrations"]),
+    ("⚡ Workflows", ["automation", "webhooks", "integrations"]),
     ("👥 Workspace", ["team", "notifications"]),
-    ("🌐 Settings", ["domains", "api", "billing", "settings"]),
+    ("🌐 Account", ["domains", "api", "billing", "settings"]),
     ("❓ Help", ["support"]),
 ]
 

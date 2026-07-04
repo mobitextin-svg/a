@@ -2238,7 +2238,7 @@ def register_modules(app):
                 s = str(raw).replace("T", " ")
                 for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d"):
                     try:
-                        return datetime.strptime(s[:len(fmt) + 6], fmt).strftime("%d %b %Y")
+                        return datetime.strptime(s[:len(fmt) + 6], fmt).strftime("%d %b %y")
                     except Exception:
                         continue
                 return str(raw)[:11]

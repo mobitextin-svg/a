@@ -3,7 +3,7 @@
 {% block content %}
 <style>
 /* ---- Contacts home: clean list-first tables (scoped ch-*) ---- */
-.ch-wrap{max-width:1380px}
+.ch-wrap{max-width:1560px}
 .ch-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
   flex-wrap:wrap;margin-bottom:14px}
 .ch-head h1{font-size:1.65rem;letter-spacing:-.02em;margin:0}
@@ -26,6 +26,7 @@
   background:#1a73e8;color:#fff;border-left:1px solid rgba(255,255,255,.28);
   border-radius:0 24px 24px 0;cursor:pointer;font-size:11px}
 .ch-cta summary::-webkit-details-marker{display:none}
+details:not([open]) .ch-menu{display:none}
 .ch-menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--panel);
   border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.14);
   min-width:190px;padding:6px;z-index:30;max-height:340px;overflow-y:auto}
@@ -46,13 +47,20 @@
   color:var(--faint);font-weight:600}
 .ch-card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
 .ch-scroll{overflow-x:auto;border-radius:14px}
-.ch-table{width:100%;border-collapse:collapse;min-width:1100px}
-.ch-table th{font-size:.66rem;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--faint);font-weight:600;text-align:left;padding:13px 14px;cursor:pointer;
+.ch-table{width:100%;border-collapse:collapse}
+.ch-table th{font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;text-align:left;padding:12px 6px;cursor:pointer;
   user-select:none;white-space:nowrap}
-.ch-table th .car{opacity:.45;font-size:.6rem;margin-left:3px}
-.ch-table td{padding:14px;border-top:1px solid var(--line);vertical-align:middle;
-  white-space:nowrap}
+.ch-table th .car{opacity:.45;font-size:.58rem;margin-left:2px}
+.ch-table td{padding:11px 6px;border-top:1px solid var(--line);vertical-align:middle;
+  white-space:nowrap;font-size:.86rem}
+#listsTable td:first-child{max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.ch-table th:first-child,.ch-table td:first-child{padding-left:16px}
+.ch-table th:last-child,.ch-table td:last-child{padding-right:16px}
+@media(max-width:1320px){ #listsTable .col-click{display:none} }
+@media(max-width:1200px){ #listsTable .col-unsub{display:none} }
+@media(max-width:1180px){ #listsTable .col-bounced{display:none} }
+@media(max-width:1100px){ #listsTable .col-active{display:none} }
 .ch-table tr:hover td{background:var(--panel2)}
 .ch-name{color:#2563eb;font-weight:500}
 .ch-count{color:#2563eb;text-decoration:underline;text-underline-offset:3px}
@@ -61,12 +69,13 @@
 .ch-row-actions{display:flex;justify-content:flex-end}
 .ch-ov{display:flex}
 .ch-ov>a{background:var(--panel2);border:1px solid var(--line);color:var(--text);
-  font-weight:500;padding:8px 16px;border-radius:12px 0 0 12px;text-decoration:none}
+  font-weight:500;padding:6px 10px;border-radius:10px 0 0 10px;text-decoration:none;
+  font-size:.82rem}
 .ch-ov>a:hover{background:var(--line);text-decoration:none}
 .ch-ov details{position:relative}
-.ch-ov summary{list-style:none;display:grid;place-items:center;width:36px;height:100%;
+.ch-ov summary{list-style:none;display:grid;place-items:center;width:30px;height:100%;
   background:var(--panel2);border:1px solid var(--line);border-left:none;
-  border-radius:0 12px 12px 0;cursor:pointer;font-size:10px;color:var(--muted)}
+  border-radius:0 10px 10px 0;cursor:pointer;font-size:9px;color:var(--muted)}
 .ch-ov summary::-webkit-details-marker{display:none}
 .ch-ov details[open] summary{background:#2563eb;color:#fff;border-color:#2563eb}
 .ch-ov details[open] .ch-menu{position:fixed;right:auto}
@@ -131,14 +140,13 @@
       <thead><tr>
         <th data-sort="text">Name <span class="car">⇅</span></th>
         <th data-sort="num">Contacts <span class="car">⇅</span></th>
-        <th data-sort="num">Active <span class="car">⇅</span></th>
+        <th data-sort="num" class="col-active">Active <span class="car">⇅</span></th>
         <th data-sort="num">Verified <span class="car">⇅</span></th>
-        <th data-sort="num">Bounced <span class="car">⇅</span></th>
-        <th data-sort="num">Unsub <span class="car">⇅</span></th>
-        <th data-sort="num">Open Rate <span class="car">⇅</span></th>
-        <th data-sort="num">Click Rate <span class="car">⇅</span></th>
-        <th>Last Campaign</th>
-        <th data-sort="date">Last Updated <span class="car">⇅</span></th>
+        <th data-sort="num" class="col-bounced">Bounced <span class="car">⇅</span></th>
+        <th data-sort="num" class="col-unsub">Unsub <span class="car">⇅</span></th>
+        <th data-sort="num">Open % <span class="car">⇅</span></th>
+        <th data-sort="num" class="col-click">Click % <span class="car">⇅</span></th>
+        <th data-sort="date">Updated <span class="car">⇅</span></th>
         <th></th>
       </tr></thead>
       <tbody>
@@ -146,13 +154,12 @@
       <tr data-search="{{ l.name|lower }}">
         <td><a class="ch-name" href="{{ url_for('contacts', list=l.id) }}">{{ l.name }}</a>{% if l.favorite %} ⭐{% endif %}</td>
         <td data-v="{{ l.n }}"><a class="ch-count" href="{{ url_for('contacts', list=l.id) }}">{{ '{:,}'.format(l.n) }}</a></td>
-        <td data-v="{{ l.active }}">{{ '{:,}'.format(l.active) }}</td>
-        <td data-v="{{ l.verified }}">{{ '{:,}'.format(l.verified) }} <span class="ch-dim">/ {{ '{:,}'.format(l.unverified) }} unv.</span></td>
-        <td data-v="{{ l.bounced }}">{{ '{:,}'.format(l.bounced) }}</td>
-        <td data-v="{{ l.unsub }}">{{ '{:,}'.format(l.unsub) }}</td>
-        <td data-v="{{ l.open_rate }}"><span class="ch-rate">{{ '%.2f'|format(l.open_rate) }}%</span></td>
-        <td data-v="{{ l.click_rate }}"><span class="ch-rate">{{ '%.2f'|format(l.click_rate) }}%</span></td>
-        <td><span class="ch-dim">{{ l.last_campaign }}</span></td>
+        <td data-v="{{ l.active }}" class="col-active">{{ '{:,}'.format(l.active) }}</td>
+        <td data-v="{{ l.verified }}" title="{{ l.verified }} verified · {{ l.unverified }} unverified">{{ '{:,}'.format(l.verified) }}<span class="ch-dim">/{{ '{:,}'.format(l.unverified) }}</span></td>
+        <td data-v="{{ l.bounced }}" class="col-bounced">{{ '{:,}'.format(l.bounced) }}</td>
+        <td data-v="{{ l.unsub }}" class="col-unsub">{{ '{:,}'.format(l.unsub) }}</td>
+        <td data-v="{{ l.open_rate }}"><span class="ch-rate">{{ '%.1f'|format(l.open_rate) }}%</span></td>
+        <td data-v="{{ l.click_rate }}" class="col-click"><span class="ch-rate">{{ '%.1f'|format(l.click_rate) }}%</span></td>
         <td data-v="{{ l.last_updated_disp }}">{{ l.last_updated_disp }}</td>
         <td class="ch-row-actions">
           <div class="ch-ov">
@@ -181,7 +188,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="11" class="ch-empty">No lists yet — click <b>Create New List</b> to get started.</td></tr>
+      <tr><td colspan="10" class="ch-empty">No lists yet — click <b>Create New List</b> to get started.</td></tr>
       {% endfor %}
       </tbody>
     </table>
