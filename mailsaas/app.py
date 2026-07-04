@@ -580,7 +580,7 @@ if _ADMIN_PW_FROM_ENV:
 elif IS_PRODUCTION:
     DEFAULT_ADMIN_PASSWORD = secrets.token_urlsafe(18)
 else:
-    DEFAULT_ADMIN_PASSWORD = "admin1234"
+    DEFAULT_ADMIN_PASSWORD = "admin@123"
 
 
 def _ensure_default_admin():
@@ -985,6 +985,9 @@ def register_auth(app):
                 flash("Too many attempts. Please wait a minute and try again.", "error")
                 return render_template("login.html"), 429
             email = request.form.get("email", "").strip().lower()
+            # Convenience: the default admin can sign in with just "admin".
+            if email == "admin":
+                email = DEFAULT_ADMIN_EMAIL.strip().lower()
             pw = request.form.get("password", "")
             u = D.query("SELECT * FROM users WHERE email=?", (email,), one=True)
             if u and u["status"] == "suspended":
@@ -1936,6 +1939,43 @@ def register_modules(app):
                     flash(f"Merged '{tag_a}' + '{tag_b}' → '{merged}' on {updated} contact(s).", "success")
                 else:
                     flash("Fill in all three tag fields.", "error")
+            elif action in ("archive_tag", "unarchive_tag"):
+                t_name = (request.form.get("tag_name") or "").strip()
+                if t_name:
+                    D.execute("UPDATE account_tags SET archived=? WHERE account_id=?"
+                              " AND name=?",
+                              (1 if action == "archive_tag" else 0, aid, t_name))
+                    flash(f"Tag '{t_name}' "
+                          f"{'archived' if action == 'archive_tag' else 'restored'}.",
+                          "success")
+                sel = "home"
+            elif action == "replace_tag_selected":
+                # Replace one tag with another on the selected contacts.
+                ids = request.form.getlist("ids")
+                find_t = (request.form.get("tag_find") or "").strip()
+                repl_t = (request.form.get("tag_replace") or "").strip()[:60]
+                n = 0
+                if ids and find_t and repl_t:
+                    qs = ",".join("?" for _ in ids)
+                    for row in D.query(f"SELECT id, tags FROM contacts WHERE"
+                                       f" account_id=? AND id IN ({qs})",
+                                       [aid] + ids):
+                        tags = [t.strip() for t in (row["tags"] or "").split(",")
+                                if t.strip()]
+                        if find_t in tags:
+                            tags = [t for t in tags if t != find_t]
+                            if repl_t not in tags:
+                                tags.append(repl_t)
+                            D.execute("UPDATE contacts SET tags=? WHERE id=?",
+                                      (", ".join(tags), row["id"]))
+                            D.log_contact_event(aid, row["id"], "tag_removed", find_t)
+                            D.log_contact_event(aid, row["id"], "tag_added", repl_t)
+                            n += 1
+                    D.touch_recent_tag(aid, repl_t)
+                    flash(f"Replaced '{find_t}' with '{repl_t}' on {n} contact(s).",
+                          "success")
+                else:
+                    flash("Select contacts and both tags.", "error")
             elif action == "duplicate_tag":
                 # Duplicate a tag: register "<name> (copy)" and apply it to every
                 # contact that carries the original.
@@ -2267,7 +2307,8 @@ def register_modules(app):
 
             reg = {r["name"]: dict(r) for r in D.query(
                 "SELECT name, color, description, favorite, last_used_at,"
-                " created_at FROM account_tags WHERE account_id=?", (aid,))}
+                " created_at, archived FROM account_tags WHERE account_id=?",
+                (aid,))}
             counts, tag_lists = {}, {}
             for row in D.query("SELECT tags, list_id FROM contacts WHERE"
                                " account_id=? AND tags IS NOT NULL AND tags != ''",
@@ -2282,6 +2323,7 @@ def register_modules(app):
                           "color": m.get("color") or "blue",
                           "description": m.get("description") or "",
                           "favorite": bool(m.get("favorite")),
+                          "archived": bool(m.get("archived")),
                           "lists_using": len(tag_lists.get(n, ())),
                           "last_used_disp": _disp(m.get("last_used_at")),
                           "created_disp": _disp(m.get("created_at"))}
@@ -2290,12 +2332,16 @@ def register_modules(app):
                 if n not in reg:
                     home_tags.append({"name": n, "count": cnt, "color": "blue",
                                       "description": "", "favorite": False,
+                                      "archived": False,
                                       "lists_using": len(tag_lists.get(n, ())),
                                       "last_used_disp": "—",
                                       "created_disp": "—"})
             home_tags.sort(key=lambda t: (not t["favorite"], t["name"].lower()))
+            archived_tags = [t for t in home_tags if t["archived"]]
+            home_tags = [t for t in home_tags if not t["archived"]]
             return render_template("contacts_home.html", lists=home_lists,
                                    archived=archived_lists, tags=home_tags,
+                                   archived_tags=archived_tags,
                                    tiles=tiles, all_total=tiles["total"], acct=acct,
                                    type_icons=LIST_TYPE_ICONS)
 

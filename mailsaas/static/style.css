@@ -645,3 +645,62 @@ body[data-role="admin"] .sidebar{
   --brand:#1a73e8;--brand2:#1667cf;--accent:#1a73e8}
 :root[data-theme="light"] body[data-role="admin"] .nav-link.active{
   background:#eef3fd;color:#1a48b8;box-shadow:inset 2px 0 0 #1a73e8}
+
+/* =========================================================================
+   Bold sidebar headers + shining polished color pass (light theme)
+   ========================================================================= */
+/* Section headers: bold, dark, clearly separated groups */
+:root[data-theme="light"] .nav-sec{border-top:1px solid var(--line);
+  margin-top:8px;padding-top:8px}
+:root[data-theme="light"] .nav-toggle{font-weight:800;color:#0d1b33;
+  font-size:.95rem;letter-spacing:-.01em}
+:root[data-theme="light"] .nav-toggle .ic{opacity:1;font-size:1.05rem;
+  filter:none}
+:root[data-theme="light"] .nav-toggle .caret{color:#1a73e8;opacity:1}
+:root[data-theme="light"] .nav-toggle:hover{background:#eef3fd;color:#1a48b8}
+:root[data-theme="light"] .nav-link{color:#33415c;font-weight:600}
+:root[data-theme="light"] .nav-link .ic{opacity:1}
+:root[data-theme="light"] .nav-link.sub{color:#5c6b84;font-weight:500}
+:root[data-theme="light"] .nav-link.sub:hover,
+:root[data-theme="light"] .nav-link:hover{background:#eef3fd;color:#1a48b8}
+:root[data-theme="light"] .sidebar .brand{color:#0d1b33;font-weight:800}
+
+/* Shining gradient primaries with a soft glow — every blue action button */
+:root[data-theme="light"] .btn:not(.ghost):not(.danger),
+:root[data-theme="light"] .cx-btn:not(.ghost):not(.danger),
+:root[data-theme="light"] .ch-cta .main,
+:root[data-theme="light"] .ch-cta summary,
+:root[data-theme="light"] .lg-btn{
+  background:linear-gradient(180deg,#3f8ef5 0%,#1a73e8 100%);
+  box-shadow:0 3px 10px rgba(26,115,232,.35), inset 0 1px 0 rgba(255,255,255,.28);
+}
+:root[data-theme="light"] .btn:not(.ghost):not(.danger):hover,
+:root[data-theme="light"] .cx-btn:not(.ghost):not(.danger):hover,
+:root[data-theme="light"] .ch-cta .main:hover{
+  background:linear-gradient(180deg,#2f82ec 0%,#1667cf 100%);
+  box-shadow:0 4px 14px rgba(26,115,232,.45), inset 0 1px 0 rgba(255,255,255,.25);
+}
+:root[data-theme="light"] .btn.danger,
+:root[data-theme="light"] .cx-btn.danger{
+  background:linear-gradient(180deg,#ef5350 0%,#dc2626 100%);
+  box-shadow:0 3px 10px rgba(220,38,38,.3), inset 0 1px 0 rgba(255,255,255,.22);
+}
+:root[data-theme="light"] .btn.ghost,
+:root[data-theme="light"] .cx-btn.ghost{box-shadow:0 1px 2px rgba(15,23,42,.05)}
+
+/* Dashboard tiles: vivid per-metric colors with a colored top edge */
+.ch-tile{position:relative;overflow:hidden}
+.ch-tile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px}
+.ch-tile:nth-child(1) b{color:#1a73e8}.ch-tile:nth-child(1)::before{background:#1a73e8}
+.ch-tile:nth-child(2) b{color:#0e9f6e}.ch-tile:nth-child(2)::before{background:#0e9f6e}
+.ch-tile:nth-child(3) b{color:#0891b2}.ch-tile:nth-child(3)::before{background:#0891b2}
+.ch-tile:nth-child(4) b{color:#d97706}.ch-tile:nth-child(4)::before{background:#d97706}
+.ch-tile:nth-child(5) b{color:#dc2626}.ch-tile:nth-child(5)::before{background:#dc2626}
+.ch-tile:nth-child(6) b{color:#ea580c}.ch-tile:nth-child(6)::before{background:#ea580c}
+.ch-tile:nth-child(7) b{color:#64748b}.ch-tile:nth-child(7)::before{background:#64748b}
+
+/* Polished pills & chips: subtle inner light */
+:root[data-theme="light"] .cx-view.on,
+:root[data-theme="light"] .cx-tab.on{
+  box-shadow:0 2px 8px rgba(26,115,232,.25), inset 0 1px 0 rgba(255,255,255,.25)}
+:root[data-theme="light"] .topbar .pill{background:#f4f8ff;border:1px solid #dbe7fb}

@@ -254,9 +254,11 @@
               <div class="ch-menu">
                 <button type="button" onclick="renameTag({{ t.name|tojson }}, {{ t.description|tojson }})">Edit / Rename</button>
                 <button type="button" onclick="tagAction('duplicate_tag', {{ t.name|tojson }})">Duplicate</button>
-                <button type="button" onclick="mergeTag({{ t.name|tojson }})">Merge</button>
-                <a href="{{ url_for('contacts_export', list='all', tag=t.name, fmt='csv') }}">Export tagged contacts</a>
+                <button type="button" onclick="mergeTag({{ t.name|tojson }})">Merge Tags</button>
+                <button type="button" onclick="moveTag({{ t.name|tojson }})">Move Contacts</button>
+                <a href="{{ url_for('contacts_export', list='all', tag=t.name, fmt='csv') }}">Export Tagged Contacts</a>
                 <div class="msep"></div>
+                <button type="button" onclick="tagAction('archive_tag', {{ t.name|tojson }})">Archive</button>
                 <button type="button" class="danger" onclick="deleteTag({{ t.name|tojson }})">Delete</button>
               </div>
             </details>
@@ -269,6 +271,36 @@
       </tbody>
     </table>
   </div></div>
+
+  {% if archived_tags %}
+  <div class="ch-sec">
+    <div><h2>Archived Tags</h2>
+      <div class="sub">{{ archived_tags|length }} archived — hidden from the dashboard until restored</div></div>
+  </div>
+  <div class="ch-card"><div class="ch-scroll">
+    <table class="ch-table" style="min-width:600px">
+      <thead><tr><th>Name</th><th>Contacts</th><th></th></tr></thead>
+      <tbody>
+      {% for t in archived_tags %}
+      <tr data-search="{{ t.name|lower }}">
+        <td><span class="tagdot tagdot-{{ t.color }}"></span><span class="ch-dim">{{ t.name }}</span></td>
+        <td>{{ '{:,}'.format(t.count) }}</td>
+        <td class="ch-row-actions">
+          <div class="ch-ov">
+            <a href="#" onclick="tagAction('unarchive_tag', {{ t.name|tojson }});return false">Unarchive</a>
+            <details><summary>▼</summary>
+              <div class="ch-menu">
+                <button type="button" class="danger" onclick="deleteTag({{ t.name|tojson }})">Delete</button>
+              </div>
+            </details>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div></div>
+  {% endif %}
 </div>
 
 {# ---------------- Hidden generic action form ---------------- #}
@@ -284,8 +316,6 @@
   <input type="hidden" name="action" value="create_list"><input type="hidden" name="sel" value="home">
   <h3>Create New List</h3>
   <label>List name</label><input name="name" placeholder="e.g. Newsletter" required maxlength="60" autofocus>
-  <label>Type</label>
-  <select name="list_type">{% for lt, ic in type_icons.items() %}<option value="{{ lt }}">{{ ic }} {{ lt }}</option>{% endfor %}</select>
   <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Create</button></div>
 </form></dialog>
 
@@ -371,6 +401,15 @@
   <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Save</button></div>
 </form></dialog>
 
+<dialog id="dlgMoveTag" class="ch-dlg"><form method="post">
+  <input type="hidden" name="action" value="move_tag_contacts"><input type="hidden" name="sel" value="home">
+  <h3>Move Contacts to Another Tag</h3>
+  <label>From tag</label><input name="from_tag" id="mv-from" readonly style="opacity:.6">
+  <label>To tag</label>
+  <select name="to_tag" id="mv-to" required>{% for t in tags %}<option>{{ t.name }}</option>{% endfor %}</select>
+  <div class="ch-foot"><button type="button" class="btn ghost sm" data-close>Cancel</button><button class="btn sm">Move</button></div>
+</form></dialog>
+
 <dialog id="dlgMergeTags" class="ch-dlg"><form method="post">
   <input type="hidden" name="action" value="merge_tags"><input type="hidden" name="sel" value="home">
   <h3>Merge Tags</h3>
@@ -428,6 +467,11 @@ function renameTag(name,desc){document.getElementById('rt-old').value=name;
   document.getElementById('rt-desc').value=desc||''; dlg('dlgRenameTag');}
 function mergeTag(name){document.getElementById('mt-a').value=name;
   document.getElementById('mt-name').value=name; dlg('dlgMergeTags');}
+function moveTag(name){document.getElementById('mv-from').value=name;
+  var sel=document.getElementById('mv-to');
+  for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===name){sel.remove(i);break;} }
+  if(!sel.options.length){alert('Create another tag first.');return;}
+  dlg('dlgMoveTag');}
 function deleteTag(name){document.getElementById('dt-name').value=name;
   document.getElementById('dt-label').textContent=name; dlg('dlgDeleteTag');}
 /* close any open row menu when clicking elsewhere */
@@ -438,7 +482,16 @@ document.addEventListener('click',function(e){
 document.querySelectorAll('.ch-ov details').forEach(function(d){
   d.addEventListener('toggle',function(){
     if(d.open){var r=d.getBoundingClientRect(),m=d.querySelector('.ch-menu');
-      m.style.top=(r.bottom+6)+'px'; m.style.left=Math.max(8,r.right-190)+'px';}});});
+      m.style.left=Math.max(8,r.right-200)+'px';
+      /* keep the whole menu on screen: shrink + scroll if space is short */
+      var below=window.innerHeight-r.bottom-14;
+      if(below<160 && r.top>below){ /* open upward when almost no room below */
+        m.style.maxHeight=Math.min(340,r.top-14)+'px';
+        m.style.top='auto'; m.style.bottom=(window.innerHeight-r.top+6)+'px';
+      } else {
+        m.style.bottom='auto'; m.style.top=(r.bottom+6)+'px';
+        m.style.maxHeight=Math.min(340,below)+'px';
+      }}});});
 /* live search across all tables */
 document.getElementById('chSearch').addEventListener('input',function(){
   var q=this.value.trim().toLowerCase();

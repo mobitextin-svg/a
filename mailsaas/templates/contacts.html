@@ -424,15 +424,24 @@ a.cx-ico{color:var(--text)}
   <div class="cx-foot"><button type="button" class="cx-btn ghost sm" data-close>Cancel</button></div>
 </form></dialog>
 
-<dialog id="dlgTag" class="cx-dlg"><form method="post" id="tagForm">
-  <input type="hidden" name="action" value="tag"><input type="hidden" name="sel" value="{{ sel }}">
-  <h3>🏷 Tag / Untag Selected</h3>
-  <label>Add tag</label><input name="tag_add" placeholder="e.g. vip" list="tagList">
-  <label>Remove tag</label><input name="tag_remove" placeholder="e.g. lead" list="tagList">
-  <datalist id="tagList">{% for tn, _ in all_tags %}<option value="{{ tn }}">{% endfor %}</datalist>
-  <p class="small" style="color:var(--muted)">Applied to every selected contact. New tags are created automatically.</p>
-  <div class="cx-foot"><button type="button" class="cx-btn ghost sm" data-close>Cancel</button><button class="cx-btn sm">Apply</button></div>
-</form></dialog>
+<dialog id="dlgTag" class="cx-dlg">
+  <form method="post" class="bulkTagForm">
+    <input type="hidden" name="action" value="tag"><input type="hidden" name="sel" value="{{ sel }}">
+    <h3>🏷 Tag / Untag Selected</h3>
+    <label>Add tag</label><input name="tag_add" placeholder="e.g. vip" list="tagList">
+    <label>Remove tag</label><input name="tag_remove" placeholder="e.g. lead" list="tagList">
+    <datalist id="tagList">{% for tn, _ in all_tags %}<option value="{{ tn }}">{% endfor %}</datalist>
+    <p class="small" style="color:var(--muted)">Applied to every selected contact. New tags are created automatically.</p>
+    <div class="cx-foot"><button type="button" class="cx-btn ghost sm" data-close>Cancel</button><button class="cx-btn sm">Apply</button></div>
+  </form>
+  <form method="post" class="bulkTagForm" style="border-top:1px solid var(--line);margin-top:14px;padding-top:8px">
+    <input type="hidden" name="action" value="replace_tag_selected"><input type="hidden" name="sel" value="{{ sel }}">
+    <b class="small">Replace tag</b>
+    <label>Find tag</label><input name="tag_find" placeholder="e.g. lead" list="tagList">
+    <label>Replace with</label><input name="tag_replace" placeholder="e.g. customer" list="tagList">
+    <div class="cx-foot" style="margin-top:12px"><button class="cx-btn sm">Replace on Selected</button></div>
+  </form>
+</dialog>
 
 <dialog id="dlgHistory" class="cx-dlg">
   <h3>🕘 Import History</h3>
@@ -519,14 +528,14 @@ document.querySelectorAll('.js-edit').forEach(function(b){
     document.querySelectorAll('.e-cf').forEach(function(i){
       i.value = custom[i.dataset.cf] || ''; });
     document.getElementById('dlgEdit').showModal(); });});
-/* bulk tag dialog: carry the selected ids into its form */
-var tagForm = document.getElementById('tagForm');
-if (tagForm) tagForm.addEventListener('submit', function(){
-  tagForm.querySelectorAll('input[name=ids]').forEach(function(i){ i.remove(); });
-  document.querySelectorAll('.rowChk:checked').forEach(function(c){
-    var i = document.createElement('input');
-    i.type = 'hidden'; i.name = 'ids'; i.value = c.value;
-    tagForm.appendChild(i); });});
+/* bulk tag dialogs: carry the selected ids into their forms */
+document.querySelectorAll('.bulkTagForm').forEach(function(f){
+  f.addEventListener('submit', function(){
+    f.querySelectorAll('input[name=ids]').forEach(function(i){ i.remove(); });
+    document.querySelectorAll('.rowChk:checked').forEach(function(c){
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'ids'; i.value = c.value;
+      f.appendChild(i); });});});
 /* deep links: ?open=add / ?open=import */
 (function(){
   var open = new URLSearchParams(location.search).get('open');

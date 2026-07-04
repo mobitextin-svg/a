@@ -570,7 +570,7 @@ def register_experience(app, current_user, current_account):
     # Enterprise pass: default admin credentials are no longer shown in the
     # UI. Surface them on the server console instead (dev convenience).
     if not app.config.get("TESTING"):
-        print("[ZyvoMail] Default admin sign-in: admin@gmail.com / admin1234 "
+        print("[ZyvoMail] Default admin sign-in: admin / admin@123 "
               "(change it in Settings -> Security)")
 
     # ---- context: IST greeting + sidebar setup progress + version --------- #

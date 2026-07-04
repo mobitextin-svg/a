@@ -549,6 +549,7 @@ _MIGRATIONS = [
     ("contacts", "custom_json", "TEXT"),
     # Contact List Management upgrade: archivable lists + richer contact profile.
     ("contact_lists", "archived", "INTEGER NOT NULL DEFAULT 0"),
+    ("account_tags", "archived", "INTEGER NOT NULL DEFAULT 0"),
     ("contacts", "job_title", "TEXT"),
     ("contacts", "birthday", "TEXT"),
     ("contacts", "source", "TEXT"),
