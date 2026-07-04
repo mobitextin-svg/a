@@ -288,9 +288,9 @@ textarea{resize:vertical;min-height:90px}
 }
 /* role accents keep navy for users, deep violet for admins */
 :root[data-theme="light"] body[data-role="user"]{
-  --brand:#1F4E78; --brand2:#2A6399; --accent:#00A8CC}
+  --brand:#1a73e8; --brand2:#1667cf; --accent:#1a73e8}
 :root[data-theme="light"] body[data-role="admin"]{
-  --brand:#5B3FBF; --brand2:#7457D6; --accent:#8B5CF6}
+  --brand:#1a73e8; --brand2:#1667cf; --accent:#1a73e8}
 
 /* Sora display face for headings + brand, matching auth pages */
 :root[data-theme="light"] h1,
@@ -443,7 +443,7 @@ textarea{resize:vertical;min-height:90px}
   font-family:Sora,Inter,sans-serif;font-size:1.02rem}
 :root[data-theme="light"] .avatar{
   background:var(--brand);color:#fff;font-family:Sora,Inter,sans-serif}
-:root[data-theme="light"] body[data-role="admin"] .avatar{background:#5B3FBF}
+:root[data-theme="light"] body[data-role="admin"] .avatar{background:#1a73e8}
 
 /* Sidebar: tighter rhythm, quiet icons, teal spine on active */
 :root[data-theme="light"] .sidebar{padding:16px 10px}
@@ -458,9 +458,9 @@ textarea{resize:vertical;min-height:90px}
 /* Admin shell: same light chrome, violet identity strip so context is
    unmistakable without going dark */
 :root[data-theme="light"] body[data-role="admin"] .sidebar{
-  border-top:3px solid #5B3FBF}
+  border-top:3px solid #1a73e8}
 :root[data-theme="light"] body[data-role="admin"] .topbar{
-  border-top:3px solid #5B3FBF;padding-top:11px}
+  border-top:3px solid #1a73e8;padding-top:11px}
 
 /* Cards: hairline + one soft layer, hover lift only where clickable */
 :root[data-theme="light"] .card{
@@ -596,7 +596,7 @@ body[data-role="admin"] .sidebar{
   --bg:#f6f8fb; --bg2:#ffffff; --panel:#ffffff; --panel2:#f3f6fa;
   --line:#e7ecf3; --line2:#d9e1ec; --border:#d9e1ec;
   --text:#0f1626; --muted:#5c6b84; --faint:#93a0b4;
-  --brand:#0b0d13; --brand2:#232a38; --accent:#1a73e8;
+  --brand:#1a73e8; --brand2:#1667cf; --accent:#1a73e8;
   --shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px rgba(15,23,42,.06);
 }
 :root[data-theme="light"] body{
@@ -613,8 +613,8 @@ body[data-role="admin"] .sidebar{
 }
 :root[data-theme="light"] a{color:#1a73e8}
 /* ink-black primary buttons, quiet ghosts */
-:root[data-theme="light"] .btn{background:#0b0d13;color:#fff;border-radius:10px}
-:root[data-theme="light"] .btn:hover{background:#232a38}
+:root[data-theme="light"] .btn{background:#1a73e8;color:#fff;border-radius:10px}
+:root[data-theme="light"] .btn:hover{background:#1667cf}
 :root[data-theme="light"] .btn.ghost{background:#fff;color:var(--text);
   border:1px solid var(--line2)}
 :root[data-theme="light"] .btn.ghost:hover{background:var(--panel2)}
@@ -637,3 +637,11 @@ body[data-role="admin"] .sidebar{
   border-right-color:var(--line)}
 :root[data-theme="light"] body[data-role="admin"] .nav-link.active{
   background:#f1edff;color:#4c2fd8;box-shadow:inset 2px 0 0 #7c5cff}
+
+/* Corporate blue accents for both roles in the light theme (overrides the
+   body-level role palettes, which otherwise beat the :root variables). */
+:root[data-theme="light"] body[data-role="admin"],
+:root[data-theme="light"] body[data-role="user"]{
+  --brand:#1a73e8;--brand2:#1667cf;--accent:#1a73e8}
+:root[data-theme="light"] body[data-role="admin"] .nav-link.active{
+  background:#eef3fd;color:#1a48b8;box-shadow:inset 2px 0 0 #1a73e8}
